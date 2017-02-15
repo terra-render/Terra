@@ -10,7 +10,7 @@ Unidirectional Monte Carlo Path Tracer
 - Easy to add more materials
 - Russian roulette for path termination
 - Antialiasing via random subpixel jittering
-- Multithread ready (see TODO)
+- Multithread ready (see https://github.com/c4stan/TerraPreview)
 - Progressive iterative rendering
 - Texturing and environment mapping
 - Multiple tone mapping operators (local)
