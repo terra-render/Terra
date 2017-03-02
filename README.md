@@ -1,5 +1,5 @@
 # Terra 
-Unidirectional Monte Carlo Path Tracer
+Unidirectional Monte Carlo Path Tracer  
 Written by:
 - Matteo Bracci
 - Edoardo Dominici
@@ -26,9 +26,9 @@ Written by:
 ## Sample Renderings
 #### Stanford dragon ~300k triangles (BSDF: Glass)
 ##### Specs
-**Disclamer** 8 worker threads are used in addition to the main thread, this is not an optimal scenario.
-Machine: Intel Core i7-2600 @ 3.40GHz - Windows 10 Pro x64
-Worker threads: 8 (1 per virtual core)
+**Disclamer** 8 worker threads are used in addition to the main thread, this is not an optimal scenario.   
+Machine: Intel Core i7-2600 @ 3.40GHz - Windows 10 Pro x64  
+Worker threads: 8 (1 per virtual core)  
 
 ##### Stats
 - `terra_trace()` ~4.2 ns
