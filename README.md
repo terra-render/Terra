@@ -29,7 +29,7 @@ Machine: Intel Core i7-2600 @ 3.40GHz - Windows 10 Pro x64
 Worker threads: 8 (1 per virtual core)  
 
 ##### Stats
-- Ray throughput: ~ 1'670'000 rays/s
+- Throughput: ~ 1'670'000 rays/s
 
 ![](http://i.imgur.com/w4rndg8.jpg)
 
