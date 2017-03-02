@@ -81,7 +81,8 @@ typedef TerraFloat3(TerraRoutineSample)(const struct TerraMaterial* material, Te
 typedef float       (TerraRoutineWeight)(const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 typedef TerraFloat3(TerraRoutineShade) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 
-typedef enum TerraBSDFType {
+typedef enum TerraBSDFType 
+{
     kTerraBSDFDiffuse,
     kTerraBSDFRoughDielectric,
     kTerraBSDFGlass
@@ -103,7 +104,6 @@ typedef struct TerraBSDF
 // A texture is invalid if pixels is NULL
 typedef struct TerraTexture
 {
-    char*    name;
     uint8_t* pixels;
     uint16_t width;
     uint16_t height;
@@ -164,37 +164,49 @@ typedef struct TerraTriangle
     TerraFloat3 a;
     TerraFloat3 b;
     TerraFloat3 c;
-    TerraFloat3 na;
-    TerraFloat2 ta;
-    TerraFloat3 nb;
-    TerraFloat2 tb;
-    TerraFloat3 nc;
-    TerraFloat2 tc;
 } TerraTriangle;
+
+typedef struct TerraTriangleProperties
+{
+    TerraFloat3 normal_a;
+    TerraFloat3 normal_b;
+    TerraFloat3 normal_c;
+    TerraFloat2 texcoord_a;
+    TerraFloat2 texcoord_b;
+    TerraFloat2 texcoord_c;
+}TerraTriangleProperties;
 
 typedef int MaterialID;
 
 typedef struct TerraObject
 {
     TerraTriangle* triangles;
-    int            triangles_count;
+    TerraTriangleProperties* properties;
+    int           triangles_count;
     TerraMaterial  material;
 }TerraObject;
 
 typedef enum TerraTonemappingOperator
 {
-    kTonemappingOperatorNone,
-    kTonemappingOperatorLinear,
-    kTonemappingOperatorReinhard,
-    kTonemappingOperatorFilmic,
-    kTonemappingOperatorUncharted2
+    kTerraTonemappingOperatorNone,
+    kTerraTonemappingOperatorLinear,
+    kTerraTonemappingOperatorReinhard,
+    kTerraTonemappingOperatorFilmic,
+    kTerraTonemappingOperatorUncharted2
 }TerraTonemappingOperator;
+
+typedef enum TerraAccelerator
+{
+    kTerraAcceleratorBVH,
+    kTerraAcceleratorKDTree
+}TerraAccelerator;
 
 typedef struct TerraSceneOptions
 {
     // lat/long format
     TerraHDRTexture environment_map;
     TerraTonemappingOperator tonemapping_operator;
+    TerraAccelerator accelerator;
 
     bool  enable_direct_light_sampling;
     float subpixel_jitter;
@@ -211,19 +223,19 @@ typedef struct TerraAABB
     TerraFloat3 max;
 } TerraAABB;
 
+typedef struct TerraPrimitiveRef
+{
+    uint32_t object_idx : 8;
+    uint32_t triangle_idx : 24;
+}TerraPrimitiveRef;
+
+// BVH
 typedef struct TerraBVHNode
 {
     TerraAABB aabb[2];
     int index[2];
+    int type[2];
 } TerraBVHNode;
-
-/*
-typedef struct TerraSceneObject
-{
-    unsigned int index;
-    int type;
-} TerraSceneObject;
-*/
 
 typedef struct TerraBVHVolume
 {
@@ -234,12 +246,69 @@ typedef struct TerraBVHVolume
 
 typedef struct TerraBVH
 {
-    TerraBVHNode* nodes;
+    TerraBVHNode*  nodes;
     int           nodes_count;
-    volatile int  traverse_stack_top;
-    int*          traverse_stack[32];
 } TerraBVH;
 
+// KDTree
+// Triangle is copied to avoid an additional redirection. Leaves have extremely few nodes (1 - 3).
+// Having an additional redirection would be wasteful as data in TerraObject is interleaved.
+// The only regret is that a triangle is 36 bytes which doesn't really play well with cache.
+// Assuming 64-byte cache line loading 2 triangles requires 2 cache lines atleast, might aswell
+// add the 4 bytes to reference the triangle in case hit is successful, 3 ObjectRefs still fit in 2 
+// cache lines.
+typedef struct TerraKDObjectRef
+{
+    TerraTriangle    triangle;
+    TerraPrimitiveRef primitive;
+}TerraKDObjectRef;
+
+typedef struct TerraKDObjectBuffer
+{
+    TerraKDObjectRef* objects;
+    int             objects_count;
+}TerraKDObjectBuffer;
+
+typedef struct TerraKDNodeInternalData
+{
+    uint32_t is_leaf : 1;
+    uint32_t axis : 2;
+    uint32_t children;
+}TerraKDNodeInternalData;
+
+typedef struct TerraKDNodeLeafData
+{
+    uint32_t padding : 1;
+    uint32_t objects : 31; // idx to ObjectBuffer
+}TerrAKDNodeLeafData;
+
+
+typedef union TerraKDNodeData
+{
+    TerraKDNodeInternalData internal;
+    TerrAKDNodeLeafData leaf;
+}TerraKDNodeData;
+
+typedef struct TerraKDNode
+{
+    float split;
+
+    TerraKDNodeData data;
+}TerraKDNode;
+
+// Container for different allocators. Root is nodes[0]
+typedef struct TerraKDTree
+{
+    TerraKDNode* nodes; 
+    int nodes_count;
+    int nodes_capacity;
+    TerraKDObjectBuffer* object_buffers;
+    int object_buffers_count;
+    int object_buffers_capacity;
+    TerraAABB scene_aabb;
+}TerraKDTree;
+
+// scene
 typedef struct TerraLight 
 {
     TerraFloat3 center;
@@ -259,6 +328,7 @@ typedef struct TerraScene
     int lights_count;
 
     TerraBVH bvh;
+    TerraKDTree kdtree;
 } TerraScene;
 
 typedef struct TerraCamera
@@ -305,7 +375,7 @@ typedef struct TerraFramebuffer
 // Terra public API
 //--------------------------------------------------------------------------------------------------
 void         terra_scene_begin(TerraScene* scene, int objects_count, int materials_count);
-TerraObject* terra_scene_add_object(TerraScene* scene);
+TerraObject*  terra_scene_add_object(TerraScene* scene);
 void         terra_scene_end(TerraScene* scene);
 void         terra_scene_destroy(TerraScene* scene);
 
@@ -313,7 +383,7 @@ bool terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int heig
 void terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
 
 TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
-TerraRay terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
+TerraRay   terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
 
 // Builtin BSDFs
 void terra_bsdf_init(TerraBSDF* bsdf, TerraBSDFType type);
@@ -351,32 +421,39 @@ TerraFloat3 terra_transformf3(const TerraFloat4x4* transform, const TerraFloat3*
 //--------------------------------------------------------------------------------------------------
 // Terra Internal routines
 //--------------------------------------------------------------------------------------------------
-TerraFloat3     terra_trace(TerraScene* scene, const TerraRay* ray);
-TerraFloat3     terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range);
-bool            terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out);
-bool            terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb);
-void            terra_triangle_init_shading(const TerraTriangle* triangle, const TerraFloat3* point, TerraShadingContext* ctx_out);
-void            terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
-TerraFloat3     terra_sample_texture(const TerraTexture* texture, const TerraFloat2* uv);
-TerraFloat3     terra_sample_hdr_cubemap(const TerraHDRTexture* texture, const TerraFloat3* v);
-TerraFloat3     terra_eval_attribute(const TerraAttribute* attribute, const TerraFloat2* uv);
+TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* ray);
+TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range);
+bool terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out);
+bool terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, float* tmin_out, float* tmax_out);
+void       terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingContext* ctx_out);
+void       terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
+TerraFloat3 terra_sample_texture(const TerraTexture* texture, const TerraFloat2* uv);
+TerraFloat3 terra_sample_hdr_cubemap(const TerraHDRTexture* texture, const TerraFloat3* v);
+TerraFloat3 terra_eval_attribute(const TerraAttribute* attribute, const TerraFloat2* uv);
 
 typedef int64_t TerraTimeSlice;
-int64_t terra_timer_split();
-double   terra_timer_elapsed_ms(int64_t delta);
+TerraTimeSlice terra_timer_split();
+double        terra_timer_elapsed_ms(TerraTimeSlice delta);
 
 //--------------------------------------------------------------------------------------------------
 // Terra BVH Internal routines
 //--------------------------------------------------------------------------------------------------
-void                terra_bvh_create(TerraBVH* bvh, const struct TerraScene* scene);
-void                terra_bvh_destroy(TerraBVH* bvh);
-TerraSceneObject    terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const struct TerraScene* scene, TerraFloat3* point);
-float               terra_aabb_surface_area(const TerraAABB* aabb);
-TerraFloat3         terra_aabb_center(const TerraAABB* aabb);
-int                 terra_bvh_volume_compare_x(const void* left, const void* right);
-int                 terra_bvh_volume_compare_y(const void* left, const void* right);
-int                 terra_bvh_volume_compare_z(const void* left, const void* right);
-int                 terra_bvh_sah_split_volumes(TerraBVHVolume* volumes, int volumes_count, const TerraAABB* container);
+void       terra_bvh_create(TerraBVH* bvh, const struct TerraScene* scene);
+void       terra_bvh_destroy(TerraBVH* bvh);
+bool       terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point_out, TerraPrimitiveRef* primitive_out);
+float      terra_aabb_surface_area(const TerraAABB* aabb);
+TerraFloat3 terra_aabb_center(const TerraAABB* aabb);
+int        terra_bvh_volume_compare_x(const void* left, const void* right);
+int        terra_bvh_volume_compare_y(const void* left, const void* right);
+int        terra_bvh_volume_compare_z(const void* left, const void* right);
+int        terra_bvh_sah_split_volumes(TerraBVHVolume* volumes, int volumes_count, const TerraAABB* container);
+
+//--------------------------------------------------------------------------------------------------
+// Terra K-D Tree Internal routines
+//--------------------------------------------------------------------------------------------------
+void terra_kdtree_create(TerraKDTree* kdtree, const struct TerraScene* scene);
+void terra_kdtree_destroy(TerraKDTree* kdtree);
+bool terra_kdtree_traverse(TerraKDTree* kdtree, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point_out, TerraPrimitiveRef* primitive_out);
 
 //--------------------------------------------------------------------------------------------------
 // Terra implementation
@@ -432,12 +509,13 @@ void terra_prepare_texture(TerraTexture* texture)
 
 void terra_scene_end(TerraScene* scene)
 {
-    // Move objects
+    // TODO: Transform to world position ?? 
 
-    terra_bvh_create(&scene->bvh, scene);
-    for (int i = 0; i < 32; ++i)
-        scene->bvh.traverse_stack[i] = NULL;
-    scene->bvh.traverse_stack_top = 0;
+
+    if (scene->opts.accelerator == kTerraAcceleratorBVH)
+        terra_bvh_create(&scene->bvh, scene);
+    else if (scene->opts.accelerator == kTerraAcceleratorKDTree)
+        terra_kdtree_create(&scene->kdtree, scene);
 
     // dem lights
 
@@ -458,9 +536,6 @@ void terra_scene_destroy(TerraScene * scene)
 {
     if (scene != NULL)
         terra_free(scene->objects);
-
-    for (int i = 0; i < scene->bvh.traverse_stack_top; ++i)
-        terra_free(scene->bvh.traverse_stack[i]);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -545,7 +620,7 @@ void terra_build_rotation_around_normal(TerraShadingContext* ctx)
 
 void terra_ray_create(TerraRay* ray, TerraFloat3* point, TerraFloat3* direction, TerraFloat3* normal, float sign)
 {
-    TerraFloat3 offset = terra_mulf3(normal, 0.0001 * sign);
+    TerraFloat3 offset = terra_mulf3(normal, 0.0001f * sign);
 
     ray->origin = terra_addf3(point, &offset);
     ray->direction = *direction;
@@ -557,23 +632,24 @@ void terra_ray_create(TerraRay* ray, TerraFloat3* point, TerraFloat3* direction,
 
 bool terra_find_closest(TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingContext* ctx_out, TerraFloat3* intersection_point)
 {
-    TerraSceneObject obj = terra_bvh_traverse(&scene->bvh, ray, scene, intersection_point);
-    int closest = obj.type;
-    void* nearest_object = &scene->objects[obj.index & 0xff];
-    int nearest_geometry = obj.index >> 8;
-
-    // Nothing hit, returning background color
-    if (closest == 0)
+    TerraPrimitiveRef primitive;
+    if (scene->opts.accelerator == kTerraAcceleratorBVH)
+    {
+        if (!terra_bvh_traverse(&scene->bvh, ray, scene, intersection_point, &primitive))
+            return false;
+    }
+    else if (scene->opts.accelerator == kTerraAcceleratorKDTree)
+    {
+        if (!terra_kdtree_traverse(&scene->kdtree, ray, scene, intersection_point, &primitive))
+            return false;
+    }
+    else
         return false;
 
-    if (closest == 1)
-    {
-        const TerraObject* model = (TerraObject*)nearest_object;
-        *material_out = &model->material;
-        terra_triangle_init_shading(&model->triangles[nearest_geometry],
-            intersection_point, ctx_out);
-    }
+    TerraObject* object = &scene->objects[primitive.object_idx];
 
+    *material_out = &object->material;
+    terra_triangle_init_shading(&object->triangles[primitive.triangle_idx], &object->properties[primitive.triangle_idx], intersection_point, ctx_out);
     return true;
 }
 
@@ -775,11 +851,11 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
 
         // Russian roulette
         /*float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
-        float e3 = 0.5f;//(float)rand() / RAND_MAX;
-        if (e3 > p)
-            break;
-        //throughput = terra_pointf3(&throughput, &throughput);
-        throughput = terra_divf3(&throughput, 0.5f);*/
+         float e3 = 0.5f;//(float)rand() / RAND_MAX;
+         if (e3 > p)
+             break;
+         //throughput = terra_pointf3(&throughput, &throughput);
+         throughput = terra_divf3(&throughput, 0.5f);*/
 
         // Next ray (Skip if last?)
         float sNoL = terra_dotf3(&ctx.normal, &bsdf_sample);
@@ -809,7 +885,6 @@ TerraFloat3 terra_tonemapping_uncharted2(const TerraFloat3* x)
 //--------------------------------------------------------------------------------------------------
 TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height)
 {
-    // TODO: Precalculate as many values as possible
     TerraStats stats;
     stats.total_ms = 0.f;
     stats.trace_total_ms = 0.f;
@@ -844,9 +919,9 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
                 TerraFloat3 cur = terra_trace(scene, &ray);
                 TerraTimeSlice trace_end = terra_timer_split();
 
-                float trace_elapsed = terra_timer_elapsed_ms(trace_end - trace_start);
-                stats.trace_min_ms = terra_minf(stats.trace_min_ms, trace_elapsed);
-                stats.trace_max_ms = terra_maxf(stats.trace_max_ms, trace_elapsed);
+                float trace_elapsed = (float)terra_timer_elapsed_ms(trace_end - trace_start);
+                stats.trace_min_ms = (double)terra_minf((float)stats.trace_min_ms, trace_elapsed);
+                stats.trace_max_ms = (double)terra_maxf((float)stats.trace_max_ms, trace_elapsed);
                 stats.trace_total_ms += trace_elapsed;
                 ++stats.trace_count;
 
@@ -860,7 +935,7 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
             partial->samples += spp;
 
             // Calculating final radiance
-            TerraFloat3 color = terra_divf3(&partial->acc, partial->samples);
+            TerraFloat3 color = terra_divf3(&partial->acc, (float)partial->samples);
             
             // Manual exposure
             color = terra_mulf3(&color, scene->opts.manual_exposure);
@@ -868,13 +943,13 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
             {
                 // TODO: Should exposure be 2^exposure as with f-stops ?
                 // Gamma correction
-            case kTonemappingOperatorLinear:
+            case kTerraTonemappingOperatorLinear:
             {
                 color = terra_powf3(&color, 1.f / scene->opts.gamma);
                 break;
             }
             // Simple version, local operator w/o white balancing
-            case kTonemappingOperatorReinhard:
+            case kTerraTonemappingOperatorReinhard:
             {
                 // TODO: same as inv_dir invf3
                 color.x = color.x / (1.f + color.x);
@@ -884,7 +959,7 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
                 break;
             }
             // Approx
-            case kTonemappingOperatorFilmic:
+            case kTerraTonemappingOperatorFilmic:
             {
                 // TODO: Better code pls
                 TerraFloat3 x;
@@ -900,7 +975,7 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
 
                 break;
             }
-            case kTonemappingOperatorUncharted2:
+            case kTerraTonemappingOperatorUncharted2:
             {
                 // TODO: Should white be tweaked ?
                 // This is the white point in linear space
@@ -1228,10 +1303,37 @@ void terra_bsdf_init(TerraBSDF* bsdf, TerraBSDFType type)
 }
 
 //--------------------------------------------------------------------------------------------------
-bool terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out)
+#if defined(TERRA_SSE)
+#include <immintrin.h>
+__m128 terra_sse_loadf3(const TerraFloat3* xyz)
+{
+    __m128 x = _mm_load_ss(&xyz->x);
+    __m128 y = _mm_load_ss(&xyz->y);
+    __m128 z = _mm_load_ss(&xyz->z);
+    __m128 xy = _mm_movelh_ps(x, y);
+    return _mm_shuffle_ps(xy, z, _MM_SHUFFLE(2, 0, 2, 0));
+}
+
+__m128 terra_sse_cross(__m128 a, __m128 b)
+{
+    return _mm_sub_ps(
+        _mm_mul_ps(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)), _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 1, 0, 2))),
+        _mm_mul_ps(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 1, 0, 2)), _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1)))
+    );
+}
+
+float terra_sse_dotf3(__m128 a, __m128 b)
+{
+    __m128 dp = _mm_dp_ps(a, b, 0xFF);
+    return *(float*)&dp;
+}
+
+#endif
+
+bool terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out)
 {
     const TerraTriangle *tri = triangle;
-
+#if !defined(TERRA_SSE)
     TerraFloat3 e1, e2, h, s, q;
     float a, f, u, v, t;
 
@@ -1242,7 +1344,7 @@ bool terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* t
     a = terra_dotf3(&e1, &h);
     if (a > -terra_Epsilon && a < terra_Epsilon)
         return false;
-
+    
     f = 1 / a;
     s = terra_subf3(&ray->origin, &tri->a);
     u = f * (terra_dotf3(&s, &h));
@@ -1260,13 +1362,55 @@ bool terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* t
     {
         TerraFloat3 offset = terra_mulf3(&ray->direction, t);
         *point_out = terra_addf3(&offset, &ray->origin);
+        if (t_out != NULL) *t_out = t;
         return true;
     }
     return false;
+#else
+    __m128 tri_a = terra_sse_loadf3(&tri->a);
+    __m128 tri_b = terra_sse_loadf3(&tri->b);
+    __m128 tri_c = terra_sse_loadf3(&tri->c);
+    __m128 ray_ori = terra_sse_loadf3(&ray->origin);
+    __m128 ray_dir = terra_sse_loadf3(&ray->direction);
+
+    __m128 e1, e2, h, s, q;
+    float a, f, u, v, t;
+
+    e1 = _mm_sub_ps(tri_b, tri_a);
+    e2 = _mm_sub_ps(tri_c, tri_a);
+
+    h = terra_sse_cross(ray_dir, e2);
+    a = terra_sse_dotf3(e1, h);
+
+    if (a > -terra_Epsilon && a < terra_Epsilon)
+        return false;
+
+    f = 1.f / a;
+    s = _mm_sub_ps(ray_ori, tri_a);
+    u = f * terra_sse_dotf3(s, h);
+    if (u < 0.f || u > 1.f)
+        return false;
+
+    q = terra_sse_cross(s, e1);
+    v = f * terra_sse_dotf3(ray_dir, q);
+    if (v < 0.f || u + v > 1.f)
+        return false;
+
+    t = f * terra_sse_dotf3(e2, q);
+
+    if (t > 0.00001)
+    {
+        TerraFloat3 offset = terra_mulf3(&ray->direction, t);
+        *point_out = terra_addf3(&offset, &ray->origin);
+        if (t_out != NULL) *t_out = t;
+        return true;
+    }
+    return false;
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
-bool terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb)
+bool terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, float* tmin_out, float* tmax_out)
 {
     float t1 = (aabb->min.x - ray->origin.x) * ray->inv_direction.x;
     float t2 = (aabb->max.x - ray->origin.x) * ray->inv_direction.x;
@@ -1286,11 +1430,16 @@ bool terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb)
     tmin = terra_maxf(tmin, terra_minf(t1, t2));
     tmax = terra_minf(tmax, terra_maxf(t1, t2));
 
-    return tmax > terra_maxf(tmin, 0.f);
+    if (tmax > terra_maxf(tmin, 0.f))
+    {
+        if (tmin_out != NULL) *tmin_out = tmin;
+        if (tmax_out != NULL) *tmax_out = tmax;
+        return true;
+    }
+    return false;
 }
-
 //--------------------------------------------------------------------------------------------------
-void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraFloat3* point, TerraShadingContext* ctx)
+void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingContext* ctx)
 {
     TerraFloat3 e0 = terra_subf3(&triangle->b, &triangle->a);
     TerraFloat3 e1 = terra_subf3(&triangle->c, &triangle->a);
@@ -1308,17 +1457,17 @@ void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraFloat
     uv.x = (d11 * dp0 - d01 * dp1) / div;
     uv.y = (d00 * dp1 - d01 * dp0) / div;
 
-    TerraFloat3 na = terra_mulf3(&triangle->nc, uv.y);
-    TerraFloat3 nb = terra_mulf3(&triangle->nb, uv.x);
-    TerraFloat3 nc = terra_mulf3(&triangle->na, 1 - uv.x - uv.y);
+    TerraFloat3 na = terra_mulf3(&properties->normal_c, uv.y);
+    TerraFloat3 nb = terra_mulf3(&properties->normal_b, uv.x);
+    TerraFloat3 nc = terra_mulf3(&properties->normal_a, 1 - uv.x - uv.y);
 
     ctx->normal = terra_addf3(&na, &nb);
     ctx->normal = terra_addf3(&ctx->normal, &nc);
     ctx->normal = terra_normf3(&ctx->normal);
 
-    TerraFloat2 ta = terra_mulf2(&triangle->tc, uv.y);
-    TerraFloat2 tb = terra_mulf2(&triangle->tb, uv.x);
-    TerraFloat2 tc = terra_mulf2(&triangle->ta, 1 - uv.x - uv.y);
+    TerraFloat2 ta = terra_mulf2(&properties->texcoord_c, uv.y);
+    TerraFloat2 tb = terra_mulf2(&properties->texcoord_b, uv.x);
+    TerraFloat2 tc = terra_mulf2(&properties->texcoord_a, 1 - uv.x - uv.y);
 
     ctx->texcoord = terra_addf2(&ta, &tb);
     ctx->texcoord = terra_addf2(&ctx->texcoord, &tc);
@@ -1378,6 +1527,9 @@ void terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle)
     aabb->min.z = terra_minf(aabb->min.z, triangle->a.z);
     aabb->min.z = terra_minf(aabb->min.z, triangle->b.z);
     aabb->min.z = terra_minf(aabb->min.z, triangle->c.z);
+    aabb->min.x -= terra_Epsilon;
+    aabb->min.y -= terra_Epsilon;
+    aabb->min.z -= terra_Epsilon;
 
     aabb->max.x = terra_maxf(aabb->max.x, triangle->a.x);
     aabb->max.x = terra_maxf(aabb->max.x, triangle->b.x);
@@ -1388,6 +1540,9 @@ void terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle)
     aabb->max.z = terra_maxf(aabb->max.z, triangle->a.z);
     aabb->max.z = terra_maxf(aabb->max.z, triangle->b.z);
     aabb->max.z = terra_maxf(aabb->max.z, triangle->c.z);
+    aabb->max.x += terra_Epsilon;
+    aabb->max.y += terra_Epsilon;
+    aabb->max.z += terra_Epsilon;
 }
 
 TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y)
@@ -1395,8 +1550,8 @@ TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y)
     switch (texture->address_mode)
     {
     case kTerraTextureAddressClamp:
-        x = terra_minf(x, texture->width - 1);
-        y = terra_minf(y, texture->height - 1);
+        x = (int)terra_minf((float)x, (float)(texture->width - 1));
+        y = (int)terra_minf((float)y, (float)(texture->height - 1));
         break;
     case kTerraTextureAddressWrap:
         x = x % texture->width;
@@ -1545,8 +1700,8 @@ void terra_aabb_fit_aabb(TerraAABB* aabb, const TerraAABB* other)
 
 int terra_bvh_sah_split_volumes(TerraBVHVolume* volumes, int volumes_count, const TerraAABB* container)
 {
-    float* left_area = (float*)malloc(sizeof(*left_area) * (volumes_count - 1));
-    float* right_area = (float*)malloc(sizeof(*right_area) * (volumes_count - 1));
+    float* left_area = (float*)terra_malloc(sizeof(*left_area) * (volumes_count - 1));
+    float* right_area = (float*)terra_malloc(sizeof(*right_area) * (volumes_count - 1));
     float container_area;
     if (container != NULL)
         container_area = terra_aabb_surface_area(container);
@@ -1607,7 +1762,7 @@ void terra_bvh_create(TerraBVH* bvh, const TerraScene* scene)
         volumes_count += scene->objects[i].triangles_count;
     }
 
-    TerraBVHVolume* volumes = (TerraBVHVolume*)malloc(sizeof(*volumes) * volumes_count);
+    TerraBVHVolume* volumes = (TerraBVHVolume*)terra_malloc(sizeof(*volumes) * volumes_count);
     for (int i = 0; i < volumes_count; ++i)
     {
         volumes[i].aabb.min = terra_f3_set1(FLT_MAX);
@@ -1616,9 +1771,9 @@ void terra_bvh_create(TerraBVH* bvh, const TerraScene* scene)
     int p = 0;
 
     // build the scene aabb and the volumes aabb
-    for (unsigned int j = 0; j < scene->objects_count; ++j)
+    for (int j = 0; j < scene->objects_count; ++j)
     {
-        for (unsigned int i = 0; i < scene->objects[j].triangles_count; ++i, ++p)
+        for (int i = 0; i < scene->objects[j].triangles_count; ++i, ++p)
         {
             terra_aabb_fit_triangle(&scene_aabb, &scene->objects[j].triangles[i]);
             terra_aabb_fit_triangle(&volumes[p].aabb, &scene->objects[j].triangles[i]);
@@ -1628,7 +1783,7 @@ void terra_bvh_create(TerraBVH* bvh, const TerraScene* scene)
     }
 
     // build the bvh. we do iterative building using a stack
-    bvh->nodes = (TerraBVHNode*)malloc(sizeof(*bvh->nodes) * volumes_count * 2);
+    bvh->nodes = (TerraBVHNode*)terra_malloc(sizeof(*bvh->nodes) * volumes_count * 2);
     bvh->nodes_count = 1;
 
     // a stack task holds the idx of the node to be created along with its aabb
@@ -1723,21 +1878,12 @@ void terra_bvh_create(TerraBVH* bvh, const TerraScene* scene)
 
 void terra_bvh_destroy(TerraBVH* bvh)
 {
-    free(bvh->nodes);
+    terra_free(bvh->nodes);
 }
 
-TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point)
+bool terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point_out, TerraPrimitiveRef* primitive_out)
 {
-    static __thread int* queue = NULL;
-    if (queue == NULL)
-    {
-        queue = (int*)terra_malloc(sizeof(*queue) * bvh->nodes_count);
-
-        // registering for deallocation
-        int top = (int)InterlockedAdd((volatile LONG*)&scene->bvh.traverse_stack_top, 1);
-        bvh->traverse_stack[top] = queue;
-    }
-    //int* queue = malloc(sizeof(int) * 2 * bvh->nodes_count);
+    int queue[64];
     queue[0] = 0;
     int queue_count = 1;
 
@@ -1745,11 +1891,10 @@ TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const Te
     int type = 0;
     int child = -1;
 
-    TerraSceneObject obj;
-    obj.type = 0;
     float min_d = FLT_MAX;
     TerraFloat3 min_p = terra_f3_set1(FLT_MAX);
 
+    bool found = false;
     while (queue_count > 0)
     {
         node = queue[--queue_count];
@@ -1759,7 +1904,7 @@ TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const Te
             {
             case -1:
                 // not leaf
-                if (terra_ray_aabb_intersection(ray, &bvh->nodes[node].aabb[i]))
+                if (terra_ray_aabb_intersection(ray, &bvh->nodes[node].aabb[i], NULL, NULL))
                 {
                     queue[queue_count++] = bvh->nodes[node].index[i];
                 }
@@ -1770,7 +1915,7 @@ TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const Te
                 int model_idx = bvh->nodes[node].index[i] & 0xff;
                 int tri_idx = bvh->nodes[node].index[i] >> 8;
                 TerraFloat3 p;
-                if (terra_ray_triangle_intersection(ray, &scene->objects[model_idx].triangles[tri_idx], &p))
+                if (terra_ray_triangle_intersection(ray, &scene->objects[model_idx].triangles[tri_idx], &p, NULL))
                 {
                     TerraFloat3 po = terra_subf3(&p, &ray->origin);
                     float d = terra_lenf3(&po);
@@ -1778,8 +1923,9 @@ TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const Te
                     {
                         min_d = d;
                         min_p = p;
-                        obj.index = bvh->nodes[node].index[i];
-                        obj.type = bvh->nodes[node].type[i];
+                        primitive_out->object_idx = model_idx;
+                        primitive_out->triangle_idx = tri_idx;
+                        found = true;
                     }
                 }
             }
@@ -1790,30 +1936,486 @@ TerraSceneObject terra_bvh_traverse(TerraBVH* bvh, const TerraRay* ray, const Te
             }
         }
     }
-    //free(queue);
-    *point = min_p;
-    return obj;
+    *point_out = min_p;
+    return found;
+}
+
+//--------------------------------------------------------------------------------------------------
+// Internal stuff needed at tree build time
+typedef struct TerraKDSplit
+{
+    float offset;
+    uint32_t left_count;
+    uint32_t right_count : 31;
+    uint32_t type : 1;
+    uint16_t t0c; // If you have more than 65k identical bitwise vertices 
+    uint16_t t1c; // there is something wrong
+}TerraKDSplit;
+TerraKDSplit* terra_kdtree_splitbuffer = NULL;
+TerraAABB*   terra_kdtree_aabb_cache = NULL;
+#define terra__comp(float3, axis) *((float*)&float3 + axis) // saving space
+
+// Sorts the splits in ascending order
+int terra_splitlist_ascending_cmpfun(const void* a, const void* b)
+{
+    float af = ((TerraKDSplit*)a)->offset;
+    float bf = ((TerraKDSplit*)b)->offset;
+    return af == bf ? 0 : (af < bf) ? -1 : 1;
+}
+
+// Nodes are added in as a kd-tree always has either no children or both
+// and reduces nodes size
+int terra_kdtree_add_node_pair(TerraKDTree* tree)
+{
+    if (tree->nodes_count + 2 > tree->nodes_capacity)
+    {
+        TerraKDNode* old_buffer = tree->nodes;
+        int new_capacity = max(64, tree->nodes_capacity * tree->nodes_capacity);
+        tree->nodes = terra_malloc(sizeof(TerraKDNode) * new_capacity);
+        memcpy(tree->nodes, old_buffer, sizeof(TerraKDNode) * tree->nodes_count);
+
+        tree->nodes_capacity = new_capacity;
+        terra_free(old_buffer);
+    }
+
+    int ret = tree->nodes_count;
+    tree->nodes_count += 2;
+    return ret;
+}
+
+void terra_kdtree_destroy_object_buffer(TerraKDObjectBuffer* buffer)
+{
+    if (buffer == NULL || buffer->objects == NULL)
+        return;
+
+    terra_free(buffer->objects);
+    buffer->objects = NULL;
+    buffer->objects_count = 0;
+}
+
+void terra_kdtree_init_object_buffer(TerraKDObjectBuffer* buffer, int num_objects)
+{
+    terra_kdtree_destroy_object_buffer(buffer);
+
+    buffer->objects = terra_malloc(sizeof(TerraKDObjectRef) * num_objects);
+    buffer->objects_count = num_objects;
+}
+
+int terra_kdtree_add_object_buffer(TerraKDTree* tree)
+{
+    if (tree->object_buffers_count + 1 > tree->object_buffers_capacity)
+    {
+        TerraKDObjectBuffer* old_buffer = tree->object_buffers;
+        int new_capacity = max(64, tree->object_buffers_capacity * tree->object_buffers_capacity);
+        tree->object_buffers = terra_malloc(sizeof(TerraKDObjectBuffer) * new_capacity);
+        memcpy(tree->object_buffers, old_buffer, sizeof(TerraKDObjectBuffer) * tree->object_buffers_count);
+        tree->object_buffers_capacity = new_capacity;
+        terra_free(old_buffer);
+    }
+
+    int ret = tree->object_buffers_count;
+
+    tree->object_buffers[ret].objects = NULL;
+    tree->object_buffers[ret].objects_count = 0;
+    tree->object_buffers_count += 1;
+    return ret;
+}
+
+bool terra_aabb_overlap(const TerraAABB* left, const TerraAABB* right)
+{
+    return (left->min.x <= right->max.x && left->max.x >= right->min.x) &&
+        (left->min.y <= right->max.y && left->max.y >= right->min.y) &&
+        (left->min.z <= right->max.z && left->max.z >= right->min.z);
+}
+
+void terra_kdtree_add_splitbuffer(int* counter, float val, int type)
+{
+    for (int i = 0; i < *counter; ++i)
+    {
+        if (val == terra_kdtree_splitbuffer[i].offset)
+        {
+            if (type == 0)
+                ++terra_kdtree_splitbuffer[i].t0c;
+            else
+                ++terra_kdtree_splitbuffer[i].t1c;
+            return;
+        }
+    }
+
+    terra_kdtree_splitbuffer[*counter].offset = val;
+    terra_kdtree_splitbuffer[*counter].type = type;
+    terra_kdtree_splitbuffer[*counter].t0c = 1;
+    terra_kdtree_splitbuffer[*counter].t1c = 1;
+    (*counter)++;
+}
+
+void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* scene, const TerraAABB* aabb, int depth)
+{
+    if (depth <= 0)
+        return;
+
+    TerraKDNode* node = &tree->nodes[node_idx];
+
+    TerraFloat3 extents;
+    extents.x = aabb->max.x - aabb->min.x;
+    extents.y = aabb->max.y - aabb->min.y;
+    extents.z = aabb->max.z - aabb->min.z;
+
+    // Choosing split axis
+    int axis = 2;
+    if ((extents.x >= extents.y) && (extents.x >= extents.z))
+        axis = 0;
+    else if ((extents.y >= extents.x) && (extents.y >= extents.z))
+        axis = 1;
+
+    float lower_limit = terra__comp(aabb->min, axis);
+    float upper_limit = terra__comp(aabb->max, axis);
+
+    // Finding all split positions
+    TerraKDObjectBuffer* buffer = &tree->object_buffers[node->data.leaf.objects];
+
+    int splitlist_next = 0;
+    int t1 = 0, t2 = 0;
+    for (int i = 0; i < buffer->objects_count; ++i)
+    {
+        TerraKDObjectRef ref = buffer->objects[i];
+        TerraTriangle* triangle = &scene->objects[ref.primitive.object_idx].triangles[ref.primitive.triangle_idx];
+
+        terra_kdtree_aabb_cache[i].min = terra_f3_set1(FLT_MAX);
+        terra_kdtree_aabb_cache[i].max = terra_f3_set1(-FLT_MAX);
+        terra_aabb_fit_triangle(&terra_kdtree_aabb_cache[i], triangle);
+        TerraAABB* triangle_aabb = &terra_kdtree_aabb_cache[i];
+
+        float p1 = terra__comp(triangle_aabb->min, axis);
+        terra_kdtree_add_splitbuffer(&splitlist_next, p1, 0);
+
+        float p2 = terra__comp(triangle_aabb->max, axis);
+        terra_kdtree_add_splitbuffer(&splitlist_next, p2, 1);
+    }
+
+    qsort(terra_kdtree_splitbuffer, splitlist_next, sizeof(TerraKDSplit), terra_splitlist_ascending_cmpfun);
+
+    int right_counter = buffer->objects_count;
+    int left_counter = 0;
+    for (int i = 0; i < splitlist_next; ++i)
+    {
+        TerraKDSplit* split = &terra_kdtree_splitbuffer[i];
+        if (split->type == 0)
+            left_counter += split->t0c;
+
+        split->right_count = right_counter;
+        split->left_count = left_counter;
+
+        if (split->type == 1)
+            right_counter -= split->t1c;
+    }
+
+    // Estimating costs
+    float SAV = 0.5f / (extents.x * extents.z + extents.x * extents.y + extents.z * extents.y);
+    float leaf_cost = (float)buffer->objects_count;
+
+    float lowest_cost = FLT_MAX;
+    float best_split = 0.f;
+    int left_count, right_count;
+    for (int i = 0; i < splitlist_next; ++i)
+    {
+        TerraKDSplit* split = &terra_kdtree_splitbuffer[i];
+
+        // Calculating extents
+        TerraAABB left = *aabb, right = *aabb;
+        terra__comp(left.max, axis) = split->offset;
+        terra__comp(right.min, axis) = split->offset;
+
+        TerraFloat3 le;
+        le.x = left.max.x - left.min.x;
+        le.y = left.max.y - left.min.y;
+        le.z = left.max.z - left.min.z;
+
+        TerraFloat3 re;
+        re.x = right.max.x - right.min.x;
+        re.y = right.max.y - right.min.y;
+        re.z = right.max.z - right.min.z;
+
+        float SA_left = 2 * (le.x * le.z + le.x * le.y + le.z * le.y);
+        float SA_right = 2 * (re.x * re.z + re.x * re.y + re.z * re.y);
+
+        // for the most part just played around w/ it and 0.32 seemed good on a couple of scenes
+        float split_cost = 0.32f + (SA_left * SAV * split->left_count + SA_right * SAV * split->right_count);
+
+        if (split_cost < lowest_cost)
+        {
+            lowest_cost = split_cost;
+            best_split = split->offset;
+            left_count = split->left_count;
+            right_count = split->right_count;
+        }
+    }
+
+    // Splitting is not worth
+    if (lowest_cost > leaf_cost)
+        return;
+
+    // Saving the temporary buffer used by left
+    int old_buffer = node->data.leaf.objects;
+
+    // Time to split!
+    int children = (uint32_t)terra_kdtree_add_node_pair(tree);
+    node = &tree->nodes[node_idx];
+    node->data.internal.children = children;
+    node->data.internal.is_leaf = 0;
+    node->data.internal.axis = axis;
+    node->split = best_split;
+
+    TerraKDNode* left_node = &tree->nodes[node->data.internal.children];
+    TerraKDNode* right_node = &tree->nodes[node->data.internal.children + 1];
+    left_node->data.leaf.objects = terra_kdtree_add_object_buffer(tree);
+    right_node->data.leaf.objects = terra_kdtree_add_object_buffer(tree);
+    left_node->data.internal.is_leaf = 1;
+    right_node->data.internal.is_leaf = 1;
+    buffer = &tree->object_buffers[old_buffer];
+
+    TerraKDObjectBuffer* left_buffer = &tree->object_buffers[left_node->data.leaf.objects];
+    TerraKDObjectBuffer* right_buffer = &tree->object_buffers[right_node->data.leaf.objects];
+
+    terra_kdtree_init_object_buffer(left_buffer, left_count);
+    terra_kdtree_init_object_buffer(right_buffer, right_count);
+
+    int lbc = 0; int rbc = 0;
+    TerraAABB left_aabb = *aabb, right_aabb = *aabb;
+    terra__comp(left_aabb.max, axis) = best_split;
+    terra__comp(right_aabb.min, axis) = best_split;
+    float left_max = best_split;
+    float right_min = best_split;
+    float left_min = terra__comp(left_aabb.min, axis);
+    float right_max = terra__comp(right_aabb.max, axis);
+    for (int i = 0; i < buffer->objects_count; ++i)
+    {
+        TerraKDObjectRef ref = buffer->objects[i];
+       // TerraTriangle* triangle = &scene->objects[ref.primitive.object_idx].triangles[ref.primitive.triangle_idx];
+
+        TerraAABB triangle_aabb = terra_kdtree_aabb_cache[i];
+        float triangle_min = terra__comp(triangle_aabb.min, axis);
+        float triangle_max = terra__comp(triangle_aabb.max, axis);
+
+        if ((triangle_min <= left_max) && (triangle_max >= left_min))
+            left_buffer->objects[lbc++] = ref;
+        if ((triangle_min <= right_max) && (triangle_max >= right_min))
+            right_buffer->objects[rbc++] = ref;
+    }
+    assert(lbc == left_buffer->objects_count);
+    assert(rbc == right_buffer->objects_count);
+    terra_kdtree_destroy_object_buffer(buffer);
+
+    // Reason is that 0 - 3 is a decend number of objects for a leaf 
+    if (left_count > 3)
+        terra_kdtree_create_rec(tree, children, scene, &left_aabb, depth - 1);
+
+    if (right_count > 3)
+        terra_kdtree_create_rec(tree, children + 1, scene, &right_aabb, depth - 1);
+}
+
+void terra_kdtree_create(TerraKDTree* kdtree, const struct TerraScene* scene)
+{
+    int primitives_count = 0;
+    for (int j = 0; j < scene->objects_count; ++j)
+        primitives_count += scene->objects[j].triangles_count;
+
+    kdtree->nodes = terra_malloc(sizeof(TerraKDNode));
+    kdtree->nodes_count = 1;
+    kdtree->nodes_capacity = 1;
+
+    kdtree->object_buffers = NULL;
+    kdtree->object_buffers_count = 0;
+    kdtree->object_buffers_capacity = 0;
+
+    kdtree->nodes[0].data.internal.is_leaf = 1;
+    kdtree->nodes[0].data.leaf.objects = terra_kdtree_add_object_buffer(kdtree);
+    TerraKDObjectBuffer* buffer = &kdtree->object_buffers[kdtree->nodes[0].data.leaf.objects];
+    terra_kdtree_init_object_buffer(buffer, primitives_count);
+
+    kdtree->scene_aabb.min = terra_f3_set1(FLT_MAX);
+    kdtree->scene_aabb.max = terra_f3_set1(-FLT_MAX);
+
+    int pidx = 0;
+    for (int j = 0; j < scene->objects_count; ++j)
+    {
+        for (int i = 0; i < scene->objects[j].triangles_count; ++i, ++pidx)
+        {
+            TerraTriangle* triangle = &scene->objects[j].triangles[i];
+            terra_aabb_fit_triangle(&kdtree->scene_aabb, triangle);
+            buffer->objects[pidx].primitive.object_idx = j;
+            buffer->objects[pidx].primitive.triangle_idx = i;
+            buffer->objects[pidx].triangle = *triangle;
+        }
+    }
+    buffer->objects_count = pidx;
+
+    terra_kdtree_splitbuffer = terra_malloc(sizeof(TerraKDSplit) * primitives_count * 2);
+    terra_kdtree_aabb_cache = terra_malloc(sizeof(TerraAABB) * primitives_count * 2);
+
+    terra_kdtree_create_rec(kdtree, 0, scene, &kdtree->scene_aabb, 20);
+
+    terra_free(terra_kdtree_splitbuffer);
+    terra_free(terra_kdtree_aabb_cache);
+}
+
+//--------------------------------------------------------------------------------------------------
+void terra_kdtree_destroy(TerraKDTree* kdtree)
+{
+    terra_free(kdtree->nodes);
+    for (int i = 0; i < kdtree->object_buffers_count; ++i)
+        terra_kdtree_destroy_object_buffer(&kdtree->object_buffers[i]);
+    terra_free(kdtree->object_buffers);
+}
+
+//--------------------------------------------------------------------------------------------------
+bool terra_kdtree_traverse(TerraKDTree* kdtree, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point_out, TerraPrimitiveRef* primitive_out)
+{
+    float a, b;
+    float t;
+
+    if (!terra_ray_aabb_intersection(ray, &kdtree->scene_aabb, &a, &b))
+        return false;
+
+    typedef struct StackEntry
+    {
+        TerraKDNode* node;
+        float t;
+        TerraFloat3 pb;
+        int prev;
+    }StackEntry;
+
+    StackEntry stack[64];
+    TerraKDNode* far_child, *cur_node;
+    cur_node = &kdtree->nodes[0];
+
+    int enpt = 0;
+    stack[enpt].t = a;
+
+    if (a >= 0.f)
+    {
+        TerraFloat3 d = terra_mulf3(&ray->direction, a);
+        stack[enpt].pb = terra_addf3(&ray->origin, &d);
+    }
+    else
+    {
+        stack[enpt].pb = ray->origin;
+    }
+
+    int expt = 1;
+    stack[expt].t = b;
+    TerraFloat3 d = terra_mulf3(&ray->direction, b);
+    stack[expt].pb = terra_addf3(&ray->origin, &d);
+    stack[expt].node = NULL;
+
+    while (cur_node != NULL)
+    {
+        while (!cur_node->data.internal.is_leaf)
+        {
+            float splitval = cur_node->split;
+
+            int na_lu[3] = { 1, 2, 0 };
+            int pa_lu[3] = { 2, 0, 1 };
+            int axis = cur_node->data.internal.axis;
+            int next_axis = na_lu[axis];
+            int prev_axis = pa_lu[axis];
+
+            TerraKDNode* left_node = &kdtree->nodes[cur_node->data.internal.children];
+            TerraKDNode* right_node = left_node + 1;
+
+            if (terra__comp(stack[enpt].pb, axis) <= splitval)
+            {
+                if (terra__comp(stack[expt].pb, axis) <= splitval)
+                {
+                    cur_node = left_node;
+                    continue;
+                }
+                if (terra__comp(stack[expt].pb, axis) == splitval)
+                {
+                    cur_node = right_node;
+                    continue;
+                }
+                far_child = right_node;
+                cur_node = left_node;
+            }
+            else
+            {
+                if (splitval < terra__comp(stack[expt].pb, axis))
+                {
+                    cur_node = right_node;
+                    continue;
+                }
+                far_child = left_node;
+                cur_node = right_node;
+            }
+
+            t = (splitval - terra__comp(ray->origin, axis)) / terra__comp(ray->direction, axis);
+
+            int tmp = expt++;
+            if (expt == enpt)
+                ++expt;
+
+            stack[expt].prev = tmp;
+            stack[expt].t = t;
+            stack[expt].node = far_child;
+            terra__comp(stack[expt].pb, axis) = splitval;
+            terra__comp(stack[expt].pb, next_axis) = terra__comp(ray->origin, next_axis) + t * terra__comp(ray->direction, next_axis);
+            terra__comp(stack[expt].pb, prev_axis) = terra__comp(ray->origin, prev_axis) + t * terra__comp(ray->direction, prev_axis);
+        }
+
+        TerraKDObjectBuffer* buffer = &kdtree->object_buffers[cur_node->data.leaf.objects];
+        bool hit = false;
+
+        float closest_t = FLT_MAX;
+        for (int i = 0; i < buffer->objects_count; ++i)
+        {
+            TerraKDObjectRef ref = buffer->objects[i];
+//            TerraTriangle* triangle = &scene->objects[ref.primitive.object_idx].triangles[ref.primitive.triangle_idx];
+
+            float t;
+            TerraFloat3 point;
+            if (terra_ray_triangle_intersection(ray, &ref.triangle, &point, &t))
+            {
+                if (t >= stack[enpt].t && t <= stack[expt].t && t < closest_t)
+                {
+                    closest_t = t;
+                    *primitive_out = ref.primitive;
+                    *point_out = point;
+                    hit = true;
+                }
+            }
+        }
+
+        if (hit)
+            return true;
+
+        enpt = expt;
+        cur_node = stack[expt].node;
+        expt = stack[enpt].prev;
+    }
+
+    return false;
 }
 
 //--------------------------------------------------------------------------------------------------
 #if defined(TERRA_TIMING)
 #include <Windows.h>
-int64_t terra_timer_split()
+TerraTimeSlice terra_timer_split()
 {
     LARGE_INTEGER ts;
     QueryPerformanceCounter(&ts);
-    return (int64_t)ts.QuadPart;
+    return (TerraTimeSlice)ts.QuadPart;
 }
 
 //--------------------------------------------------------------------------------------------------
-double terra_timer_elapsed_ms(int64_t delta)
+double terra_timer_elapsed_ms(TerraTimeSlice delta)
 {
     LARGE_INTEGER fq;
     QueryPerformanceFrequency(&fq);
     return (double)delta / ((double)fq.QuadPart / 1000.f);
 }
 #else
-uint64_t terra_timer_split()
+TerraTimeSlice terra_timer_split()
 {
     return 0;
 }
@@ -1828,8 +2430,7 @@ float terra_timer_elapsed_ms(uint64_t delta)
 //--------------------------------------------------------------------------------------------------
 // Math implementation
 //--------------------------------------------------------------------------------------------------
-#if !defined(TERRA_ENABLE_SIMD)
-inline TerraFloat2 terra_f2_set(float x, float y)
+TerraFloat2 terra_f2_set(float x, float y)
 {
     TerraFloat2 ret;
     ret.x = x;
@@ -1853,7 +2454,7 @@ TerraFloat3 terra_f3_set1(float xyz)
     return ret;
 }
 
-inline TerraFloat4 terra_f4(float x, float y, float z, float w)
+TerraFloat4 terra_f4(float x, float y, float z, float w)
 {
     TerraFloat4 ret;
     ret.x = x;
@@ -1875,7 +2476,7 @@ TerraFloat3 terra_addf3(const TerraFloat3 *left, const TerraFloat3 *right)
         left->z + right->z);
 }
 
-inline TerraFloat2 terra_addf2(const TerraFloat2 * left, const TerraFloat2 * right)
+TerraFloat2 terra_addf2(const TerraFloat2 * left, const TerraFloat2 * right)
 {
     return terra_f2_set(left->x + right->x, left->y + right->y);
 }
@@ -1888,7 +2489,7 @@ TerraFloat3 terra_subf3(const TerraFloat3 *left, const TerraFloat3 *right)
         left->z - right->z);
 }
 
-inline TerraFloat2 terra_mulf2(const TerraFloat2 * left, float scale)
+TerraFloat2 terra_mulf2(const TerraFloat2 * left, float scale)
 {
     return terra_f2_set(left->x * scale, left->y * scale);
 }
@@ -1996,130 +2597,6 @@ bool terra_f3_is_zero(const TerraFloat3* f3)
 {
     return f3->x == 0 && f3->y == 0 && f3->z == 0;
 }
-
-#else
-TerraFloat3 terra_f3(float x, float y, float z)
-{
-    return (TerraFloat3) { x, y, z };
-}
-
-inline TerraFloat4 terra_f4(float x, float y, float z, float w)
-{
-    return (TerraFloat4) { x, y, z, w };
-}
-
-bool terra_equalf3(TerraFloat3* a, TerraFloat3* b) {
-    return (a->x == b->x && a->y == b->y && a->z == b->z);
-}
-
-TerraFloat3 terra_addf3(const TerraFloat3 *left, const TerraFloat3 *right)
-{
-    return terra_f3(
-        left->x + right->x,
-        left->y + right->y,
-        left->z + right->z);
-}
-
-TerraFloat3 terra_subf3(const TerraFloat3 *left, const TerraFloat3 *right)
-{
-    return terra_f3(
-        left->x - right->x,
-        left->y - right->y,
-        left->z - right->z);
-}
-
-TerraFloat3 terra_mulf3(const TerraFloat3 *vec, float scale)
-{
-    return terra_f3(
-        vec->x * scale,
-        vec->y * scale,
-        vec->z * scale);
-}
-
-TerraFloat3 terra_pointf3(const TerraFloat3 *a, const TerraFloat3* b)
-{
-    return terra_f3(a->x * b->x, a->y * b->y, a->z * b->z);
-}
-
-TerraFloat3 terra_divf3(const TerraFloat3 *vec, float val)
-{
-    return terra_f3(
-        vec->x / val,
-        vec->y / val,
-        vec->z / val);
-}
-
-float terra_dotf3(const TerraFloat3 *a, const TerraFloat3 *b)
-{
-    return a->x * b->x + a->y * b->y + a->z * b->z;
-}
-
-TerraFloat3 terra_crossf3(const TerraFloat3 *a, const TerraFloat3 *b)
-{
-    return terra_f3(
-        a->y * b->z - a->z * b->y,
-        a->z * b->x - a->x * b->z,
-        a->x * b->y - a->y * b->x);
-}
-
-TerraFloat3 terra_negf3(const TerraFloat3 *vec)
-{
-    return terra_f3(
-        -vec->x,
-        -vec->y,
-        -vec->z);
-}
-
-float terra_lenf3(const TerraFloat3 *vec)
-{
-    return sqrtf(
-        vec->x * vec->x +
-        vec->y * vec->y +
-        vec->z * vec->z);
-}
-
-float terra_distance_squaredf3(const TerraFloat3 *a, const TerraFloat3 *b)
-{
-    TerraFloat3 delta = terra_subf3(b, a);
-    return terra_dotf3(&delta, &delta);
-}
-
-TerraFloat3 terra_normf3(const TerraFloat3 *vec)
-{
-    // Substitute with inverse len
-    float len = terra_lenf3(vec);
-    return terra_f3(
-        vec->x / len,
-        vec->y / len,
-        vec->z / len);
-}
-
-float terra_maxf(float a, float b)
-{
-    return a > b ? a : b;
-}
-
-float terra_minf(float a, float b)
-{
-    return a < b ? a : b;
-}
-
-void terra_swapf(float *a, float *b)
-{
-    float t = *a;
-    *a = *b;
-    *b = t;
-}
-
-TerraFloat3 terra_transformf3(const TerraFloat4x4 * transform, const TerraFloat3 * vec)
-{
-    return terra_f3(terra_dotf3((TerraFloat3*)&transform->rows[0], vec),
-        terra_dotf3((TerraFloat3*)&transform->rows[1], vec),
-        terra_dotf3((TerraFloat3*)&transform->rows[2], vec));
-}
-
-
-#endif // TERRA_ENABLE_SIMD
 
 #endif // TERRA_IMPLEMENTATION
 
