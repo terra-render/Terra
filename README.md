@@ -1,8 +1,6 @@
 # Terra 
 Unidirectional Monte Carlo Path Tracer  
-Written by:
-- Matteo Bracci
-- Edoardo Dominici
+co-authored w/ https://github.com/sparkon
 
 ### Features
 - Header only (C99 ~2.6k lines of code) tested on **Mingw64-6.2.0** **Clang-3.9.0** **MSVC2015**
@@ -20,7 +18,7 @@ Written by:
 - Russian Roulette for path termination
 - Antialiasing via random sub-pixel jittering
 - Multithread ready (see https://github.com/c4stan/TerraPreview)
-- Incremental rendering
+- Incremental progressive rendering
 - Multiple (local) tonemapping operators (Linear, Reinhard, Filmic & Uncharted2)
 
 ## Sample Renderings
@@ -31,8 +29,8 @@ Machine: Intel Core i7-2600 @ 3.40GHz - Windows 10 Pro x64
 Worker threads: 8 (1 per virtual core)  
 
 ##### Stats
-- `terra_trace()` ~4.2 ns
-- Total Throughput ~ 1'670'000 spp
+- `terra_trace()` ~ 4.2 ns per call
+- Total Throughput ~ 1'670'000 ray/s
 
 ![](http://i.imgur.com/w4rndg8.jpg)
 
