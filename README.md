@@ -30,7 +30,7 @@ Worker threads: 8 (1 per virtual core)
 
 ##### Stats
 - `terra_trace()`: ~ 4.2 ns per call
-- Ray throughput: ~ 1'670'000 ray/s
+- Ray throughput: ~ 1'670'000 rays/s
 
 ![](http://i.imgur.com/w4rndg8.jpg)
 
