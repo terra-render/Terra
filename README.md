@@ -29,8 +29,8 @@ Machine: Intel Core i7-2600 @ 3.40GHz - Windows 10 Pro x64
 Worker threads: 8 (1 per virtual core)  
 
 ##### Stats
-- `terra_trace()` ~ 4.2 ns per call
-- Total Throughput ~ 1'670'000 ray/s
+- `terra_trace()`: ~ 4.2 ns per call
+- Ray throughput: ~ 1'670'000 ray/s
 
 ![](http://i.imgur.com/w4rndg8.jpg)
 
