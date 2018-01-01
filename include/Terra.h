@@ -254,11 +254,11 @@ TerraObject* terra_scene_add_object(TerraScene* scene);
 void         terra_scene_end(TerraScene* scene);
 void         terra_scene_destroy(TerraScene* scene);
 
-bool terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int height);
-void terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
+bool         terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int height);
+void         terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
 
-TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
-TerraRay   terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
+TerraStats   terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
+TerraRay     terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
 
 //--------------------------------------------------------------------------------------------------
 // Terra Semi-public API (Usable from bsdf routine)
@@ -273,7 +273,7 @@ bool        terra_ray_triangle_intersection(const TerraRay* ray, const TerraTria
 void        terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
 
 typedef int64_t TerraTimeSlice;
-TerraTimeSlice terra_timer_split();
-double        terra_timer_elapsed_ms(TerraTimeSlice delta);
+TerraTimeSlice  terra_timer_split();
+double          terra_timer_elapsed_ms(TerraTimeSlice delta);
 
 #endif // _TERRA_H_
