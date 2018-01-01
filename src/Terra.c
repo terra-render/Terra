@@ -1,5 +1,5 @@
 // Header
-#include "Terra.h"
+#include <Terra.h>
 
 // Terra
 #include "TerraBVH.h"
@@ -724,7 +724,8 @@ TerraRay terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* fra
 
 //--------------------------------------------------------------------------------------------------
 #if defined(_WIN32)
-// #include <Windows.h>
+#define _CRT_SECURE_NO_WARNINGS
+#include <Windows.h>
 TerraTimeSlice terra_timer_split()
 {
     LARGE_INTEGER ts;

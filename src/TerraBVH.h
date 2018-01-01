@@ -2,7 +2,7 @@
 #define _TERRA_BVH_H_
 
 // terra
-#include "Terra.h"
+#include <Terra.h>
 
 // BVH Public types
 typedef struct TerraBVHNode

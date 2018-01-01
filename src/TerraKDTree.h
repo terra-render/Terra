@@ -2,7 +2,7 @@
 #define _TERRA_KDTREE_H_
 
 // Terra
-#include "Terra.h"
+#include <Terra.h>
 
 // KDTree
 // Triangle is copied to avoid an additional redirection. Leaves have extremely few nodes (1 - 3).
