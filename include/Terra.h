@@ -37,9 +37,9 @@ typedef struct TerraShadingState
 }TerraShadingState;
 
 struct  TerraMaterial;
-typedef TerraFloat3(TerraRoutineSample)(const struct TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
-typedef float       (TerraRoutineWeight)(const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
-typedef TerraFloat3(TerraRoutineShade) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef TerraFloat3 (TerraRoutineSample) (const struct TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
+typedef float       (TerraRoutineWeight) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef TerraFloat3 (TerraRoutineShade)  (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 
 typedef enum TerraBSDFType 
 {
@@ -142,8 +142,8 @@ typedef struct TerraObject
 {
     TerraTriangle* triangles;
     TerraTriangleProperties* properties;
-    int           triangles_count;
-    TerraMaterial  material;
+    int triangles_count;
+    TerraMaterial material;
 }TerraObject;
 
 typedef enum TerraTonemappingOperator
@@ -179,7 +179,7 @@ typedef struct TerraSceneOptions
 
 typedef struct TerraPrimitiveRef
 {
-    uint32_t object_idx : 8;
+    uint32_t object_idx   :  8;
     uint32_t triangle_idx : 24;
 }TerraPrimitiveRef;
 
@@ -249,28 +249,28 @@ typedef struct TerraFramebuffer
 //--------------------------------------------------------------------------------------------------
 // Terra public API
 //--------------------------------------------------------------------------------------------------
-void         terra_scene_begin(TerraScene* scene, int objects_count, int materials_count);
-TerraObject* terra_scene_add_object(TerraScene* scene);
-void         terra_scene_end(TerraScene* scene);
-void         terra_scene_destroy(TerraScene* scene);
+void            terra_scene_begin(TerraScene* scene, int objects_count, int materials_count);
+TerraObject*    terra_scene_add_object(TerraScene* scene);
+void            terra_scene_end(TerraScene* scene);
+void            terra_scene_destroy(TerraScene* scene);
 
-bool         terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int height);
-void         terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
+bool            terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int height);
+void            terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
 
-TerraStats   terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
-TerraRay     terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
+TerraStats      terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
+TerraRay        terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
 
 //--------------------------------------------------------------------------------------------------
 // Terra Semi-public API (Usable from bsdf routine)
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_sample_texture(const TerraTexture* texture, const TerraFloat2* uv);
-TerraFloat3 terra_sample_hdr_cubemap(const TerraHDRTexture* texture, const TerraFloat3* v);
-TerraFloat3 terra_eval_attribute(const TerraAttribute* attribute, const TerraFloat2* uv);
-void*       terra_malloc(size_t size);
-void        terra_free(void* ptr);
-bool        terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, float* tmin_out, float* tmax_out);
-bool        terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out);
-void        terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
+TerraFloat3     terra_sample_texture(const TerraTexture* texture, const TerraFloat2* uv);
+TerraFloat3     terra_sample_hdr_cubemap(const TerraHDRTexture* texture, const TerraFloat3* v);
+TerraFloat3     terra_eval_attribute(const TerraAttribute* attribute, const TerraFloat2* uv);
+void*           terra_malloc(size_t size);
+void            terra_free(void* ptr);
+bool            terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, float* tmin_out, float* tmax_out);
+bool            terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out);
+void            terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
 
 typedef int64_t TerraTimeSlice;
 TerraTimeSlice  terra_timer_split();
