@@ -20,7 +20,7 @@ TerraFloat3 terra_fresnel(const TerraFloat3* F_0, const TerraFloat3* view, const
 
 TerraFloat3 terra_F_0(float ior, const TerraFloat3* albedo, float metalness)
 {
-    float f = terra_absf((1.f - ior) / (1.f + ior));
+    float f = (1.f - ior) / (1.f + ior);
     f *= f;
     TerraFloat3 F0 = terra_f3_set1(f);
     F0 = terra_lerpf3(&F0, albedo, metalness);
