@@ -36,10 +36,10 @@ typedef struct TerraShadingState
     float       fresnel;
 }TerraShadingState;
 
-struct  TerraMaterial;
-typedef TerraFloat3 (TerraRoutineSample) (const struct TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
-typedef float       (TerraRoutineWeight) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
-typedef TerraFloat3 (TerraRoutineShade)  (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef struct TerraMaterial TerraMaterial;
+typedef TerraFloat3 (TerraRoutineSample) (const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
+typedef float       (TerraRoutineWeight) (const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef TerraFloat3 (TerraRoutineShade)  (const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 
 typedef enum TerraBSDFType 
 {
