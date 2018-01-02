@@ -727,7 +727,7 @@ TerraRay terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* fra
 
 //--------------------------------------------------------------------------------------------------
 
-static TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y)
+TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y)
 {
     switch (texture->address_mode)
     {
@@ -757,7 +757,7 @@ static TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y)
     return terra_f3_set((float) pixel[0] / 255, (float) pixel[1] / 255, (float) pixel[2] / 255);
 }
 
-static TerraFloat3 terra_read_hdr_texture(const TerraHDRTexture* texture, int x, int y)
+TerraFloat3 terra_read_hdr_texture(const TerraHDRTexture* texture, int x, int y)
 {
     // HDR textures are RGB
     float* pixel = &texture->pixels[(y * texture->width + x) * 3];
@@ -887,15 +887,16 @@ double terra_timer_elapsed_ms(TerraTimeSlice delta)
     return (double)delta / ((double)fq.QuadPart / 1000.f);
 }
 #else
+#include <time.h>
 TerraTimeSlice terra_timer_split()
 {
-    return 0;
+    return (TerraTimeSlice)clock();
 }
 
 //--------------------------------------------------------------------------------------------------
 double terra_timer_elapsed_ms(TerraTimeSlice delta)
 {
-    return 0.f;
+    return (double)delta / CLOCKS_PER_SEC * 1000;
 }
 #endif
 
