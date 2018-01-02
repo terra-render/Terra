@@ -4,9 +4,9 @@
 // Terra
 #include <Terra.h>
 
-// KDTree
-// O(N log(N)^2)
-// Triangle is copied to avoid an additional redirection. 
+//--------------------------------------------------------------------------------------------------
+// Terra K-D Tree Types
+//--------------------------------------------------------------------------------------------------
 typedef struct TerraKDObjectRef
 {
     TerraTriangle    triangle;
@@ -52,8 +52,13 @@ typedef struct TerraKDTree
 }TerraKDTree;
 
 //--------------------------------------------------------------------------------------------------
-// Terra K-D Tree Internal routines
+// Terra K-D Tree API
 //--------------------------------------------------------------------------------------------------
+//
+// KDTree
+// O(N log(N)^2)
+// Triangle is copied to avoid an additional redirection. 
+//
 void terra_kdtree_create(TerraKDTree* kdtree, const TerraScene* scene);
 void terra_kdtree_destroy(TerraKDTree* kdtree);
 bool terra_kdtree_traverse(TerraKDTree* kdtree, const TerraRay* ray, const TerraScene* scene, TerraFloat3* point_out, TerraPrimitiveRef* primitive_out);
