@@ -8,6 +8,11 @@
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
+#define TERRA_DO_RUSSIAN_ROULETTE
+#define TERRA_DO_DIRECT_LIGHTING
+//--------------------------------------------------------------------------------------------------
+// Terra internal types
+//--------------------------------------------------------------------------------------------------
 typedef struct TerraSceneImpl
 {
 	TerraKDTree kdtree;
@@ -205,6 +210,7 @@ void terra_scene_begin(TerraScene* scene, int objects_count, int materials_count
     scene->objects_count = 0;
     scene->lights = (TerraLight*)terra_malloc(sizeof(TerraLight) * objects_count);
     scene->lights_count = 0;
+    scene->opts.environment_map.pixels = NULL;
     scene->_impl = NULL;
 }
 
@@ -376,13 +382,15 @@ bool terra_find_closest(TerraScene* scene, const TerraRay* ray, const TerraMater
 }
 
 TerraLight* terra_light_pick_power_proportional(const TerraScene* scene, float* e1) {
-    // Compute total light emitted (in order to weight properly the lights when picking one)
+    // Compute total light emitted so that we can later weight
+    // TODO cache this ?
     float total_light_power = 0;
     for (int i = 0; i < scene->lights_count; ++i) {
         total_light_power += scene->lights[i].emissive;
     }
 
-    // Pick one light
+    // Pick a light
+    // e1 is a random float between 0 and 
     float alpha_acc = *e1;
     int light_idx = -1;
     for (int i = 0; i < scene->lights_count; ++i) {
@@ -460,17 +468,20 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
     TerraFloat3 throughput = terra_f3_one;
     TerraRay ray = *primary_ray;
 
-    for (int bounce = 0; bounce < scene->opts.bounces; ++bounce)
+    for (int bounce = 0; bounce <= scene->opts.bounces; ++bounce)
     {
         const TerraMaterial* material;
         TerraShadingContext ctx;
         TerraFloat3 intersection_point;
 
-        // Finding closest object
         if (terra_find_closest(scene, &ray, &material, &ctx, &intersection_point) == false)
         {
-            // Nothing hit, returning scene radiance
-            TerraFloat3 env_color = terra_sample_hdr_cubemap(&scene->opts.environment_map, &ray.direction);
+            TerraFloat3 env_color;
+            if (scene->opts.environment_map.pixels != NULL) {
+                env_color = terra_sample_hdr_cubemap(&scene->opts.environment_map, &ray.direction);
+            } else {
+                env_color = terra_f3_zero;
+            }
             throughput = terra_pointf3(&throughput, &env_color);
             Lo = terra_addf3(&Lo, &throughput);
             break;
@@ -482,12 +493,10 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
         TerraFloat3 mat_emissive = terra_eval_attribute(&material->emissive, &ctx.texcoord);
         TerraFloat3 mat_albedo = terra_eval_attribute(&material->albedo, &ctx.texcoord);
 
-        // Adding emissive
         TerraFloat3 emissive = terra_mulf3(&throughput, mat_emissive.x);
         emissive = terra_pointf3(&emissive, &mat_albedo);
         Lo = terra_addf3(&Lo, &emissive);
 
-        // Sampling BSDF
         float e0 = (float)rand() / RAND_MAX;
         float e1 = (float)rand() / RAND_MAX;
         float e2 = (float)rand() / RAND_MAX;
@@ -497,9 +506,9 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
         float       bsdf_pdf = terra_maxf(material->bsdf.weight(material, &state, &bsdf_sample, &ctx), terra_Epsilon);
 
         float light_pdf = 0.f;
-        if (scene->opts.enable_direct_light_sampling)
+#ifdef TERRA_DO_DIRECT_LIGHTING
+        if (scene->opts.direct_sampling)
         {
-            // Sampling light
             float l1 = (float)rand() / RAND_MAX;
             float l2 = (float)rand() / RAND_MAX;
             TerraLight* light = terra_light_pick_power_proportional(scene, &l1);
@@ -527,22 +536,23 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
                 Lo = terra_addf3(&Lo, &light_emissive);
             }
         }
-
+#endif
         // BSDF Contribution
         TerraFloat3 bsdf_radiance = material->bsdf.shade(material, &state, &bsdf_sample, &ctx);
         float bsdf_weight = bsdf_pdf * bsdf_pdf / (light_pdf * light_pdf + bsdf_pdf * bsdf_pdf);
         TerraFloat3 bsdf_contribution = terra_mulf3(&bsdf_radiance, bsdf_weight / bsdf_pdf);
 
         throughput = terra_pointf3(&throughput, &bsdf_contribution);
-
+        
         // Russian roulette
-        /*float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
-         float e3 = 0.5f;//(float)rand() / RAND_MAX;
-         if (e3 > p)
-             break;
-         //throughput = terra_pointf3(&throughput, &throughput);
-         throughput = terra_divf3(&throughput, 0.5f);*/
-
+#ifdef TERRA_DO_RUSSIAN_ROULETTE
+        float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
+        float e3 = 0.5f;
+        e3 = (float)rand() / RAND_MAX + terra_Epsilon;
+        if (e3 > p)
+            break;
+        throughput = terra_mulf3(&throughput, 1.f / p);
+#endif
         // Next ray (Skip if last?)
         float sNoL = terra_dotf3(&ctx.normal, &bsdf_sample);
         terra_ray_create(&ray, &intersection_point, &bsdf_sample, &ctx.normal, sNoL < 0.f ? -1.f : 1.f);
