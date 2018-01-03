@@ -548,10 +548,10 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
 #ifdef TERRA_DO_RUSSIAN_ROULETTE
         float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
         float e3 = 0.5f;
-        e3 = (float)rand() / RAND_MAX + terra_Epsilon;
+        e3 = (float)rand() / RAND_MAX;
         if (e3 > p)
             break;
-        throughput = terra_mulf3(&throughput, 1.f / p);
+        throughput = terra_mulf3(&throughput, 1.f / (p + terra_Epsilon));
 #endif
         // Next ray (Skip if last?)
         float sNoL = terra_dotf3(&ctx.normal, &bsdf_sample);
