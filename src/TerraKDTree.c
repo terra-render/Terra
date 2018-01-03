@@ -10,12 +10,13 @@ typedef struct TerraKDSplit
     uint32_t left_count;
     uint32_t right_count : 31;
     uint32_t type : 1;
-    uint16_t t0c; // If you have more than 65k identical bitwise vertices 
-    uint16_t t1c; // there is something wrong
+    uint16_t t0c; 
+    uint16_t t1c;
 }TerraKDSplit;
-TerraKDSplit* terra_kdtree_splitbuffer = NULL;
-TerraAABB*   terra_kdtree_aabb_cache = NULL;
+
 #define terra__comp(float3, axis) *((float*)&float3 + axis) // saving space
+#define TERRA_KDTREE_INTERSECTION_COST 1.5f // 0.32f
+#define TERRA_KDTREE_TRAVERSAL_COST 0.8f
 
 // Sorts the splits in ascending order
 int terra_splitlist_ascending_cmpfun(const void* a, const void* b)
@@ -90,28 +91,28 @@ bool terra_aabb_overlap(const TerraAABB* left, const TerraAABB* right)
         (left->min.z <= right->max.z && left->max.z >= right->min.z);
 }
 
-void terra_kdtree_add_splitbuffer(int* counter, float val, int type)
+void terra_kdtree_add_splitbuffer(TerraKDSplit* splitbuffer, int* counter, float val, int type)
 {
     for (int i = 0; i < *counter; ++i)
     {
-        if (val == terra_kdtree_splitbuffer[i].offset)
+        if (val == splitbuffer[i].offset)
         {
             if (type == 0)
-                ++terra_kdtree_splitbuffer[i].t0c;
+                ++splitbuffer[i].t0c;
             else
-                ++terra_kdtree_splitbuffer[i].t1c;
+                ++splitbuffer[i].t1c;
             return;
         }
     }
 
-    terra_kdtree_splitbuffer[*counter].offset = val;
-    terra_kdtree_splitbuffer[*counter].type = type;
-    terra_kdtree_splitbuffer[*counter].t0c = 1;
-    terra_kdtree_splitbuffer[*counter].t1c = 1;
+    splitbuffer[*counter].offset = val;
+    splitbuffer[*counter].type = type;
+    splitbuffer[*counter].t0c = 1;
+    splitbuffer[*counter].t1c = 1;
     (*counter)++;
 }
 
-void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* scene, const TerraAABB* aabb, int depth)
+void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* scene, const TerraAABB* aabb, int depth, TerraKDSplit* splitbuffer, TerraAABB* aabb_cache)
 {
     if (depth <= 0)
         return;
@@ -123,7 +124,7 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
     extents.y = aabb->max.y - aabb->min.y;
     extents.z = aabb->max.z - aabb->min.z;
 
-    // Choosing split axis
+    // Cycling through the axis
     int axis = 2;
     if ((extents.x >= extents.y) && (extents.x >= extents.z))
         axis = 0;
@@ -131,7 +132,7 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
         axis = 1;
 
     // Finding all split positions
-    TerraKDObjectBuffer* buffer = &tree->object_buffers[node->data.leaf.objects];
+    TerraKDObjectBuffer* buffer = &tree->object_buffers[node->leaf.objects];
 
     int splitlist_next = 0;
     for (int i = 0; i < buffer->objects_count; ++i)
@@ -139,25 +140,25 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
         TerraKDObjectRef ref = buffer->objects[i];
         TerraTriangle* triangle = &scene->objects[ref.primitive.object_idx].triangles[ref.primitive.triangle_idx];
 
-        terra_kdtree_aabb_cache[i].min = terra_f3_set1(FLT_MAX);
-        terra_kdtree_aabb_cache[i].max = terra_f3_set1(-FLT_MAX);
-        terra_aabb_fit_triangle(&terra_kdtree_aabb_cache[i], triangle);
-        TerraAABB* triangle_aabb = &terra_kdtree_aabb_cache[i];
+        aabb_cache[i].min = terra_f3_set1(FLT_MAX);
+        aabb_cache[i].max = terra_f3_set1(-FLT_MAX);
+        terra_aabb_fit_triangle(&aabb_cache[i], triangle);
+        TerraAABB* triangle_aabb = &aabb_cache[i];
 
         float p1 = terra__comp(triangle_aabb->min, axis);
-        terra_kdtree_add_splitbuffer(&splitlist_next, p1, 0);
+        terra_kdtree_add_splitbuffer(splitbuffer, &splitlist_next, p1, 0);
 
         float p2 = terra__comp(triangle_aabb->max, axis);
-        terra_kdtree_add_splitbuffer(&splitlist_next, p2, 1);
+        terra_kdtree_add_splitbuffer(splitbuffer, &splitlist_next, p2, 1);
     }
 
-    qsort(terra_kdtree_splitbuffer, splitlist_next, sizeof(TerraKDSplit), terra_splitlist_ascending_cmpfun);
+    qsort(splitbuffer, splitlist_next, sizeof(TerraKDSplit), terra_splitlist_ascending_cmpfun);
 
     int right_counter = buffer->objects_count;
     int left_counter = 0;
     for (int i = 0; i < splitlist_next; ++i)
     {
-        TerraKDSplit* split = &terra_kdtree_splitbuffer[i];
+        TerraKDSplit* split = &splitbuffer[i];
         if (split->type == 0)
             left_counter += split->t0c;
 
@@ -170,14 +171,15 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
 
     // Estimating costs
     float SAV = 0.5f / (extents.x * extents.z + extents.x * extents.y + extents.z * extents.y);
-    float leaf_cost = (float)buffer->objects_count;
+    float cost_of_not_splitting = TERRA_KDTREE_INTERSECTION_COST * (float)buffer->objects_count;
 
     float lowest_cost = FLT_MAX;
     float best_split = 0.f;
-    int left_count, right_count;
+    int left_count = -1;
+    int right_count = -1;
     for (int i = 0; i < splitlist_next; ++i)
     {
-        TerraKDSplit* split = &terra_kdtree_splitbuffer[i];
+        TerraKDSplit* split = &splitbuffer[i];
 
         // Calculating extents
         TerraAABB left = *aabb, right = *aabb;
@@ -197,8 +199,7 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
         float SA_left = 2 * (le.x * le.z + le.x * le.y + le.z * le.y);
         float SA_right = 2 * (re.x * re.z + re.x * re.y + re.z * re.y);
 
-        // for the most part just played around w/ it and 0.32 seemed good on a couple of scenes
-        float split_cost = 0.32f + (SA_left * SAV * split->left_count + SA_right * SAV * split->right_count);
+        float split_cost = TERRA_KDTREE_TRAVERSAL_COST + TERRA_KDTREE_INTERSECTION_COST * (SA_left * SAV * split->left_count + SA_right * SAV * split->right_count);
 
         if (split_cost < lowest_cost)
         {
@@ -210,30 +211,30 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
     }
 
     // Splitting is not worth
-    if (lowest_cost > leaf_cost)
+    if (lowest_cost > cost_of_not_splitting)
         return;
 
     // Saving the temporary buffer used by left
-    int old_buffer = node->data.leaf.objects;
+    int old_buffer = node->leaf.objects;
 
     // Time to split!
     int children = (uint32_t)terra_kdtree_add_node_pair(tree);
     node = &tree->nodes[node_idx];
-    node->data.internal.children = children;
-    node->data.internal.is_leaf = 0;
-    node->data.internal.axis = axis;
+    node->internal.children = children;
+    node->internal.is_leaf = 0;
+    node->internal.axis = axis;
     node->split = best_split;
 
-    TerraKDNode* left_node = &tree->nodes[node->data.internal.children];
-    TerraKDNode* right_node = &tree->nodes[node->data.internal.children + 1];
-    left_node->data.leaf.objects = terra_kdtree_add_object_buffer(tree);
-    right_node->data.leaf.objects = terra_kdtree_add_object_buffer(tree);
-    left_node->data.internal.is_leaf = 1;
-    right_node->data.internal.is_leaf = 1;
+    TerraKDNode* left_node = &tree->nodes[node->internal.children];
+    TerraKDNode* right_node = &tree->nodes[node->internal.children + 1];
+    left_node->leaf.objects = terra_kdtree_add_object_buffer(tree);
+    right_node->leaf.objects = terra_kdtree_add_object_buffer(tree);
+    left_node->internal.is_leaf = 1;
+    right_node->internal.is_leaf = 1;
     buffer = &tree->object_buffers[old_buffer];
 
-    TerraKDObjectBuffer* left_buffer = &tree->object_buffers[left_node->data.leaf.objects];
-    TerraKDObjectBuffer* right_buffer = &tree->object_buffers[right_node->data.leaf.objects];
+    TerraKDObjectBuffer* left_buffer = &tree->object_buffers[left_node->leaf.objects];
+    TerraKDObjectBuffer* right_buffer = &tree->object_buffers[right_node->leaf.objects];
 
     terra_kdtree_init_object_buffer(left_buffer, left_count);
     terra_kdtree_init_object_buffer(right_buffer, right_count);
@@ -251,7 +252,7 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
         TerraKDObjectRef ref = buffer->objects[i];
        // TerraTriangle* triangle = &scene->objects[ref.primitive.object_idx].triangles[ref.primitive.triangle_idx];
 
-        TerraAABB triangle_aabb = terra_kdtree_aabb_cache[i];
+        TerraAABB triangle_aabb = aabb_cache[i];
         float triangle_min = terra__comp(triangle_aabb.min, axis);
         float triangle_max = terra__comp(triangle_aabb.max, axis);
 
@@ -264,12 +265,12 @@ void terra_kdtree_create_rec(TerraKDTree* tree, int node_idx, const TerraScene* 
     assert(rbc == right_buffer->objects_count);
     terra_kdtree_destroy_object_buffer(buffer);
 
-    // Reason is that 0 - 3 is a decend number of objects for a leaf 
+    // Not splitting for less than 3..
     if (left_count > 3)
-        terra_kdtree_create_rec(tree, children, scene, &left_aabb, depth - 1);
+        terra_kdtree_create_rec(tree, children, scene, &left_aabb, depth - 1, splitbuffer, aabb_cache);
 
     if (right_count > 3)
-        terra_kdtree_create_rec(tree, children + 1, scene, &right_aabb, depth - 1);
+        terra_kdtree_create_rec(tree, children + 1, scene, &right_aabb, depth - 1, splitbuffer, aabb_cache);
 }
 
 void terra_kdtree_create(TerraKDTree* kdtree, const struct TerraScene* scene)
@@ -286,14 +287,15 @@ void terra_kdtree_create(TerraKDTree* kdtree, const struct TerraScene* scene)
     kdtree->object_buffers_count = 0;
     kdtree->object_buffers_capacity = 0;
 
-    kdtree->nodes[0].data.internal.is_leaf = 1;
-    kdtree->nodes[0].data.leaf.objects = terra_kdtree_add_object_buffer(kdtree);
-    TerraKDObjectBuffer* buffer = &kdtree->object_buffers[kdtree->nodes[0].data.leaf.objects];
+    kdtree->nodes[0].internal.is_leaf = 1;
+    kdtree->nodes[0].leaf.objects = terra_kdtree_add_object_buffer(kdtree);
+    TerraKDObjectBuffer* buffer = &kdtree->object_buffers[kdtree->nodes[0].leaf.objects];
     terra_kdtree_init_object_buffer(buffer, primitives_count);
 
     kdtree->scene_aabb.min = terra_f3_set1(FLT_MAX);
     kdtree->scene_aabb.max = terra_f3_set1(-FLT_MAX);
 
+    // Copying all triangles to temporary buffer
     int pidx = 0;
     for (int j = 0; j < scene->objects_count; ++j)
     {
@@ -308,13 +310,13 @@ void terra_kdtree_create(TerraKDTree* kdtree, const struct TerraScene* scene)
     }
     buffer->objects_count = pidx;
 
-    terra_kdtree_splitbuffer = terra_malloc(sizeof(TerraKDSplit) * primitives_count * 2);
-    terra_kdtree_aabb_cache = terra_malloc(sizeof(TerraAABB) * primitives_count * 2);
+    TerraKDSplit* splitbuffer = terra_malloc(sizeof(TerraKDSplit) * primitives_count * 2);
+    TerraAABB* aabb_cache = terra_malloc(sizeof(TerraAABB) * primitives_count * 2);
 
-    terra_kdtree_create_rec(kdtree, 0, scene, &kdtree->scene_aabb, 20);
+    terra_kdtree_create_rec(kdtree, 0, scene, &kdtree->scene_aabb, 20, splitbuffer, aabb_cache);
 
-    terra_free(terra_kdtree_splitbuffer);
-    terra_free(terra_kdtree_aabb_cache);
+    terra_free(splitbuffer);
+    terra_free(aabb_cache);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -368,17 +370,17 @@ bool terra_kdtree_traverse(TerraKDTree* kdtree, const TerraRay* ray, const Terra
 
     while (cur_node != NULL)
     {
-        while (!cur_node->data.internal.is_leaf)
+        while (!cur_node->internal.is_leaf)
         {
             float splitval = cur_node->split;
 
             int na_lu[3] = { 1, 2, 0 };
             int pa_lu[3] = { 2, 0, 1 };
-            int axis = cur_node->data.internal.axis;
+            int axis = cur_node->internal.axis;
             int next_axis = na_lu[axis];
             int prev_axis = pa_lu[axis];
 
-            TerraKDNode* left_node = &kdtree->nodes[cur_node->data.internal.children];
+            TerraKDNode* left_node = &kdtree->nodes[cur_node->internal.children];
             TerraKDNode* right_node = left_node + 1;
 
             if (terra__comp(stack[enpt].pb, axis) <= splitval)
@@ -421,7 +423,7 @@ bool terra_kdtree_traverse(TerraKDTree* kdtree, const TerraRay* ray, const Terra
             terra__comp(stack[expt].pb, prev_axis) = terra__comp(ray->origin, prev_axis) + t * terra__comp(ray->direction, prev_axis);
         }
 
-        TerraKDObjectBuffer* buffer = &kdtree->object_buffers[cur_node->data.leaf.objects];
+        TerraKDObjectBuffer* buffer = &kdtree->object_buffers[cur_node->leaf.objects];
         bool hit = false;
 
         float closest_t = FLT_MAX;
