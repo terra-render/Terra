@@ -6,10 +6,11 @@
 #include "TerraKDTree.h"
 
 //--------------------------------------------------------------------------------------------------
-// Terra internal types
+// Dev-only defines
 //--------------------------------------------------------------------------------------------------
 #define TERRA_DO_RUSSIAN_ROULETTE
 #define TERRA_DO_DIRECT_LIGHTING
+#define TERRA_DO_PATH_LIGHTING
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
@@ -473,7 +474,6 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
         const TerraMaterial* material;
         TerraShadingContext ctx;
         TerraFloat3 intersection_point;
-
         if (terra_find_closest(scene, &ray, &material, &ctx, &intersection_point) == false)
         {
             TerraFloat3 env_color;
@@ -492,11 +492,11 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
 
         TerraFloat3 mat_emissive = terra_eval_attribute(&material->emissive, &ctx.texcoord);
         TerraFloat3 mat_albedo = terra_eval_attribute(&material->albedo, &ctx.texcoord);
-
+#ifdef TERRA_DO_PATH_LIGHTING
         TerraFloat3 emissive = terra_mulf3(&throughput, mat_emissive.x);
         emissive = terra_pointf3(&emissive, &mat_albedo);
         Lo = terra_addf3(&Lo, &emissive);
-
+#endif
         float e0 = (float)rand() / RAND_MAX;
         float e1 = (float)rand() / RAND_MAX;
         float e2 = (float)rand() / RAND_MAX;
@@ -537,13 +537,14 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
             }
         }
 #endif
+#ifdef TERRA_DO_PATH_LIGHTING
         // BSDF Contribution
         TerraFloat3 bsdf_radiance = material->bsdf.shade(material, &state, &bsdf_sample, &ctx);
         float bsdf_weight = bsdf_pdf * bsdf_pdf / (light_pdf * light_pdf + bsdf_pdf * bsdf_pdf);
         TerraFloat3 bsdf_contribution = terra_mulf3(&bsdf_radiance, bsdf_weight / bsdf_pdf);
 
         throughput = terra_pointf3(&throughput, &bsdf_contribution);
-        
+#endif
         // Russian roulette
 #ifdef TERRA_DO_RUSSIAN_ROULETTE
         float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
