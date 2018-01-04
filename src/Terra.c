@@ -14,22 +14,45 @@
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
+struct pcg_state_setseq_64 {    // Internals are *Private*.
+    uint64_t state;             // RNG state.  All values are possible.
+    uint64_t inc;               // Controls which RNG sequence (stream) is
+                                // selected. Must *always* be odd.
+};
+typedef struct pcg_state_setseq_64 pcg32_random_t;
+
+// Adapted using the author's implementation as in
+// http://www.pcg-random.org/
+typedef struct TerraPCGInternalState {
+    uint64_t state;
+    uint64_t inc;
+}TerraPCGInternalState;
+
 typedef struct TerraSceneImpl
 {
 	TerraKDTree kdtree;
 	TerraBVH bvh;
+    TerraPCGInternalState rng;
 }TerraSceneImpl;
 #define _impl(scene) ((TerraSceneImpl*)((scene)->_impl))
+#define _rng(scene) _impl(scene)->rng
+
+// Assumes having TerraScene* scene as variable
+#define _randf()  terra_rng(&_rng(scene))
 
 //--------------------------------------------------------------------------------------------------
 // Terra internal routines
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* ray);
-TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range);
+TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range, float r1, float r2);
 void        terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingContext* ctx_out);
 
 TerraFloat3 terra_read_hdr_texture(const TerraHDRTexture* texture, int x, int y);
 TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y);
+
+// Single stream 0..1 range rounded to nearest 1/2^32
+void terra_rng_seed(TerraPCGInternalState* rng, uint32_t seed);
+float terra_rng(TerraPCGInternalState* rng);
 
 //--------------------------------------------------------------------------------------------------
 // Terra implementation
@@ -257,6 +280,8 @@ void terra_scene_end(TerraScene* scene)
         terra_prepare_texture(&material->metalness.map);
         terra_prepare_texture(&material->roughness.map);
     }
+
+    terra_rng_seed(&_rng(scene), (uint32_t)((uint64_t)time(NULL) ^ (uint64_t)&exit));
 }
 
 void terra_scene_destroy(TerraScene * scene)
@@ -300,10 +325,10 @@ void terra_framebuffer_destroy(TerraFramebuffer* framebuffer)
 }
 
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range)
+TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range, float r1, float r2)
 {
-    const float dx = -half_range + 2 * (float)rand() / (float)(RAND_MAX)* half_range;
-    const float dy = -half_range + 2 * (float)rand() / (float)(RAND_MAX)* half_range;
+    const float dx = -half_range + 2 * r1 * half_range;
+    const float dy = -half_range + 2 * r2 * half_range;
 
     // [0:1], y points down
     const float ndc_x = (x + 0.5f + dx) / frame->width;
@@ -497,9 +522,9 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
         emissive = terra_pointf3(&emissive, &mat_albedo);
         Lo = terra_addf3(&Lo, &emissive);
 #endif
-        float e0 = (float)rand() / RAND_MAX;
-        float e1 = (float)rand() / RAND_MAX;
-        float e2 = (float)rand() / RAND_MAX;
+        float e0 = _randf();
+        float e1 = _randf();
+        float e2 = _randf();
 
         TerraShadingState state;
         TerraFloat3 bsdf_sample = material->bsdf.sample(material, &state, &ctx, e0, e1, e2);
@@ -509,8 +534,9 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
 #ifdef TERRA_DO_DIRECT_LIGHTING
         if (scene->opts.direct_sampling)
         {
-            float l1 = (float)rand() / RAND_MAX;
-            float l2 = (float)rand() / RAND_MAX;
+            float l1 = _randf();
+            float l2 = _randf();
+
             TerraLight* light = terra_light_pick_power_proportional(scene, &l1);
 
             TerraFloat3 light_sample_point = terra_light_sample_disk(light, &intersection_point, l1, l2);
@@ -548,8 +574,7 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray)
         // Russian roulette
 #ifdef TERRA_DO_RUSSIAN_ROULETTE
         float p = terra_maxf(throughput.x, terra_maxf(throughput.y, throughput.z));
-        float e3 = 0.5f;
-        e3 = (float)rand() / RAND_MAX;
+        float e3 = _randf();
         if (e3 > p)
             break;
         throughput = terra_mulf3(&throughput, 1.f / (p + terra_Epsilon));
@@ -610,7 +635,7 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
             
             for (int s = 0; s < spp; ++s)
             {
-                TerraRay ray = terra_camera_ray(camera, framebuffer, j, i, scene->opts.subpixel_jitter, &rot);
+                TerraRay ray = terra_camera_ray(camera, framebuffer, j, i, scene->opts.subpixel_jitter, &rot, _randf(), _randf());
 
                 TerraTimeSlice trace_start = terra_timer_split();
                 TerraFloat3 cur = terra_trace(scene, &ray);
@@ -706,9 +731,9 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
     return stats;
 }
 
-TerraRay terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt)
+TerraRay terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt, float r1, float r2)
 {
-    TerraFloat3 dir = terra_get_pixel_pos(camera, framebuffer, x, y, jitter);
+    TerraFloat3 dir = terra_get_pixel_pos(camera, framebuffer, x, y, jitter, r1, r2);
     if (rot_opt == NULL)
     {
         TerraFloat3 zaxis = terra_normf3(&camera->direction);
@@ -920,4 +945,25 @@ void* terra_malloc(size_t size)
 void terra_free(void* ptr)
 {
     free(ptr);
+}
+
+void terra_rng_seed(TerraPCGInternalState* rng, uint32_t seed)
+{
+    rng->state = 0U;
+    rng->inc = 1u;
+    terra_rng(rng);
+    rng->state += initstate;
+    terra_rng(rng);
+}
+
+float terra_rng(TerraPCGInternalState* rng)
+{
+    uint64_t oldstate = rng->state;
+    rng->state = oldstate * 6364136223846793005ULL + rng->inc;
+    uint32_t xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+    uint32_t rot = oldstate >> 59u;
+    uint32_t rndi = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+    uint64_t max = (uint64_t)1 << 32U;
+    const float resolution = (float)1.f / max;
+    return (float)rndi * resolution;
 }

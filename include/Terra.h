@@ -258,7 +258,7 @@ bool            terra_framebuffer_create(TerraFramebuffer* framebuffer, int widt
 void            terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
 
 TerraStats      terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
-TerraRay        terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
+TerraRay        terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt, float r1, float r2);
 
 //--------------------------------------------------------------------------------------------------
 // Terra Semi-public API (Usable from bsdf routine)
