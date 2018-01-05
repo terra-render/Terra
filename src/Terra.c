@@ -14,13 +14,6 @@
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
-struct pcg_state_setseq_64 {    // Internals are *Private*.
-    uint64_t state;             // RNG state.  All values are possible.
-    uint64_t inc;               // Controls which RNG sequence (stream) is
-                                // selected. Must *always* be odd.
-};
-typedef struct pcg_state_setseq_64 pcg32_random_t;
-
 // Adapted using the author's implementation as in
 // http://www.pcg-random.org/
 typedef struct TerraPCGInternalState {
@@ -228,7 +221,7 @@ void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTrian
 }
 
 //--------------------------------------------------------------------------------------------------
-void terra_scene_begin(TerraScene* scene, int objects_count, int materials_count)
+void terra_scene_begin(TerraScene* scene, int objects_count)
 {
     scene->objects = (TerraObject*)terra_malloc(sizeof(TerraObject) * objects_count);
     scene->objects_count = 0;
@@ -952,7 +945,7 @@ void terra_rng_seed(TerraPCGInternalState* rng, uint32_t seed)
     rng->state = 0U;
     rng->inc = 1u;
     terra_rng(rng);
-    rng->state += initstate;
+    rng->state += seed;
     terra_rng(rng);
 }
 
@@ -961,7 +954,7 @@ float terra_rng(TerraPCGInternalState* rng)
     uint64_t oldstate = rng->state;
     rng->state = oldstate * 6364136223846793005ULL + rng->inc;
     uint32_t xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-    uint32_t rot = oldstate >> 59u;
+    uint32_t rot = (uint32_t)(oldstate >> 59u);
     uint32_t rndi = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
     uint64_t max = (uint64_t)1 << 32U;
     const float resolution = (float)1.f / max;

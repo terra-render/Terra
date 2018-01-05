@@ -249,7 +249,7 @@ typedef struct TerraFramebuffer
 //--------------------------------------------------------------------------------------------------
 // Terra public API
 //--------------------------------------------------------------------------------------------------
-void            terra_scene_begin(TerraScene* scene, int objects_count, int materials_count);
+void            terra_scene_begin(TerraScene* scene, int objects_count);
 TerraObject*    terra_scene_add_object(TerraScene* scene);
 void            terra_scene_end(TerraScene* scene);
 void            terra_scene_destroy(TerraScene* scene);
