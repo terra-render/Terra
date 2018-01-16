@@ -14,7 +14,6 @@ co-authored w/ https://github.com/sparkon
     - Glass (RR reflection/refraction)
     - Easy to add custom
 - Texturing and HDR environment mapping
-- Multiple importance sampling (direct light sampling)
 - Russian Roulette for path termination
 - Antialiasing via random sub-pixel jittering
 - Multithread ready (see https://github.com/c4stan/TerraPreview)
