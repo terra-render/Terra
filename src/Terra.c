@@ -6,6 +6,7 @@
 #include "TerraKDTree.h"
 
 // TODO: Remove
+#include <string.h>
 #include <stdio.h>
 
 //--------------------------------------------------------------------------------------------------
