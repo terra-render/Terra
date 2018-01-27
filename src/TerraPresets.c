@@ -27,6 +27,73 @@ TerraFloat3 terra_F_0(float ior, const TerraFloat3* albedo, float metalness)
     return F0;
 }
 
+//--------------------------------------------------------------------------------------------------
+// Preset: Actually just phong BRDF
+//--------------------------------------------------------------------------------------------------
+TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
+{
+    // In order to decide which ray to pick we need two values kd and ks with kd + ks <= 1 
+    // but kd and ks are vector, but they still represent the amount of reflectivity. Thus 
+    // we normalize them to [0, 1] keeping the ratios. If a surface has Ks = (0 0 0) There is
+    // no point in casting specular rays.
+    TerraFloat3 albedo = terra_eval_attribute(&material->albedo, &ctx->texcoord);
+    TerraFloat3 specular_color = terra_eval_attribute(&material->specular_color, &ctx->texcoord);
+    float diffuse_reflectivity = terra_maxf(albedo.x + albedo.y + albedo.z, terra_Epsilon);
+    float specular_reflectivity = specular_color.x + specular_color.y + specular_color.z;
+
+    float kd, ks;
+    if (specular_reflectivity > diffuse_reflectivity)
+    {
+        kd = 0.5 * diffuse_reflectivity / specular_reflectivity;
+        ks = 1.f - kd;
+    }
+    else
+    {
+        ks = 0.5 * specular_reflectivity / diffuse_reflectivity;
+        kd = 1.f - ks;
+    }
+
+    if (e3 < kd)
+    {
+        float r = sqrtf(e1);
+        float theta = 2 * terra_PI * e2;
+        float x = r * cosf(theta);
+        float z = r * sinf(theta);
+
+        TerraFloat3 light = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
+        return terra_transformf3(&ctx->rot, &light);
+    }
+    else
+    {
+        TerraFloat3 Ns = terra_eval_attribute(&material->specular_intensity, &ctx->texcoord);
+
+        float phi = terra_PI2 * e1;
+        float theta = acosf(powf(1.f - e2, 1.f / (Ns.x+1)));
+        float sin_theta = sinf(theta);
+
+        TerraFloat3 light = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
+        light = terra_transformf3(&ctx->rot, &state->half_vector);
+        return terra_normf3(&state->half_vector);
+    }
+}
+
+float terra_bsdf_normalized_phong_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+{
+
+}
+
+TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+{
+
+}
+
+void terra_bsdf_init_blinn_phong(TerraBSDF* bsdf)
+{
+    bsdf->sample = terra_bsdf_normalized_phong_sample;
+    bsdf->weight = terra_bsdf_normalized_phong_weight;
+    bsdf->shade = terra_bsdf_normalized_phong_shade;
+    bsdf->support_stratified_sampling = false;
+}
 
 //--------------------------------------------------------------------------------------------------
 // Preset: Diffuse (Lambertian)
@@ -59,36 +126,37 @@ void terra_bsdf_init_diffuse(TerraBSDF* bsdf)
     bsdf->sample = terra_bsdf_diffuse_sample;
     bsdf->weight = terra_bsdf_diffuse_weight;
     bsdf->shade = terra_bsdf_diffuse_shade;
+    bsdf->support_stratified_sampling = true;
 }
 
 //--------------------------------------------------------------------------------------------------
 // Preset: Rough-dielectric = Diffuse + Microfacet GGX specular
 //--------------------------------------------------------------------------------------------------
 // https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
-float terra_brdf_ctggx_chi(float val)
+float terra_brdf_ggx_chi(float val)
 {
     return val <= 0.f ? 0.f : 1.f;
 }
 
-float terra_brdf_ctggx_G1(const TerraFloat3* v, const TerraFloat3* n, const TerraFloat3* h, float alpha2)
+#if 1
+float terra_brdf_ggx_G1(const TerraFloat3* v, const TerraFloat3* n, const TerraFloat3* h, float alpha2)
 {
     float VoH = terra_dotf3(v, h);
     float VoN = terra_dotf3(v, n);
 
-    float chi = terra_brdf_ctggx_chi(VoH / VoN);
+    float chi = terra_brdf_ggx_chi(VoH / VoN);
     float VoH2 = VoH * VoH;
     float tan2 = (1.f - VoH2) / VoH2;
     return (chi * 2) / (sqrtf(1 + alpha2 * tan2) + 1);
 }
 
-float terra_brdf_ctggx_D(float NoH, float alpha2)
+float terra_brdf_ggx_D(float NoH, float alpha2)
 {
     float NoH2 = NoH * NoH;
     float den = NoH2 * alpha2 + (1 - NoH2);
-    return (terra_brdf_ctggx_chi(NoH) * alpha2) / (terra_PI * den * den);
+    return (terra_brdf_ggx_chi(NoH) * alpha2) / (terra_PI * den * den);
 }
-
-TerraFloat3 terra_bsdf_rough_dielectric_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
+TerraFloat3 terra_brdf_rough_dielectric_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
 {
     state->roughness = terra_eval_attribute(&material->roughness, &ctx->texcoord).x;
     state->metalness = terra_eval_attribute(&material->metalness, &ctx->texcoord).x;
@@ -121,13 +189,13 @@ TerraFloat3 terra_bsdf_rough_dielectric_sample(const TerraMaterial* material, Te
     }
 }
 
-float terra_bsdf_rough_dielectric_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+float terra_brdf_rough_dielectric_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
 {
     float alpha = state->roughness;
     float alpha2 = alpha * alpha;
     float NoH = terra_dotf3(&ctx->normal, &state->half_vector);
 
-    float weight_specular = terra_brdf_ctggx_D(NoH, alpha2) * NoH;
+    float weight_specular = terra_brdf_ggx_D(NoH, alpha2) * NoH;
     float weight_diffuse = terra_bsdf_diffuse_weight(material, NULL, light, ctx);
 
     const float pd = 1.f - state->metalness;
@@ -136,7 +204,7 @@ float terra_bsdf_rough_dielectric_weight(const TerraMaterial* material, TerraSha
     return weight_diffuse * pd + weight_specular * ps;
 }
 
-TerraFloat3 terra_bsdf_rough_dielectric_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+TerraFloat3 terra_brdf_rough_dielectric_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
 {
     TerraFloat3 albedo = terra_eval_attribute(&material->albedo, &ctx->texcoord);
     TerraFloat3 F_0 = terra_F_0(material->ior, &albedo, state->metalness);
@@ -154,11 +222,11 @@ TerraFloat3 terra_bsdf_rough_dielectric_shade(const TerraMaterial* material, Ter
     // float metalness = terra_eval_attribute(&material->metalness, &ctx->texcoord).x;
 
     // D
-    float D = terra_brdf_ctggx_D(NoH, alpha2);
+    float D = terra_brdf_ggx_D(NoH, alpha2);
 
     // G
-    float G = terra_brdf_ctggx_G1(&ctx->view, &ctx->normal, &state->half_vector, alpha2) *
-        terra_brdf_ctggx_G1(light, &ctx->normal, &state->half_vector, alpha2);
+    float G = terra_brdf_ggx_G1(&ctx->view, &ctx->normal, &state->half_vector, alpha2) *
+        terra_brdf_ggx_G1(light, &ctx->normal, &state->half_vector, alpha2);
 
     float den_CT = terra_minf((4 * NoL * NoV) + 0.05f, 1.f);
 
@@ -181,11 +249,99 @@ TerraFloat3 terra_bsdf_rough_dielectric_shade(const TerraMaterial* material, Ter
     return terra_mulf3(&reflectance, NoL);
 }
 
+#else
+theta_m ~ angle between m and n
+theta_v ~ angle between v and n
+float terra_brdf_ggx_G1(const TerraFloat3* v, const TerraFloat3* n, const TerraFloat3* h, float alpha2)
+{
+    float VoH = terra_dotf3(v, h);
+    float VoN = terra_dotf3(v, n);
+
+    float left = terra_brdf_ggx_chi(VoH / VoN);
+    float tan2 = tanf(acosf(VoN));
+    tan2 *= tan2;
+    return left * 2.f / (1 + sqrtf(1 + alpha2 * tan2));
+}
+
+float terra_brdf_ggx_D(float NoH, float alpha2)
+{
+    float NoH2 = NoH * NoH;
+    float theta_m = acosf(NoH);
+    float tan2_m = tanf(theta_m);
+    tan2_m *= tan2_m;
+    float den = terra_PI * NoH2 * NoH2 * ((tan2_m + alpha2) + (tan2_m + alpha2));
+    return terra_brdf_ggx_chi(NoH) * alpha2 / den;
+}
+
+TerraFloat3 terra_brdf_rough_dielectric_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
+{
+    state->roughness = terra_eval_attribute(&material->roughness, &ctx->texcoord).x;
+
+    // Sampling D
+    float alpha = state->roughness;
+    float theta = atanf(alpha * sqrtf(e1) / sqrtf(1.f - e1));
+    float phi = terra_PI2 * e2;
+    float sin_theta = sinf(theta);
+
+    state->half_vector = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
+    state->half_vector = terra_transformf3(&ctx->rot, &state->half_vector);
+    state->half_vector = terra_normf3(&state->half_vector);
+
+    // Reflecting view from sampled halfvector
+    float HoV = terra_maxf(0.f, terra_dotf3(&state->half_vector, &ctx->view));
+    TerraFloat3 r = terra_mulf3(&state->half_vector, 2 * HoV);
+    return terra_subf3(&r, &ctx->view);
+}
+
+float terra_brdf_rough_dielectric_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+{
+    float alpha = state->roughness;
+    float alpha2 = alpha * alpha;
+    float HoV = terra_dotf3(&ctx->view, &state->half_vector);
+    float NoV = terra_dotf3(&ctx->view, &ctx->normal);
+    float HoN = terra_dotf3(&state->half_vector, &ctx->normal);
+
+    float G = terra_brdf_ggx_G1(&ctx->view, &ctx->normal, &state->half_vector, alpha2) *
+        terra_brdf_ggx_G1(light, &ctx->normal, &state->half_vector, alpha2);
+
+    return HoV * G / (NoV * HoN);
+}
+
+TerraFloat3 terra_brdf_rough_dielectric_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+{
+    TerraFloat3 albedo = terra_eval_attribute(&material->albedo, &ctx->texcoord);
+    TerraFloat3 F_0 = terra_F_0(material->ior, &albedo, state->metalness);
+    TerraFloat3 F = terra_fresnel(&F_0, &ctx->view, &state->half_vector);
+
+    // Specular
+    float NoL = terra_maxf(terra_dotf3(&ctx->normal, light), 0.f);
+    float NoV = terra_maxf(terra_dotf3(&ctx->normal, &ctx->view), 0.f);
+    float NoH = terra_maxf(terra_dotf3(&ctx->normal, &state->half_vector), 0.f);
+
+    float alpha = state->roughness;
+    float alpha2 = alpha * alpha;
+
+    // D
+    float D = terra_brdf_ggx_D(NoH, alpha2);
+
+    // G
+    float G = terra_brdf_ggx_G1(&ctx->view, &ctx->normal, &state->half_vector, alpha2) *
+        terra_brdf_ggx_G1(light, &ctx->normal, &state->half_vector, alpha2);
+
+    float den = terra_minf((4 * NoL * NoV) + 0.05f, 1.f);
+
+    TerraFloat3 num = terra_mulf3(&F, D);
+    num = terra_mulf3(&num, G);
+    return terra_mulf3(&num, 1.f / den);
+}
+#endif
+
 void terra_bsdf_init_rough_dielectric(TerraBSDF* bsdf)
 {
-    bsdf->sample = terra_bsdf_rough_dielectric_sample;
-    bsdf->weight = terra_bsdf_rough_dielectric_weight;
-    bsdf->shade = terra_bsdf_rough_dielectric_shade;
+    bsdf->sample = terra_brdf_rough_dielectric_sample;
+    bsdf->weight = terra_brdf_rough_dielectric_weight;
+    bsdf->shade = terra_brdf_rough_dielectric_shade;
+    bsdf->support_stratified_sampling = false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -267,4 +423,5 @@ void terra_bsdf_init_glass(TerraBSDF* bsdf)
     bsdf->sample = terra_bsdf_glass_sample;
     bsdf->weight = terra_bsdf_glass_weight;
     bsdf->shade = terra_bsdf_glass_shade;
+    bsdf->support_stratified_sampling = false;
 }

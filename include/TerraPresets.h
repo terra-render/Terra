@@ -6,6 +6,7 @@
 
 void terra_bsdf_init_diffuse(TerraBSDF* bsdf);
 void terra_bsdf_init_rough_dielectric(TerraBSDF* bsdf);
+void terra_bsdf_init_blinn_phong(TerraBSDF* bsdf);
 void terra_bsdf_init_glass(TerraBSDF* bsdf);
 
 

@@ -1,6 +1,10 @@
 #ifndef _TERRA_H_
 #define _TERRA_H_
 
+#ifndef TERRA_MATERIAL_MAX_LAYERS
+#define TERRA_MATERIAL_MAX_LAYERS 4
+#endif
+
 // Include
 #include <math.h>
 #include <stdlib.h>
@@ -41,20 +45,21 @@ typedef TerraFloat3 (TerraRoutineSample) (const struct TerraMaterial* material, 
 typedef float       (TerraRoutineWeight) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 typedef TerraFloat3 (TerraRoutineShade)  (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
 
-typedef enum TerraBSDFType 
-{
-    kTerraBSDFDiffuse,
-    kTerraBSDFRoughDielectric,
-    kTerraBSDFGlass
-} TerraBSDFType;
-
 typedef struct TerraBSDF
 {
     TerraRoutineSample* sample;
     TerraRoutineWeight* weight;
     TerraRoutineShade*  shade;
-    TerraBSDFType type;
+    bool support_stratified_sampling;
+    float layer_weight;
+    float ior;
 }TerraBSDF;
+
+typedef struct TerraSurface
+{  
+    TerraBSDF layers[TERRA_MATERIAL_MAX_LAYERS];
+    int active_layers;
+}TerraSurface;
 
 // All TerraTextures are LDR by default. Each component is one byte only.
 // <comps> indicates how many components there are in the texture.
@@ -113,6 +118,8 @@ typedef struct TerraMaterial
     TerraAttribute roughness;
     TerraAttribute metalness;
     TerraAttribute emissive;
+    TerraAttribute specular_color;
+    TerraAttribute specular_intensity;
     float ior;
 } TerraMaterial;
 
@@ -169,9 +176,11 @@ typedef struct TerraSceneOptions
     TerraAccelerator accelerator;
 
     bool  direct_sampling;
+    bool  stratified_sampling;
     float subpixel_jitter;
     int   samples_per_pixel;
     int   bounces;
+    int   num_strata;
 
     float manual_exposure;
     float gamma;
