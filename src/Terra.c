@@ -54,7 +54,7 @@ typedef struct TerraSceneImpl
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* ray, TerraRayState* ray_state);
 TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range, float r1, float r2);
-void        terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingContext* ctx_out);
+void        terra_triangle_init_shading(const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface);
 
 TerraFloat3 terra_read_hdr_texture(const TerraHDRTexture* texture, int x, int y);
 TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y);
@@ -207,7 +207,7 @@ bool terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, flo
     return false;
 }
 //--------------------------------------------------------------------------------------------------
-void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingContext* ctx)
+void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface)
 {
     TerraFloat3 e0 = terra_subf3(&triangle->b, &triangle->a);
     TerraFloat3 e1 = terra_subf3(&triangle->c, &triangle->a);
@@ -229,17 +229,20 @@ void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraTrian
     TerraFloat3 nb = terra_mulf3(&properties->normal_b, uv.x);
     TerraFloat3 nc = terra_mulf3(&properties->normal_a, 1 - uv.x - uv.y);
 
-    ctx->normal = terra_addf3(&na, &nb);
-    ctx->normal = terra_addf3(&ctx->normal, &nc);
-    ctx->normal = terra_normf3(&ctx->normal);
+    surface->normal = terra_addf3(&na, &nb);
+    surface->normal = terra_addf3(&surface->normal, &nc);
+    surface->normal = terra_normf3(&surface->normal);
 
     TerraFloat2 ta = terra_mulf2(&properties->texcoord_c, uv.y);
     TerraFloat2 tb = terra_mulf2(&properties->texcoord_b, uv.x);
     TerraFloat2 tc = terra_mulf2(&properties->texcoord_a, 1 - uv.x - uv.y);
 
-    ctx->texcoord = terra_addf2(&ta, &tb);
-    ctx->texcoord = terra_addf2(&ctx->texcoord, &tc);
-    ctx->texcoord = ctx->texcoord;
+    TerraFloat2 texcoord = terra_addf2(&ta, &tb);
+    texcoord = terra_addf2(&texcoord, &tc);
+    texcoord = texcoord;
+
+    for (int i = 0; i < material->attributes_count; ++i)
+        surface->attributes[i] = terra_eval_attribute(&material->attributes[i], &texcoord);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -290,10 +293,10 @@ void terra_scene_end(TerraScene* scene)
         TerraMaterial* material = &scene->objects[i].material;
         
         // Unlikely that roughness and metalness will be in srgb ?
-        terra_prepare_texture(&material->albedo.map);
-        terra_prepare_texture(&material->emissive.map);
-        terra_prepare_texture(&material->metalness.map);
-        terra_prepare_texture(&material->roughness.map);
+        // terra_prepare_texture(&material->albedo.map);
+        // terra_prepare_texture(&material->emissive.map);
+        // terra_prepare_texture(&material->metalness.map);
+        // terra_prepare_texture(&material->roughness.map);
     }
 
     terra_rng_seed(&_rng(scene), (uint32_t)((uint64_t)time(NULL) ^ (uint64_t)&exit));
@@ -362,12 +365,12 @@ TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffe
 }
 
 //--------------------------------------------------------------------------------------------------
-void terra_build_rotation_around_normal(TerraShadingContext* ctx)
+void terra_build_rotation_around_normal(TerraShadingSurface* surface)
 {
     TerraFloat3 normalt;
     TerraFloat3 normalbt;
 
-    TerraFloat3* normal = &ctx->normal;
+    TerraFloat3* normal = &surface->normal;
 
     if (fabs(normal->x) > fabs(normal->y))
     {
@@ -381,10 +384,10 @@ void terra_build_rotation_around_normal(TerraShadingContext* ctx)
     }
     normalbt = terra_crossf3(normal, &normalt);
 
-    ctx->rot.rows[0] = terra_f4(normalt.x, ctx->normal.x, normalbt.x, 0.f);
-    ctx->rot.rows[1] = terra_f4(normalt.y, ctx->normal.y, normalbt.y, 0.f);
-    ctx->rot.rows[2] = terra_f4(normalt.z, ctx->normal.z, normalbt.z, 0.f);
-    ctx->rot.rows[3] = terra_f4(0.f, 0.f, 0.f, 1.f);
+    surface->rot.rows[0] = terra_f4(normalt.x, surface->normal.x, normalbt.x, 0.f);
+    surface->rot.rows[1] = terra_f4(normalt.y, surface->normal.y, normalbt.y, 0.f);
+    surface->rot.rows[2] = terra_f4(normalt.z, surface->normal.z, normalbt.z, 0.f);
+    surface->rot.rows[3] = terra_f4(0.f, 0.f, 0.f, 1.f);
 }
 
 void terra_ray_create(TerraRay* ray, TerraFloat3* point, TerraFloat3* direction, TerraFloat3* normal, float sign)
@@ -399,7 +402,7 @@ void terra_ray_create(TerraRay* ray, TerraFloat3* point, TerraFloat3* direction,
     ray->inv_direction.z = 1.f / ray->direction.z;
 }
 
-bool terra_find_closest(TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingContext* ctx_out, TerraFloat3* intersection_point)
+bool terra_find_closest(TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingSurface* surface_out, TerraFloat3* intersection_point)
 {
     TerraPrimitiveRef primitive;
     if (scene->opts.accelerator == kTerraAcceleratorBVH)
@@ -418,7 +421,7 @@ bool terra_find_closest(TerraScene* scene, const TerraRay* ray, const TerraMater
     TerraObject* object = &scene->objects[primitive.object_idx];
 
     *material_out = &object->material;
-    terra_triangle_init_shading(&object->triangles[primitive.triangle_idx], &object->properties[primitive.triangle_idx], intersection_point, ctx_out);
+    terra_triangle_init_shading(&object->triangles[primitive.triangle_idx], &object->material, &object->properties[primitive.triangle_idx], intersection_point, surface_out);
     return true;
 }
 
@@ -498,12 +501,10 @@ TerraFloat3 terra_light_sample_disk(const TerraLight* light, const TerraFloat3* 
     TerraFloat3 sample_point = terra_addf3(&light->center, &disk_offset);
     TerraFloat3 sample_dir = terra_subf3(&sample_point, surface_point);
     //float sample_dist = terra_lenf3(&sample_dir);
-sample_dir = terra_normf3(&sample_dir);
+    sample_dir = terra_normf3(&sample_dir);
 
     return sample_point;
 }
-
-
 
 TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRayState* ray_state)
 {
@@ -514,9 +515,9 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRay
     for (int bounce = 0; bounce <= scene->opts.bounces; ++bounce)
     {
         const TerraMaterial* material;
-        TerraShadingContext ctx;
+        TerraShadingSurface surface;
         TerraFloat3 intersection_point;
-        if (terra_find_closest(scene, &ray, &material, &ctx, &intersection_point) == false)
+        if (terra_find_closest(scene, &ray, &material, &surface, &intersection_point) == false)
         {
             TerraFloat3 env_color;
             if (scene->opts.environment_map.pixels != NULL) {
@@ -529,14 +530,11 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRay
             break;
         }
 
-        terra_build_rotation_around_normal(&ctx);
-        ctx.view = terra_negf3(&ray.direction);
+        terra_build_rotation_around_normal(&surface);
+        TerraFloat3 w_o = terra_negf3(&ray.direction);
 
-        TerraFloat3 mat_emissive = terra_eval_attribute(&material->emissive, &ctx.texcoord);
-        TerraFloat3 mat_albedo = terra_eval_attribute(&material->albedo, &ctx.texcoord);
 #ifdef TERRA_DO_PATH_LIGHTING
-        TerraFloat3 emissive = terra_mulf3(&throughput, mat_emissive.x);
-        emissive = terra_pointf3(&emissive, &mat_albedo);
+        TerraFloat3 emissive = terra_pointf3(&throughput, &material->emissive);
         Lo = terra_addf3(&Lo, &emissive);
 #endif
         float e0, e1;
@@ -552,46 +550,13 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRay
         }
         float e2 = _randf();
 
-        TerraShadingState state;
-        TerraFloat3 bsdf_sample = material->bsdf.sample(material, &state, &ctx, e0, e1, e2);
-        float       bsdf_pdf = terra_maxf(material->bsdf.weight(material, &state, &bsdf_sample, &ctx), terra_Epsilon);
+        TerraFloat3 w_i = material->bsdf.sample(&surface, e0, e1, e2, &w_o);
+        float       bsdf_pdf = terra_maxf(material->bsdf.pdf(&surface, &w_i, &w_o), terra_Epsilon);
 
         float light_pdf = 0.f;
-#ifdef TERRA_DO_DIRECT_LIGHTING
-        if (scene->opts.direct_sampling)
-        {
-            float l1 = _randf();
-            float l2 = _randf();
-
-            TerraLight* light = terra_light_pick_power_proportional(scene, &l1);
-
-            TerraFloat3 light_sample_point = terra_light_sample_disk(light, &intersection_point, l1, l2);
-            TerraFloat3 light_sample = terra_subf3(&light_sample_point, &intersection_point);
-            float sample_dist = terra_lenf3(&light_sample);
-            light_sample = terra_normf3(&light_sample);
-            light_pdf = (terra_light_pdf(light, sample_dist), terra_Epsilon);
-            float light_weight = light_pdf * light_pdf / (light_pdf * light_pdf + bsdf_pdf * bsdf_pdf);
-
-            // Light contribution
-            TerraFloat3 light_radiance = material->bsdf.shade(material, &state, &light_sample, &ctx);
-            TerraFloat3 light_contribution = terra_mulf3(&light_radiance, light_weight / light_pdf);
-
-            terra_ray_create(&ray, &intersection_point, &light_sample, &ctx.normal, 1.f);
-            TerraShadingContext light_ctx;
-            const TerraMaterial* light_material;
-            TerraFloat3 light_intersection_point;
-            if (terra_find_closest(scene, &ray, &light_material, &light_ctx, &light_intersection_point))
-            {
-                TerraFloat3 light_emissive = terra_eval_attribute(&light_material->emissive, &light_ctx.texcoord);
-                light_emissive = terra_mulf3(&throughput, light_emissive.x);
-                light_emissive = terra_pointf3(&light_emissive, &light_contribution);
-                Lo = terra_addf3(&Lo, &light_emissive);
-            }
-        }
-#endif
 #ifdef TERRA_DO_PATH_LIGHTING
         // BSDF Contribution
-        TerraFloat3 bsdf_radiance = material->bsdf.shade(material, &state, &bsdf_sample, &ctx);
+        TerraFloat3 bsdf_radiance = material->bsdf.eval(&surface, &w_i, &w_o);
         float bsdf_weight = bsdf_pdf * bsdf_pdf / (light_pdf * light_pdf + bsdf_pdf * bsdf_pdf);
         TerraFloat3 bsdf_contribution = terra_mulf3(&bsdf_radiance, bsdf_weight / bsdf_pdf);
 
@@ -606,8 +571,8 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRay
         throughput = terra_mulf3(&throughput, 1.f / (p + terra_Epsilon));
 #endif
         // Next ray (Skip if last?)
-        float sNoL = terra_dotf3(&ctx.normal, &bsdf_sample);
-        terra_ray_create(&ray, &intersection_point, &bsdf_sample, &ctx.normal, sNoL < 0.f ? -1.f : 1.f);
+        float sNoL = terra_dotf3(&surface.normal, &w_i);
+        terra_ray_create(&ray, &intersection_point, &w_i, &surface.normal, sNoL < 0.f ? -1.f : 1.f);
     }
 
     return Lo;
