@@ -1,9 +1,13 @@
 #ifndef _TERRA_H_
 #define _TERRA_H_
 
+#ifndef TERRA_MATERIAL_MAX_ATTRIBUTES
+#define TERRA_MATERIAL_MAX_ATTRIBUTES 8
+#endif // TERRA_MATERIAL_MAX_ATTRIBUTES
+
 #ifndef TERRA_MATERIAL_MAX_LAYERS
 #define TERRA_MATERIAL_MAX_LAYERS 4
-#endif
+#endif // TERRA_MATERIAL_MAX_LAYERS
 
 // Include
 #include <math.h>
@@ -17,10 +21,6 @@
 // Terra
 #include "TerraMath.h"
 
-#ifndef TERRA_BSDF_MAX_ATTRIBUTES
-#define TERRA_BSDF_MAX_ATTRIBUTES 8
-#endif
-
 //--------------------------------------------------------------------------------------------------
 // Shading Types
 //--------------------------------------------------------------------------------------------------
@@ -30,10 +30,7 @@ typedef struct TerraShadingSurface
     TerraFloat3   normal;
     TerraFloat3   emissive;
     float         ior;
-    TerraFloat3   attributes[TERRA_BSDF_MAX_ATTRIBUTES];
-        /*albedo;
-    float         roughness;
-    float         metalness;*/
+    TerraFloat3   attributes[TERRA_MATERIAL_MAX_ATTRIBUTES];
 }TerraShadingSurface;
 
 typedef TerraFloat3 (TerraBSDFSampleRoutine) (const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo);
@@ -100,15 +97,11 @@ typedef struct TerraAttribute
 
 typedef struct TerraMaterial
 {
-    TerraBSDF bsdf;
-
-    TerraAttribute albedo;
-    TerraAttribute roughness;
-    TerraAttribute metalness;
-    TerraAttribute emissive;
-    TerraAttribute specular_color;
-    TerraAttribute specular_intensity;
+    TerraBSDF      bsdf;
     float          ior;
+    TerraAttribute emissive;
+    TerraAttribute attributes[TERRA_MATERIAL_MAX_ATTRIBUTES];
+    int            attributes_count;
 } TerraMaterial;
 
 //--------------------------------------------------------------------------------------------------
@@ -179,7 +172,6 @@ typedef struct TerraPrimitiveRef
     uint32_t object_idx   :  8;
     uint32_t triangle_idx : 24;
 }TerraPrimitiveRef;
-
 
 // scene
 typedef struct TerraLight 

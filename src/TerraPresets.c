@@ -28,12 +28,40 @@ TerraFloat3 terra_F_0(float ior, const TerraFloat3* albedo, float metalness)
 }
 
 //--------------------------------------------------------------------------------------------------
+// Preset: Diffuse (Lambertian)
+//--------------------------------------------------------------------------------------------------
+TerraFloat3 terra_bsdf_diffuse_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
+{
+    float r = sqrtf(e1);
+    float theta = 2 * terra_PI * e2;
+    float x = r * cosf(theta);
+    float z = r * sinf(theta);
+
+    TerraFloat3 wi = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
+    return terra_transformf3(&surface->rot, &wi);
+}
+
+float terra_bsdf_diffuse_pdf(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+{
+    return terra_dotf3(&surface->normal, wi) / terra_PI;
+}
+
+TerraFloat3 terra_bsdf_diffuse_eval(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+{
+    float NoL = terra_maxf(0.f, terra_dotf3(&surface->normal, wi));
+    return terra_mulf3(&surface->attributes[TERRA_DIFFUSE_ALBEDO], NoL / terra_PI);
+}
+
+void terra_bsdf_init_diffuse(TerraBSDF* bsdf)
+{
+    bsdf->sample = terra_bsdf_diffuse_sample;
+    bsdf->pdf = terra_bsdf_diffuse_pdf;
+    bsdf->eval = terra_bsdf_diffuse_eval;
+}
+
+//--------------------------------------------------------------------------------------------------
 // Preset: Actually just phong BRDF
 //--------------------------------------------------------------------------------------------------
-#define TERRA_PHONG_ALBEDO             0
-#define TERRA_PHONG_SPECULAR_COLOR     1
-#define TERRA_PHONG_SPECULAR_INTENSITY 2
-
 TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
 {
     // In order to decide which ray to pick we need two values kd and ks with kd + ks <= 1 
@@ -78,16 +106,16 @@ TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surfac
 
         TerraFloat3 wi = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
         //wi = terra_transformf3(&surface->rot, &state->half_vector);
-        //return terra_normf3(&state->half_vector);
+        //return terra_normf3(&state->half_vector); TODO
     }
 }
 
-float terra_bsdf_normalized_phong_weight(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+float terra_bsdf_normalized_phong_pdf(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
 
 }
 
-TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+TerraFloat3 terra_bsdf_normalized_phong_eval(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
 
 }
@@ -95,42 +123,8 @@ TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraShadingSurface* surface
 void terra_bsdf_init_blinn_phong(TerraBSDF* bsdf)
 {
     bsdf->sample = terra_bsdf_normalized_phong_sample;
-    bsdf->pdf = terra_bsdf_normalized_phong_weight;
-    bsdf->eval = terra_bsdf_normalized_phong_shade;
-}
-
-//--------------------------------------------------------------------------------------------------
-// Preset: Diffuse (Lambertian)
-//--------------------------------------------------------------------------------------------------
-#define TERRA_DIFFUSE_ALBEDO 0
-
-TerraFloat3 terra_bsdf_diffuse_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
-{
-    float r = sqrtf(e1);
-    float theta = 2 * terra_PI * e2;
-    float x = r * cosf(theta);
-    float z = r * sinf(theta);
-
-    TerraFloat3 wi = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
-    return terra_transformf3(&surface->rot, &wi);
-}
-
-float terra_bsdf_diffuse_weight(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
-{
-    return terra_dotf3(&surface->normal, wi) / terra_PI;
-}
-
-TerraFloat3 terra_bsdf_diffuse_shade(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
-{
-    float NoL = terra_maxf(0.f, terra_dotf3(&surface->normal, wi));
-    return terra_mulf3(&surface->attributes[TERRA_DIFFUSE_ALBEDO], NoL / terra_PI);
-}
-
-void terra_bsdf_init_diffuse(TerraBSDF* bsdf)
-{
-    bsdf->sample = terra_bsdf_diffuse_sample;
-    bsdf->pdf = terra_bsdf_diffuse_weight;
-    bsdf->eval = terra_bsdf_diffuse_shade;
+    bsdf->pdf = terra_bsdf_normalized_phong_pdf;
+    bsdf->eval = terra_bsdf_normalized_phong_eval;
 }
 
 #if 0
