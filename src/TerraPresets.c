@@ -30,16 +30,23 @@ TerraFloat3 terra_F_0(float ior, const TerraFloat3* albedo, float metalness)
 //--------------------------------------------------------------------------------------------------
 // Preset: Actually just phong BRDF
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
+#define TERRA_PHONG_ALBEDO             0
+#define TERRA_PHONG_SPECULAR_COLOR     1
+#define TERRA_PHONG_SPECULAR_INTENSITY 2
+
+TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
 {
     // In order to decide which ray to pick we need two values kd and ks with kd + ks <= 1 
     // but kd and ks are vector, but they still represent the amount of reflectivity. Thus 
     // we normalize them to [0, 1] keeping the ratios. If a surface has Ks = (0 0 0) There is
     // no point in casting specular rays.
-    TerraFloat3 albedo = terra_eval_attribute(&material->albedo, &ctx->texcoord);
-    TerraFloat3 specular_color = terra_eval_attribute(&material->specular_color, &ctx->texcoord);
-    float diffuse_reflectivity = terra_maxf(albedo.x + albedo.y + albedo.z, terra_Epsilon);
-    float specular_reflectivity = specular_color.x + specular_color.y + specular_color.z;
+    float diffuse_reflectivity = terra_maxf(surface->attributes[TERRA_PHONG_ALBEDO].x + 
+                                            surface->attributes[TERRA_PHONG_ALBEDO].y + 
+                                            surface->attributes[TERRA_PHONG_ALBEDO].z, 
+                                            terra_Epsilon);
+    float specular_reflectivity = surface->attributes[TERRA_PHONG_SPECULAR_COLOR].x + 
+                                  surface->attributes[TERRA_PHONG_SPECULAR_COLOR].y + 
+                                  surface->attributes[TERRA_PHONG_SPECULAR_COLOR].z;
 
     float kd, ks;
     if (specular_reflectivity > diffuse_reflectivity)
@@ -60,29 +67,27 @@ TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraMaterial* material, Te
         float x = r * cosf(theta);
         float z = r * sinf(theta);
 
-        TerraFloat3 light = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
-        return terra_transformf3(&ctx->rot, &light);
+        TerraFloat3 wi = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
+        return terra_transformf3(&surface->rot, &wi);
     }
     else
     {
-        TerraFloat3 Ns = terra_eval_attribute(&material->specular_intensity, &ctx->texcoord);
-
         float phi = terra_PI2 * e1;
-        float theta = acosf(powf(1.f - e2, 1.f / (Ns.x+1)));
+        float theta = acosf(powf(1.f - e2, 1.f / (surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 1)));
         float sin_theta = sinf(theta);
 
-        TerraFloat3 light = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
-        light = terra_transformf3(&ctx->rot, &state->half_vector);
-        return terra_normf3(&state->half_vector);
+        TerraFloat3 wi = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
+        //wi = terra_transformf3(&surface->rot, &state->half_vector);
+        //return terra_normf3(&state->half_vector);
     }
 }
 
-float terra_bsdf_normalized_phong_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+float terra_bsdf_normalized_phong_weight(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
 
 }
 
-TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
 
 }
@@ -90,45 +95,45 @@ TerraFloat3 terra_bsdf_normalized_phong_shade(const TerraMaterial* material, Ter
 void terra_bsdf_init_blinn_phong(TerraBSDF* bsdf)
 {
     bsdf->sample = terra_bsdf_normalized_phong_sample;
-    bsdf->weight = terra_bsdf_normalized_phong_weight;
-    bsdf->shade = terra_bsdf_normalized_phong_shade;
-    bsdf->support_stratified_sampling = false;
+    bsdf->pdf = terra_bsdf_normalized_phong_weight;
+    bsdf->eval = terra_bsdf_normalized_phong_shade;
 }
 
 //--------------------------------------------------------------------------------------------------
 // Preset: Diffuse (Lambertian)
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_bsdf_diffuse_sample(const TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3)
+#define TERRA_DIFFUSE_ALBEDO 0
+
+TerraFloat3 terra_bsdf_diffuse_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
 {
     float r = sqrtf(e1);
     float theta = 2 * terra_PI * e2;
     float x = r * cosf(theta);
     float z = r * sinf(theta);
 
-    TerraFloat3 light = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
-    return terra_transformf3(&ctx->rot, &light);
+    TerraFloat3 wi = terra_f3_set(x, sqrtf(terra_maxf(0.f, 1 - e1)), z);
+    return terra_transformf3(&surface->rot, &wi);
 }
 
-float terra_bsdf_diffuse_weight(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+float terra_bsdf_diffuse_weight(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
-    return terra_dotf3(&ctx->normal, light) / terra_PI;
+    return terra_dotf3(&surface->normal, wi) / terra_PI;
 }
 
-TerraFloat3 terra_bsdf_diffuse_shade(const TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx)
+TerraFloat3 terra_bsdf_diffuse_shade(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
-    TerraFloat3 albedo = terra_eval_attribute(&material->albedo, &ctx->texcoord);
-    float NoL = terra_maxf(0.f, terra_dotf3(&ctx->normal, light));
-    return terra_mulf3(&albedo, NoL / terra_PI);
+    float NoL = terra_maxf(0.f, terra_dotf3(&surface->normal, wi));
+    return terra_mulf3(&surface->attributes[TERRA_DIFFUSE_ALBEDO], NoL / terra_PI);
 }
 
 void terra_bsdf_init_diffuse(TerraBSDF* bsdf)
 {
     bsdf->sample = terra_bsdf_diffuse_sample;
-    bsdf->weight = terra_bsdf_diffuse_weight;
-    bsdf->shade = terra_bsdf_diffuse_shade;
-    bsdf->support_stratified_sampling = true;
+    bsdf->pdf = terra_bsdf_diffuse_weight;
+    bsdf->eval = terra_bsdf_diffuse_shade;
 }
 
+#if 0
 //--------------------------------------------------------------------------------------------------
 // Preset: Rough-dielectric = Diffuse + Microfacet GGX specular
 //--------------------------------------------------------------------------------------------------
@@ -425,3 +430,4 @@ void terra_bsdf_init_glass(TerraBSDF* bsdf)
     bsdf->shade = terra_bsdf_glass_shade;
     bsdf->support_stratified_sampling = false;
 }
+#endif

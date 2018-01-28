@@ -17,49 +17,37 @@
 // Terra
 #include "TerraMath.h"
 
+#ifndef TERRA_BSDF_MAX_ATTRIBUTES
+#define TERRA_BSDF_MAX_ATTRIBUTES 8
+#endif
+
 //--------------------------------------------------------------------------------------------------
 // Shading Types
 //--------------------------------------------------------------------------------------------------
-// Context
-typedef struct TerraShadingContext
+typedef struct TerraShadingSurface
 {
-    TerraFloat2   texcoord;
-    TerraFloat3   normal;
-    TerraFloat3   view; // w_o
     TerraFloat4x4 rot;
-}TerraShadingContext;
+    TerraFloat3   normal;
+    TerraFloat3   emissive;
+    float         ior;
+    TerraFloat3   attributes[TERRA_BSDF_MAX_ATTRIBUTES];
+        /*albedo;
+    float         roughness;
+    float         metalness;*/
+}TerraShadingSurface;
 
-// Some state shared inside a BSDF.
-typedef struct TerraShadingState
-{
-    TerraFloat3 half_vector;
-    TerraFloat3 albedo;
-    float       roughness;
-    float       metalness;
-    float       emissive;
-    float       fresnel;
-}TerraShadingState;
-
-struct  TerraMaterial;
-typedef TerraFloat3 (TerraRoutineSample) (const struct TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
-typedef float       (TerraRoutineWeight) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
-typedef TerraFloat3 (TerraRoutineShade)  (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef TerraFloat3 (TerraBSDFSampleRoutine) (const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo);
+typedef float       (TerraBSDFPdfRoutine)    (const TerraShadingSurface* surface, const TerraFloat3* wi,        const TerraFloat3* wo);
+typedef TerraFloat3 (TerraBSDFEvalRoutine)   (const TerraShadingSurface* surface, const TerraFloat3* wi,        const TerraFloat3* wo);
 
 typedef struct TerraBSDF
 {
-    TerraRoutineSample* sample;
-    TerraRoutineWeight* weight;
-    TerraRoutineShade*  shade;
-    bool support_stratified_sampling;
-    float layer_weight;
-    float ior;
+    TerraBSDFSampleRoutine* sample;
+    TerraBSDFPdfRoutine*    pdf;
+    TerraBSDFEvalRoutine*   eval;
+    float                   layer_weight;
+    float                   ior;
 }TerraBSDF;
-
-typedef struct TerraSurface
-{  
-    TerraBSDF layers[TERRA_MATERIAL_MAX_LAYERS];
-    int active_layers;
-}TerraSurface;
 
 // All TerraTextures are LDR by default. Each component is one byte only.
 // <comps> indicates how many components there are in the texture.
@@ -120,7 +108,7 @@ typedef struct TerraMaterial
     TerraAttribute emissive;
     TerraAttribute specular_color;
     TerraAttribute specular_intensity;
-    float ior;
+    float          ior;
 } TerraMaterial;
 
 //--------------------------------------------------------------------------------------------------
@@ -147,10 +135,10 @@ typedef int MaterialID;
 
 typedef struct TerraObject
 {
-    TerraTriangle* triangles;
+    TerraTriangle*           triangles;
     TerraTriangleProperties* properties;
-    int triangles_count;
-    TerraMaterial material;
+    int                      triangles_count;
+    TerraMaterial            material;
 }TerraObject;
 
 typedef enum TerraTonemappingOperator
@@ -171,9 +159,9 @@ typedef enum TerraAccelerator
 typedef struct TerraSceneOptions
 {
     // lat/long format
-    TerraHDRTexture environment_map;
+    TerraHDRTexture          environment_map;
     TerraTonemappingOperator tonemapping_operator;
-    TerraAccelerator accelerator;
+    TerraAccelerator         accelerator;
 
     bool  direct_sampling;
     bool  stratified_sampling;
@@ -210,7 +198,7 @@ typedef struct TerraScene
     int          objects_count;
 
     TerraLight* lights;
-    int lights_count;
+    int         lights_count;
 
     void* _impl;
 } TerraScene;
