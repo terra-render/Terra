@@ -236,7 +236,10 @@ void terra_triangle_init_shading(const TerraTriangle* triangle, const TerraMater
     texcoord = texcoord;
 
     for (int i = 0; i < material->attributes_count; ++i)
-        surface->attributes[i] = terra_eval_attribute(&material->attributes[i], &texcoord);
+    {
+        TerraFloat3 val = terra_eval_attribute(&material->attributes[i], &texcoord);
+        memcpy(&surface->attributes[i], &val, sizeof(TerraFloat3));
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -284,7 +287,7 @@ void terra_scene_end(TerraScene* scene)
     // Encoding all textures to linear
     for (int i = 0; i < scene->objects_count; ++i)
     {
-        TerraMaterial* material = &scene->objects[i].material;
+        // TerraMaterial* material = &scene->objects[i].material;
         
         // Unlikely that roughness and metalness will be in srgb ?
         // terra_prepare_texture(&material->albedo.map);
