@@ -13,24 +13,28 @@ typedef struct TerraFloat2
 {
     float x, y;
 } TerraFloat2;
+typedef const TerraFloat2* TerraFloat2Arg;
 
 // 3D vector
 typedef struct TerraFloat3
 {
     float x, y, z;
 } TerraFloat3;
+typedef const TerraFloat3* TerraFloat3Arg;
 
 // 4D vector
 typedef struct TerraFloat4
 {
     float x, y, z, w;
 } TerraFloat4;
+typedef const TerraFloat4* TerraFloat4Arg;
 
 // Matrix
 typedef struct TerraFloat4x4
 {
     TerraFloat4 rows[4];
 } TerraFloat4x4;
+typedef const TerraFloat4x4* TerraFloat4x4Arg;
 
 // Ray
 typedef struct TerraRay

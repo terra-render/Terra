@@ -12,13 +12,6 @@
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
-// Adapted using the author's implementation as in
-// http://www.pcg-random.org/
-typedef struct TerraPCGInternalState {
-    uint64_t state;
-    uint64_t inc;
-}TerraPCGInternalState;
-
 typedef struct TerraStratifiedSampler2D {
     float* samples;
     int num_samples;
@@ -26,42 +19,65 @@ typedef struct TerraStratifiedSampler2D {
     int next;
 }TerraStratifiedSampler2D;
 
-typedef struct TerraRayState
+// Adapted using the author's implementation as in
+// http://www.pcg-random.org/
+typedef struct TerraSamplerRandom
 {
-    TerraStratifiedSampler2D stratified_sampler;
-}TerraRayState;
+    uint64_t state;
+    uint64_t inc;
+}TerraSamplerRandom;
+
+typedef struct TerraSamplerStratified
+{
+    TerraSamplerRandom random_sampler;
+    int num_samples;
+    int num_strata;
+    int next;
+    float ds;
+}TerraSamplerStratified;
+
+typedef struct TerraSamplerHalton
+{
+
+}TerraSamplerHalton;
+
+typedef void* TerraSampler;
+typedef void(*TerraSamplingRoutine)(void*, float*, float*);
+typedef struct TerraSampler2D
+{
+    TerraSampler         sampler;
+    TerraSamplingRoutine sample;
+}TerraSampler2D;
 
 typedef struct TerraSceneImpl
 {
 	TerraKDTree kdtree;
 	TerraBVH bvh;
-    TerraPCGInternalState rng;
 }TerraSceneImpl;
 #define _impl(scene) ((TerraSceneImpl*)((scene)->_impl))
-#define _rng(scene) _impl(scene)->rng
-
-// Assumes having TerraScene* scene as variable
-#define _randf()  terra_rng(&_rng(scene))
 
 //--------------------------------------------------------------------------------------------------
 // Terra internal routines
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* ray, TerraRayState* ray_state);
+TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* ray, TerraSamplerRandom* random_sampler, TerraSampler2D* hemisphere_sampler);
 TerraFloat3 terra_get_pixel_pos(const TerraCamera *camera, const TerraFramebuffer *frame, int x, int y, float half_range, float r1, float r2);
 void        terra_triangle_init_shading(const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface);
 
 TerraFloat3 terra_read_hdr_texture(const TerraHDRTexture* texture, int x, int y);
 TerraFloat3 terra_read_texture(const TerraTexture* texture, int x, int y);
 
-// Single stream 0..1 range rounded to nearest 1/2^32
-void terra_rng_seed(TerraPCGInternalState* rng, uint32_t seed);
-float terra_rng(TerraPCGInternalState* rng);
+void  terra_sampler_random_init(TerraSamplerRandom* sampler);
+void  terra_sampler_random_destroy(TerraSamplerRandom* sampler);
+float terra_sampler_random_next(void* sampler);
+void  terra_sampler_random_next_pair(void* sampler, float* e1, float* e2);
 
-// init just initializes the structure, you need to call *_generate()
-bool terra_stratified_sampler_2D_init(TerraStratifiedSampler2D* sampler);
-void terra_stratified_sampler_2D_destroy(TerraStratifiedSampler2D* sampler);
-void terra_stratified_sampler_2D_generate(TerraStratifiedSampler2D* sampler, int num_sampler_per_strata, int num_strata, TerraPCGInternalState* rng);
-bool terra_stratified_sampler_2D_read(TerraStratifiedSampler2D* sampler, float* e0_out, float* e1_out);
+void  terra_sampler_stratified_init(TerraSamplerStratified* sampler, int num_strata_each_dimension, int num_samples);
+void  terra_sampler_stratified_destroy(TerraSamplerStratified* sampler);
+void  terra_sampler_stratified_next_pair(void* sampler, float* e1, float* e2);
+
+void  terra_sampler_halton_init(TerraSamplerHalton* sampler, int dimensions, int samples_per_dimension);
+void  terra_sampler_halton_destroy(TerraSamplerHalton* sampler);
+void  terra_sampler_halton_next_pair(void* sampler, float* e1, float* e2);
 
 //--------------------------------------------------------------------------------------------------
 // Terra implementation
@@ -282,8 +298,6 @@ void terra_scene_end(TerraScene* scene)
     else if (scene->opts.accelerator == kTerraAcceleratorKDTree)
         terra_kdtree_create(&_impl(scene)->kdtree, scene);
 
-    // dem lights
-
     // Encoding all textures to linear
     for (int i = 0; i < scene->objects_count; ++i)
     {
@@ -295,8 +309,6 @@ void terra_scene_end(TerraScene* scene)
         // terra_prepare_texture(&material->metalness.map);
         // terra_prepare_texture(&material->roughness.map);
     }
-
-    terra_rng_seed(&_rng(scene), (uint32_t)((uint64_t)time(NULL) ^ (uint64_t)&exit));
 }
 
 void terra_scene_destroy(TerraScene * scene)
@@ -503,7 +515,8 @@ TerraFloat3 terra_light_sample_disk(const TerraLight* light, const TerraFloat3* 
     return sample_point;
 }
 
-TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRayState* ray_state)
+#define _randf() terra_sampler_random_next(random_sampler);
+TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraSamplerRandom* random_sampler, TerraSampler2D* hemisphere_sampler)
 {
     TerraFloat3 Lo = terra_f3_zero;
     TerraFloat3 throughput = terra_f3_one;
@@ -534,15 +547,12 @@ TerraFloat3 terra_trace(TerraScene* scene, const TerraRay* primary_ray, TerraRay
         Lo = terra_addf3(&Lo, &emissive);
       
         float e0, e1;
-        if (ray_state->stratified_sampler.samples != NULL && bounce == 0)
-        {
-            assert(ray_state != NULL);
-            terra_stratified_sampler_2D_read(&ray_state->stratified_sampler, &e0, &e1);
-        }
+        if (bounce == 0 && hemisphere_sampler)
+            hemisphere_sampler->sample(hemisphere_sampler->sampler, &e0, &e1);
         else
         {
             e0 = _randf();
-            e1 = _randf();    
+            e1 = _randf();
         }
         float e2 = _randf();
 
@@ -615,39 +625,36 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
 
     int spp = scene->opts.samples_per_pixel;
     
-    TerraRayState ray_state;
-    memset(&ray_state, 0, sizeof(TerraRayState));
-
-    // In order to be unbiased with stratified sampling, the number of samples needs to be equal 
-    // to the number of strata(or a power of). Which corresponds to scene->opts->num_strata ^ 2
-    // rounding nearest power of num_strata
-    int next_sampler = 0;
-    int samples_per_strata = 0;
-    if (scene->opts.stratified_sampling)
-    {
-        int cur = scene->opts.num_strata * scene->opts.num_strata;;
-        while (++samples_per_strata && spp > cur)
-            cur *= cur;
-        spp = cur;
-
-        terra_stratified_sampler_2D_init(&ray_state.stratified_sampler);
-    }
+    TerraSamplerRandom random_sampler;
+    terra_sampler_random_init(&random_sampler);
 
     for (int i = y; i < y + height; ++i)
     {
         for (int j = x; j < x + width; ++j)
         {    
-            if (scene->opts.stratified_sampling)
-                terra_stratified_sampler_2D_generate(&ray_state.stratified_sampler, samples_per_strata, scene->opts.num_strata, &_rng(scene));       
             TerraFloat3 acc = terra_f3_zero;
+
+            // First bounce hemisphere stratified sampling
+            TerraSampler2D hemisphere_sampler;
+            hemisphere_sampler.sampler = NULL;
+
+            // Creating stratified sampler
+            TerraStratifiedSampler2D stratified_sampler;
+            if (scene->opts.stratified_sampling)
+            {
+                hemisphere_sampler.sampler = &stratified_sampler;
+                hemisphere_sampler.sample = terra_sampler_stratified_next_pair;
+            }
+
+            TerraSampler2D* hemisphere_sampler_ptr = hemisphere_sampler.sampler == NULL ? NULL : &hemisphere_sampler;
             for (int s = 0; s < spp; ++s)
             {
-                // I'm not sure it's entirely correct to jitter this way the samples with stratified sampling enabled..
-                // TODO Look into
-                TerraRay ray = terra_camera_ray(camera, framebuffer, j, i, scene->opts.subpixel_jitter, &rot, _randf(), _randf());
+                float r1 = terra_sampler_random_next(&random_sampler);
+                float r2 = terra_sampler_random_next(&random_sampler);
+                TerraRay ray = terra_camera_ray(camera, framebuffer, j, i, scene->opts.subpixel_jitter, &rot, r1, r2);
 
                 TerraTimeSlice trace_start = terra_timer_split();
-                TerraFloat3 cur = terra_trace(scene, &ray, &ray_state);
+                TerraFloat3 cur = terra_trace(scene, &ray, &random_sampler, hemisphere_sampler_ptr);
                 TerraTimeSlice trace_end = terra_timer_split();
 
                 float trace_elapsed = (float)terra_timer_elapsed_ms(trace_end - trace_start);
@@ -736,11 +743,6 @@ TerraStats terra_render(const TerraCamera *camera, TerraScene *scene, const Terr
 
     TerraTimeSlice total_end = terra_timer_split();
     stats.total_ms = terra_timer_elapsed_ms(total_end - total_start);
-
-    if (scene->opts.stratified_sampling)
-    {
-        terra_stratified_sampler_2D_destroy(&ray_state.stratified_sampler);
-    }
 
     return stats;
 }
@@ -918,6 +920,131 @@ TerraFloat3 terra_eval_attribute(const TerraAttribute* attribute, const TerraFlo
     return attribute->value;
 }
 
+//-------------------------
+// Samplers
+//-------------------------
+void  terra_sampler_random_init(TerraSamplerRandom* sampler)
+{
+    uint32_t seed = (uint32_t)((uint64_t)time(NULL) ^ (uint64_t)&exit);
+    sampler->state = 0U;
+    sampler->inc = 1u;
+    terra_sampler_random_next(sampler);
+    sampler->state += seed;
+    terra_sampler_random_next(sampler);
+}
+
+void  terra_sampler_random_destroy(TerraSamplerRandom* sampler) { }
+
+float terra_sampler_random_next(void* _sampler)
+{
+    TerraSamplerRandom* sampler = (TerraSamplerRandom*)_sampler;
+    uint64_t oldstate = sampler->state;
+    sampler->state = oldstate * 6364136223846793005ULL + sampler->inc;
+    uint32_t xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
+    uint32_t rot = (uint32_t)(oldstate >> 59u);
+    uint32_t rndi = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+    uint64_t max = (uint64_t)1 << 32U;
+    const float resolution = (float)1.f / max;
+    return (float)rndi * resolution;
+}
+
+// bool terra_stratified_sampler_2D_init(TerraStratifiedSampler2D* sampler)
+// {
+//     if (sampler == NULL || sampler->num_samples <= 0 || sampler->num_strata <= 0)
+//         return false;
+
+//     memset(sampler, 0, sizeof(TerraStratifiedSampler2D));
+// }
+
+// void terra_stratified_sampler_2D_destroy(TerraStratifiedSampler2D* sampler)
+// {
+//     if (sampler != NULL)
+//         free(sampler->samples);
+// }
+
+// void terra_stratified_sampler_2D_generate(TerraStratifiedSampler2D* sampler, int num_samples_per_strata, int num_strata, TerraPCGInternalState* rng)
+// {
+//     // Can we reuse the buffer ?
+//     if (sampler->num_strata != num_strata || sampler->num_samples != num_samples_per_strata)
+//     {
+//         free(sampler->samples);
+//         sampler->samples = (float*)terra_malloc(sizeof(float) * num_strata * num_strata * 2 * num_samples_per_strata);
+//         sampler->num_samples = num_samples_per_strata;
+//         sampler->num_strata = num_strata;
+//     }
+
+//     sampler->next = 0;
+//     int s = 0;
+//     float ds = 1.f / sampler->num_strata;
+//     for (int y = 0; y < sampler->num_strata; ++y)
+//     {
+//         for (int x = 0; x < sampler->num_strata; ++x)
+//         {
+//             sampler->samples[s++] = terra_minf(((float)x+terra_rng(rng)) * ds, 1.f - terra_Epsilon);
+//             sampler->samples[s++] = terra_minf(((float)y+terra_rng(rng)) * ds, 1.f - terra_Epsilon);
+//         }
+//     }
+// }
+
+// bool terra_stratified_sampler_2D_read(TerraStratifiedSampler2D* sampler, float* e0_out, float* e1_out)
+// {
+// /// TBH This code is not necessary as this is internal api
+//     if (sampler == NULL)
+//         return false;
+
+//     if (sampler->next == (sampler->num_strata * sampler->num_strata * sampler->num_samples * 2))
+//         return false;
+// ///
+
+//     *e0_out = sampler->samples[sampler->next++];
+//     *e1_out = sampler->samples[sampler->next++];
+//     return true;
+// }
+
+void  terra_sampler_stratified_init(TerraSamplerStratified* sampler, int num_strata_each_dimension, int num_samples_per_strata)
+{   
+    terra_sampler_random_init(&sampler->random_sampler);
+    sampler->num_strata = num_strata_each_dimension;
+    sampler->num_samples = num_samples_per_strata;
+    sampler->next = 0;
+    sampler->ds = 1.f / sampler->num_strata;
+}
+
+void  terra_sampler_stratified_destroy(TerraSamplerStratified* sampler)
+{
+    terra_sampler_random_destroy(&sampler->random_sampler);
+}
+
+void terra_sampler_stratified_next_pair(void* _sampler, float* e1, float* e2)
+{
+    TerraSamplerStratified* sampler = (TerraSamplerStratified*)_sampler;
+    assert(sampler->next < (sampler->num_strata * sampler->num_strata * sampler->num_samples));
+
+    int next = sampler->next / sampler->num_samples;
+    int x = next % sampler->num_strata;
+    int y = next / sampler->num_strata;
+
+    *e1 = terra_minf(((float)x+terra_sampler_random_next(&sampler->random_sampler)) * sampler->ds, 1.f - terra_Epsilon);
+    *e2 = terra_minf(((float)y+terra_sampler_random_next(&sampler->random_sampler)) * sampler->ds, 1.f - terra_Epsilon);
+    ++sampler->next;
+}
+
+void  terra_sampler_halton_init(TerraSamplerHalton* sampler, int dimensions, int samples_per_dimension)
+{
+
+}
+
+void  terra_sampler_halton_destroy(TerraSamplerHalton* sampler)
+{
+
+}
+
+float terra_sampler_halton_next(void* sampler)
+{
+    return 0.f;
+}
+
+
 //--------------------------------------------------------------------------------------------------
 #if defined(_WIN32)
 #define _CRT_SECURE_NO_WARNINGS
@@ -959,78 +1086,4 @@ void* terra_malloc(size_t size)
 void terra_free(void* ptr)
 {
     free(ptr);
-}
-
-void terra_rng_seed(TerraPCGInternalState* rng, uint32_t seed)
-{
-    rng->state = 0U;
-    rng->inc = 1u;
-    terra_rng(rng);
-    rng->state += seed;
-    terra_rng(rng);
-}
-
-float terra_rng(TerraPCGInternalState* rng)
-{
-    uint64_t oldstate = rng->state;
-    rng->state = oldstate * 6364136223846793005ULL + rng->inc;
-    uint32_t xorshifted = ((oldstate >> 18u) ^ oldstate) >> 27u;
-    uint32_t rot = (uint32_t)(oldstate >> 59u);
-    uint32_t rndi = (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
-    uint64_t max = (uint64_t)1 << 32U;
-    const float resolution = (float)1.f / max;
-    return (float)rndi * resolution;
-}
-
-bool terra_stratified_sampler_2D_init(TerraStratifiedSampler2D* sampler)
-{
-    if (sampler == NULL || sampler->num_samples <= 0 || sampler->num_strata <= 0)
-        return false;
-
-    memset(sampler, 0, sizeof(TerraStratifiedSampler2D));
-}
-
-void terra_stratified_sampler_2D_destroy(TerraStratifiedSampler2D* sampler)
-{
-    if (sampler != NULL)
-        free(sampler->samples);
-}
-
-void terra_stratified_sampler_2D_generate(TerraStratifiedSampler2D* sampler, int num_samples_per_strata, int num_strata, TerraPCGInternalState* rng)
-{
-    // Can we reuse the buffer ?
-    if (sampler->num_strata != num_strata || sampler->num_samples != num_samples_per_strata)
-    {
-        free(sampler->samples);
-        sampler->samples = (float*)terra_malloc(sizeof(float) * num_strata * num_strata * 2 * num_samples_per_strata);
-        sampler->num_samples = num_samples_per_strata;
-        sampler->num_strata = num_strata;
-    }
-
-    sampler->next = 0;
-    int s = 0;
-    float ds = 1.f / sampler->num_strata;
-    for (int y = 0; y < sampler->num_strata; ++y)
-    {
-        for (int x = 0; x < sampler->num_strata; ++x)
-        {
-            sampler->samples[s++] = terra_minf(((float)x+terra_rng(rng)) * ds, 1.f - terra_Epsilon);
-            sampler->samples[s++] = terra_minf(((float)y+terra_rng(rng)) * ds, 1.f - terra_Epsilon);
-        }
-    }
-}
-
-bool terra_stratified_sampler_2D_read(TerraStratifiedSampler2D* sampler, float* e0_out, float* e1_out)
-{
-/// TBH This code is not necessary as this is internal api
-    if (sampler == NULL)
-        return false;
-
-    if (sampler->next == (sampler->num_strata * sampler->num_strata * sampler->num_samples * 2))
-        return false;
-///
-
-    *e0_out = sampler->samples[sampler->next++];
-    *e1_out = sampler->samples[sampler->next++];
-    return true;
 }

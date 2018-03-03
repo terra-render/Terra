@@ -62,12 +62,8 @@ void terra_bsdf_init_diffuse(TerraBSDF* bsdf)
 //--------------------------------------------------------------------------------------------------
 // Preset: Actually just phong BRDF
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
+void terra_bsdf_phong__calculate_ks_kd(const TerraShadingSurface* surface, float* kd, float* ks)
 {
-    // In order to decide which ray to pick we need two values kd and ks with kd + ks <= 1 
-    // but kd and ks are vector, but they still represent the amount of reflectivity. Thus 
-    // we normalize them to [0, 1] keeping the ratios. If a surface has Ks = (0 0 0) There is
-    // no point in casting specular rays.
     float diffuse_reflectivity = terra_maxf(surface->attributes[TERRA_PHONG_ALBEDO].x + 
                                             surface->attributes[TERRA_PHONG_ALBEDO].y + 
                                             surface->attributes[TERRA_PHONG_ALBEDO].z, 
@@ -76,17 +72,26 @@ TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surfac
                                   surface->attributes[TERRA_PHONG_SPECULAR_COLOR].y + 
                                   surface->attributes[TERRA_PHONG_SPECULAR_COLOR].z;
 
-    float kd, ks;
     if (specular_reflectivity > diffuse_reflectivity)
     {
-        kd = 0.5 * diffuse_reflectivity / specular_reflectivity;
-        ks = 1.f - kd;
+        *kd = 0.5 * diffuse_reflectivity / specular_reflectivity;
+        *ks = 1.f - *kd;
     }
     else
     {
-        ks = 0.5 * specular_reflectivity / diffuse_reflectivity;
-        kd = 1.f - ks;
+        *ks = 0.5 * specular_reflectivity / diffuse_reflectivity;
+        *kd = 1.f - *ks;
     }
+}
+
+TerraFloat3 terra_bsdf_phong_sample(const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo)
+{
+    // In order to decide which ray to pick we need two values kd and ks with kd + ks <= 1 
+    // but kd and ks are vector, but they still represent the amount of reflectivity. Thus 
+    // we normalize them to [0, 1] keeping the ratios. If a surface has Ks = (0 0 0) There is
+    // no point in casting specular rays.
+    float kd, ks;
+    terra_bsdf_phong__calculate_ks_kd(surface, &kd, &ks);
 
     if (e3 < kd)
     {
@@ -105,26 +110,39 @@ TerraFloat3 terra_bsdf_normalized_phong_sample(const TerraShadingSurface* surfac
         float sin_theta = sinf(theta);
 
         TerraFloat3 wi = terra_f3_set(sin_theta * cosf(phi), cosf(theta), sin_theta * sinf(phi));
-        //wi = terra_transformf3(&surface->rot, &state->half_vector);
-        //return terra_normf3(&state->half_vector); TODO
+        wi = terra_transformf3(&surface->rot, &wi);
+        return terra_normf3(&wi);
     }
 }
 
-float terra_bsdf_normalized_phong_pdf(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+float terra_bsdf_phong_pdf(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
-
+    float alpha = acosf(terra_dotf3(wi, wo));
+    return powf(cosf(alpha), surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x) * (surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 1) / terra_PI2;
 }
 
-TerraFloat3 terra_bsdf_normalized_phong_eval(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
+TerraFloat3 terra_bsdf_phong_eval(const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo)
 {
+    TerraFloat3 diffuse_term = terra_mulf3(&surface->attributes[TERRA_PHONG_ALBEDO], 1.f / terra_PI);
 
+    float alpha = terra_dotf3(wi, wo);
+    float cos_n_alpha = powf(alpha, surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x);
+    TerraFloat3 specular_term = terra_mulf3(&surface->attributes[TERRA_PHONG_SPECULAR_COLOR], (surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 2) / terra_PI2);
+    specular_term = terra_mulf3(&specular_term, cos_n_alpha);
+
+    // Weighting by pdf
+    float kd, ks;
+    terra_bsdf_phong__calculate_ks_kd(surface, &kd, &ks);
+    diffuse_term = terra_mulf3(&diffuse_term, kd);
+    specular_term = terra_mulf3(&specular_term, ks);
+    return terra_addf3(&diffuse_term, &specular_term);
 }
 
-void terra_bsdf_init_blinn_phong(TerraBSDF* bsdf)
+void terra_bsdf_init_phong(TerraBSDF* bsdf)
 {
-    bsdf->sample = terra_bsdf_normalized_phong_sample;
-    bsdf->pdf = terra_bsdf_normalized_phong_pdf;
-    bsdf->eval = terra_bsdf_normalized_phong_eval;
+    bsdf->sample = terra_bsdf_phong_sample;
+    bsdf->pdf = terra_bsdf_phong_pdf;
+    bsdf->eval = terra_bsdf_phong_eval;
 }
 
 #if 0

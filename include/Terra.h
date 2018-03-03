@@ -149,12 +149,21 @@ typedef enum TerraAccelerator
     kTerraAcceleratorKDTree
 }TerraAccelerator;
 
+// at first bounce
+typedef enum TerraSamplingMethod
+{
+    kTerraSamplingMethodRandom,
+    kTerraSamplingMethodStratified,
+    kTerraSamplingMethodHalton
+}TerraSamplingMethod;
+
 typedef struct TerraSceneOptions
 {
     // lat/long format
     TerraHDRTexture          environment_map;
     TerraTonemappingOperator tonemapping_operator;
     TerraAccelerator         accelerator;
+    TerraSamplingMethod      sampling_method;
 
     bool  direct_sampling;
     bool  stratified_sampling;
