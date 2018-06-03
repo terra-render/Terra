@@ -1,7 +1,11 @@
 #ifndef _TERRA_H_
 #define _TERRA_H_
 
-// Include
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// std
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
@@ -16,264 +20,218 @@
 //--------------------------------------------------------------------------------------------------
 // Shading Types
 //--------------------------------------------------------------------------------------------------
-// Context
-typedef struct TerraShadingContext
-{
-    TerraFloat2   texcoord;
-    TerraFloat3   normal;
-    TerraFloat3   view; // w_o
+#ifndef TERRA_MATERIAL_MAX_ATTRIBUTES
+#define TERRA_MATERIAL_MAX_ATTRIBUTES 8
+#endif
+
+#ifndef TERRA_MATERIAL_MAX_LAYERS
+#define TERRA_MATERIAL_MAX_LAYERS 4
+#endif
+
+typedef struct {
     TerraFloat4x4 rot;
-}TerraShadingContext;
+    TerraFloat3   normal;
+    TerraFloat3   emissive;
+    float         ior;
+    TerraFloat3   attributes[TERRA_MATERIAL_MAX_ATTRIBUTES + 1];
+} TerraShadingSurface;
 
-// Some state shared inside a BSDF.
-typedef struct TerraShadingState
-{
-    TerraFloat3 half_vector;
-    TerraFloat3 albedo;
-    float       roughness;
-    float       metalness;
-    float       emissive;
-    float       fresnel;
-}TerraShadingState;
+typedef TerraFloat3 ( TerraBSDFSampleRoutine ) ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo );
+typedef float       ( TerraBSDFPdfRoutine )    ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
+typedef TerraFloat3 ( TerraBSDFEvalRoutine )   ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
 
-struct  TerraMaterial;
-typedef TerraFloat3 (TerraRoutineSample) (const struct TerraMaterial* material, TerraShadingState* state, const TerraShadingContext* ctx, float e1, float e2, float e3);
-typedef float       (TerraRoutineWeight) (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
-typedef TerraFloat3 (TerraRoutineShade)  (const struct TerraMaterial* material, TerraShadingState* state, const TerraFloat3* light, const TerraShadingContext* ctx);
+typedef struct {
+    TerraBSDFSampleRoutine* sample;
+    TerraBSDFPdfRoutine*    pdf;
+    TerraBSDFEvalRoutine*   eval;
+    float                   layer_weight;
+    float                   ior;
+} TerraBSDF;
 
-typedef enum TerraBSDFType 
-{
-    kTerraBSDFDiffuse,
-    kTerraBSDFRoughDielectric,
-    kTerraBSDFGlass
-} TerraBSDFType;
-
-typedef struct TerraBSDF
-{
-    TerraRoutineSample* sample;
-    TerraRoutineWeight* weight;
-    TerraRoutineShade*  shade;
-    TerraBSDFType type;
-}TerraBSDF;
-
-// All TerraTextures are LDR by default. Each component is one byte only.
-// <comps> indicates how many components there are in the texture.
-// <offset> indicates at what component we should start to read from.
-// This are here in case a single texture is shared by multiple materials and each channel
-// is used for a different component.
-// A texture is invalid if pixels is NULL
-typedef struct TerraTexture
-{
-    uint8_t* pixels;
-    uint16_t width;
-    uint16_t height;
-    uint8_t  comps;
-    uint8_t  offset;
-    uint8_t  filter;
-    uint8_t  address_mode;
-    bool     srgb;
-}TerraTexture;
-
-// HDR textures have 32-bit float components. 'half's are not accepted and should be converted before
-// filling the data in. There is no comps/offset/filtering/addressing as HDRTexture is currently
-// used only as cubemap and defaults to Bilinear. The only supported format is latitude/longitude
-typedef struct TerraHDRTexture
-{
-    float*   pixels;
-    uint16_t width;
-    uint16_t height;
-}TerraHDRTexture;
-
-// Sampling filter to be applied. Mipmapping is not supported, thus no trilinear/anisotropic yet
-typedef enum TerraFilter
-{
+// Sampling filter to be applied. Trilinear & Anisotropic enable ray differentials and mipmap generation at scene_end()
+typedef enum {
     kTerraFilterPoint,
     kTerraFilterBilinear,
-}TerraFilter;
+    kTerraFilterTrilinear,
+    kTerraFilterAnisotropic
+} TerraFilter;
 
 // How to handle out of bound texture coordinates
-typedef enum TerraTextureAddressMode
-{
+typedef enum {
     kTerraTextureAddressWrap,
     kTerraTextureAddressMirror,
     kTerraTextureAddressClamp
-}TerraTextureAddressMode;
+} TerraTextureAddressMode;
 
-typedef struct TerraAttribute
-{
-    TerraFloat3  value;
-    TerraTexture map;
-}TerraAttribute;
+// A texture is invalid if pixels is NULL
+typedef struct {
+    void*    pixels;
+    uint16_t width;
+    uint16_t height;
+    uint8_t  components;
+    uint8_t  depth;
+    uint8_t  filter;        // kTerraTextureFilter
+    uint8_t  address_mode;  // kTerraTextureAddressMode
+} TerraTexture;
 
-typedef struct TerraMaterial
-{
-    TerraBSDF bsdf;
+typedef void        ( *TerraAttributeFinalize ) ( void* );
+typedef TerraFloat3 ( *TerraAttributeEval )     ( void*, const void*, const void* );
+typedef struct {
+    void*                    state;
+    TerraAttributeFinalize   finalize;
+    TerraAttributeEval       eval;
+    TerraFloat3              value;
+} TerraAttribute;
 
-    TerraAttribute albedo;
-    TerraAttribute roughness;
-    TerraAttribute metalness;
+typedef struct {
+    TerraBSDF      bsdf;
+    float          ior;
     TerraAttribute emissive;
-    float ior;
+    TerraAttribute attributes[TERRA_MATERIAL_MAX_ATTRIBUTES];
+    size_t         attributes_count;
+    bool           enable_bump_map_attr;
+    bool           enable_normal_map_attr;
 } TerraMaterial;
 
 //--------------------------------------------------------------------------------------------------
 // Geometric types ( Scene )
 //--------------------------------------------------------------------------------------------------
-typedef struct TerraTriangle
-{
+typedef struct {
     TerraFloat3 a;
     TerraFloat3 b;
     TerraFloat3 c;
 } TerraTriangle;
 
-typedef struct TerraTriangleProperties
-{
+typedef struct {
     TerraFloat3 normal_a;
     TerraFloat3 normal_b;
     TerraFloat3 normal_c;
     TerraFloat2 texcoord_a;
     TerraFloat2 texcoord_b;
     TerraFloat2 texcoord_c;
-}TerraTriangleProperties;
+} TerraTriangleProperties;
 
-typedef int MaterialID;
-
-typedef struct TerraObject
-{
-    TerraTriangle* triangles;
+typedef struct {
+    TerraTriangle*           triangles;
     TerraTriangleProperties* properties;
-    int triangles_count;
-    TerraMaterial material;
-}TerraObject;
+    size_t                   triangles_count;
+    TerraMaterial            material;
+} TerraObject;
 
-typedef enum TerraTonemappingOperator
-{
+typedef enum {
     kTerraTonemappingOperatorNone,
     kTerraTonemappingOperatorLinear,
     kTerraTonemappingOperatorReinhard,
     kTerraTonemappingOperatorFilmic,
     kTerraTonemappingOperatorUncharted2
-}TerraTonemappingOperator;
+} TerraTonemappingOperator;
 
-typedef enum TerraAccelerator
-{
+typedef enum {
     kTerraAcceleratorBVH,
     kTerraAcceleratorKDTree
-}TerraAccelerator;
+} TerraAccelerator;
 
-typedef struct TerraSceneOptions
-{
-    // lat/long format
-    TerraHDRTexture environment_map;
-    TerraTonemappingOperator tonemapping_operator;
-    TerraAccelerator accelerator;
+typedef enum {
+    kTerraSamplingMethodRandom,
+    kTerraSamplingMethodStratified,
+    kTerraSamplingMethodHalton
+} TerraSamplingMethod;
 
-    bool  direct_sampling;
-    float subpixel_jitter;
-    int   samples_per_pixel;
-    int   bounces;
+typedef struct {
+    TerraAttribute              environment_map;
+    TerraTonemappingOperator    tonemapping_operator;
+    TerraAccelerator            accelerator;
+    TerraSamplingMethod         sampling_method;
 
-    float manual_exposure;
-    float gamma;
-}TerraSceneOptions;
+    bool    direct_sampling;
 
-typedef struct TerraPrimitiveRef
-{
-    uint32_t object_idx   :  8;
+    float   subpixel_jitter;
+    size_t  samples_per_pixel;
+    size_t  bounces;
+    size_t  strata;
+
+    float   manual_exposure;
+    float   gamma;
+} TerraSceneOptions;
+
+typedef struct {
+    uint32_t object_idx : 8;
     uint32_t triangle_idx : 24;
-}TerraPrimitiveRef;
-
+} TerraPrimitiveRef;
 
 // scene
-typedef struct TerraLight 
-{
+typedef struct {
     TerraFloat3 center;
-    float radius;
-    TerraAABB aabb;
-    float emissive;
+    float       radius;
+    TerraAABB   aabb;
+    float       emissive;
 } TerraLight;
 
-typedef struct TerraScene
-{
-    TerraSceneOptions opts;
-
-    TerraObject* objects;
-    int          objects_count;
-
-    TerraLight* lights;
-    int lights_count;
-
-    void* _impl;
-} TerraScene;
-
-typedef struct TerraCamera
-{
+typedef struct {
     TerraFloat3 position;
     TerraFloat3 direction;
     TerraFloat3 up;
     float       fov;
 } TerraCamera;
 
-typedef struct TerraRawIntegrationResult
-{
+typedef struct {
     TerraFloat3 acc;
     int         samples;
-}TerraRawIntegrationResult;
+} TerraRawIntegrationResult;
 
-typedef struct TerraStats
-{
-    // Total time elapsed in terra_render
-    double total_ms;
-
-    // Total time spent pathtracing
-    double trace_total_ms;
-
-    // Fastest ray
-    double trace_min_ms;
-
-    // Slowest ray
-    double trace_max_ms;
-
-    // Number of rays traced
-    int trace_count;
-}TerraStats;
-
-typedef struct TerraFramebuffer
-{
+typedef struct {
     TerraFloat3*               pixels;
     TerraRawIntegrationResult* results;
-    int width;
-    int height;
+    size_t                     width;
+    size_t                     height;
 } TerraFramebuffer;
 
 //--------------------------------------------------------------------------------------------------
 // Terra public API
 //--------------------------------------------------------------------------------------------------
-void            terra_scene_begin(TerraScene* scene, int objects_count, int materials_count);
-TerraObject*    terra_scene_add_object(TerraScene* scene);
-void            terra_scene_end(TerraScene* scene);
-void            terra_scene_destroy(TerraScene* scene);
+typedef void*   HTerraScene;
 
-bool            terra_framebuffer_create(TerraFramebuffer* framebuffer, int width, int height);
-void            terra_framebuffer_destroy(TerraFramebuffer* framebuffer);
+HTerraScene         terra_scene_create();
+TerraObject*        terra_scene_add_object ( HTerraScene scene, size_t triangle_count );
+size_t              terra_scene_count_objects ( HTerraScene scene );
+void                terra_scene_commit ( HTerraScene scene );
+void                terra_scene_clear ( HTerraScene scene );
+TerraSceneOptions*  terra_scene_get_options ( HTerraScene scene );
+void                terra_scene_destroy ( HTerraScene scene );
 
-TerraStats      terra_render(const TerraCamera *camera, TerraScene *scene, const TerraFramebuffer *framebuffer, int x, int y, int width, int height);
-TerraRay        terra_camera_ray(const TerraCamera* camera, const TerraFramebuffer* framebuffer, int x, int y, float jitter, const TerraFloat4x4* rot_opt);
+bool                terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, size_t height );
+void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer, const TerraFloat3* value );
+void                terra_framebuffer_destroy ( TerraFramebuffer* framebuffer );
+
+void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
+TerraRay            terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* rot_opt );
+
+bool                terra_texture_init ( TerraTexture* texture, size_t width, size_t height, size_t components, const void* data );
+bool                terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height, size_t components, const float* data );
+TerraFloat3         terra_texture_read ( TerraTexture* texture, size_t x, size_t y );
+TerraFloat3         terra_texture_sample ( void* texture, const void* uv, const void* xyz );            // TODO Why void* params? to wrap it as attribute?
+TerraFloat3         terra_texture_sample_latlong ( void* texture, const void* dir, const void* xyz );
+void                terra_texture_destroy ( TerraTexture* texture );
+void                terra_texture_finalize ( void* texture );
+
+void                terra_attribute_init_constant ( TerraAttribute* attr, const TerraFloat3* value );
+void                terra_attribute_init_texture ( TerraAttribute* attr, TerraTexture* texture );
+void                terra_attribute_init_cubemap ( TerraAttribute* attr, TerraTexture* texture );
 
 //--------------------------------------------------------------------------------------------------
 // Terra Semi-public API (Usable from bsdf routine)
 //--------------------------------------------------------------------------------------------------
-TerraFloat3     terra_sample_texture(const TerraTexture* texture, const TerraFloat2* uv);
-TerraFloat3     terra_sample_hdr_cubemap(const TerraHDRTexture* texture, const TerraFloat3* v);
-TerraFloat3     terra_eval_attribute(const TerraAttribute* attribute, const TerraFloat2* uv);
-void*           terra_malloc(size_t size);
-void            terra_free(void* ptr);
-bool            terra_ray_aabb_intersection(const TerraRay *ray, const TerraAABB *aabb, float* tmin_out, float* tmax_out);
-bool            terra_ray_triangle_intersection(const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out);
-void            terra_aabb_fit_triangle(TerraAABB* aabb, const TerraTriangle* triangle);
+TerraFloat3         terra_eval_attribute ( const TerraAttribute* attribute, const void* dir, const TerraFloat3* point );
+void*               terra_malloc ( size_t size );
+void*               terra_realloc ( void* ptr, size_t size );
+void                terra_free ( void* ptr );
+void                terra_log ( const char* str, ... );
+bool                terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out );
+bool                terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out );
+void                terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle );
 
-typedef int64_t TerraTimeSlice;
-TerraTimeSlice  terra_timer_split();
-double          terra_timer_elapsed_ms(TerraTimeSlice delta);
+#ifdef __cplusplus
+}
+#endif
 
 #endif // _TERRA_H_
