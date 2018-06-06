@@ -2,7 +2,7 @@
 Unidirectional Monte Carlo Path Tracer  
 co-authored w/ https://github.com/sparkon
 
-Also contains Satellite, a nice Windows front-end client to run the path thracer on whatever obj file.
+Also contains Satellite, a nice Windows front-end client to run the path tracer on whatever obj file.
 
 Disclaimer: The following is a bit outdated, will be updated ASAP. Thank you for your collaboration.
 
