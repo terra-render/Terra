@@ -1,0 +1,12 @@
+[submodule "satellite/dependencies/glfw"]
+	path = satellite/dependencies/glfw
+	url = https://github.com/glfw/glfw
+[submodule "satellite/dependencies/glew"]
+	path = satellite/dependencies/glew
+	url = https://github.com/nigels-com/glew
+[submodule "satellite/dependencies/imgui"]
+	path = satellite/dependencies/imgui
+	url = https://github.com/ocornut/imgui
+[submodule "satellite/dependencies/gl3w"]
+	path = satellite/dependencies/gl3w
+	url = https://github.com/skaslev/gl3w
