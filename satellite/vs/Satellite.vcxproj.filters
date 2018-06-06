@@ -28,6 +28,9 @@
     <Filter Include="Internal Dependencies\stb">
       <UniqueIdentifier>{878962eb-6944-41ca-b6c2-5d1055b92a94}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Internal Dependencies\gl3w">
+      <UniqueIdentifier>{48a81009-b6a3-4bd5-9cd3-7e140dde2eff}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App.hpp">
@@ -132,6 +135,12 @@
     <ClInclude Include="..\..\src\TerraPrivate.h">
       <Filter>Terra\Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\dependencies\gl3w\include\GL\gl3w.h">
+      <Filter>Internal Dependencies\gl3w</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\gl3w\include\GL\glcorearb.h">
+      <Filter>Internal Dependencies\gl3w</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
@@ -232,6 +241,9 @@
     </ClCompile>
     <ClCompile Include="..\..\src\TerraProfile.c">
       <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\gl3w\src\gl3w.c">
+      <Filter>Internal Dependencies\gl3w</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
