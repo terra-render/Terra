@@ -227,7 +227,7 @@ void App::_register_commands() {
             ofn.lpstrInitialDir = ".";
             ofn.lpstrFileTitle = NULL;
             ofn.nMaxFileTitle = 0;
-            ofn.lpstrTitle = "";
+            ofn.lpstrTitle = "Open OBJ file";
             ofn.lpstrDefExt = NULL;
             ofn.Flags = OFN_NOCHANGEDIR | OFN_FILEMUSTEXIST;
             bool result = GetOpenFileName ( &ofn );
