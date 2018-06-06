@@ -4,5 +4,6 @@ backup/
 renderings/
 *.exe
 satellite/vs/*
+satellite/scenes/*
 !satellite/vs/Satellite.vcxproj
 !satellite/vs/Satellite.vcxproj.filters

@@ -72,7 +72,7 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
         return nullptr;
     }
 
-    glfwWindowHint ( GLFW_CONTEXT_VERSION_MAJOR, 4 );
+    glfwWindowHint ( GLFW_CONTEXT_VERSION_MAJOR, 3 );
     glfwWindowHint ( GLFW_CONTEXT_VERSION_MINOR, 3 );
     glfwWindowHint ( GLFW_RESIZABLE, false );
     glfwWindowHint ( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
@@ -85,6 +85,7 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
     glfwWindowHint ( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 #endif
     gfx->window = glfwCreateWindow ( width, height, title, nullptr, nullptr );
+    glfwSetWindowPos ( gfx->window, 100, 100 );
     glfwMakeContextCurrent ( gfx->window );
     glfwSwapInterval ( 1 ); // vsync
     gl3wInit(); // opengl function pointers
