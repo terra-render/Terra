@@ -16,6 +16,8 @@
 #include <imgui.h>
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
+#include <Commdlg.h>
+
 using namespace std;
 
 namespace {
@@ -208,12 +210,37 @@ void App::_register_commands() {
     // load
     //
     _c_load = [ this ] ( const CommandArgs & args ) -> int {
+        char name[256];
+
         if ( args.size() < 1 ) {
-            Log::console ( "<obj path> " );
-            return 0;
+            OPENFILENAMEA ofn;
+            ZeroMemory ( &ofn, sizeof ( ofn ) );
+            name[0] = '\0';
+            ofn.lStructSize = sizeof ( OPENFILENAME );
+            ofn.hwndOwner = GetFocus();
+            ofn.lpstrFilter = NULL;
+            ofn.lpstrCustomFilter = NULL;
+            ofn.nMaxCustFilter = 0;
+            ofn.nFilterIndex = 0;
+            ofn.lpstrFile = name;
+            ofn.nMaxFile = sizeof ( name );
+            ofn.lpstrInitialDir = ".";
+            ofn.lpstrFileTitle = NULL;
+            ofn.nMaxFileTitle = 0;
+            ofn.lpstrTitle = "";
+            ofn.lpstrDefExt = NULL;
+            ofn.Flags = OFN_NOCHANGEDIR | OFN_FILEMUSTEXIST;
+            bool result = GetOpenFileName ( &ofn );
+
+            if ( result == 0 ) {
+                Log::console ( "<obj [path]> " );
+                return 0;
+            }
+        } else {
+            strcpy ( name, args[0].c_str() );
         }
 
-        if ( !_scene.load ( args[0].c_str() ) ) {
+        if ( !_scene.load ( name ) ) {
             return 1;
         }
 
@@ -316,8 +343,8 @@ void App::_register_commands() {
 
         if ( args[0].compare ( "list" ) == 0 ) {
             _scene.dump_opts();
-            Log::info ( FMT ( "workers = %d", _renderer.concurrent_jobs() ) );
-            Log::info ( FMT ( "tile_size = %d", _renderer.tile_size() ) );
+            Log::info ( FMT ( "workers           = %d", _renderer.concurrent_jobs() ) );
+            Log::info ( FMT ( "tile_size         = %d", _renderer.tile_size() ) );
         } else if ( args[0].compare ( "reset" ) == 0 ) {
             _scene.reset_options();
             Log::info ( STR ( "Reset options to Config default" ) );
