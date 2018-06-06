@@ -1,0 +1,245 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Terra">
+      <UniqueIdentifier>{185d0e92-1338-4c59-ac11-a214c6de7730}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Terra\Header Files">
+      <UniqueIdentifier>{8fe9129b-27e9-4778-b452-7f1d5f7438d3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Terra\Source Files">
+      <UniqueIdentifier>{da2a06d6-7cb4-447a-ba37-9ddbf4445e52}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Dependencies">
+      <UniqueIdentifier>{6c9fcebe-9fde-4d2c-acf3-81679fdd23b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Dependencies\ImGui">
+      <UniqueIdentifier>{612a9482-0e58-4189-b92c-088ac1dad5df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Dependencies\glfw">
+      <UniqueIdentifier>{afdb1697-7ac1-4be2-89ce-840b57d4f377}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Satellite Headers">
+      <UniqueIdentifier>{1cd30d82-97d6-4dc1-8b97-212b8ca8af92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Satellite Sources">
+      <UniqueIdentifier>{2a2552fb-a4cf-4157-af73-2f0de33b234f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Dependencies\stb">
+      <UniqueIdentifier>{878962eb-6944-41ca-b6c2-5d1055b92a94}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\App.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Cloto.h">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Console.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Events.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Graphics.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Logging.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Renderer.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Scene.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Visualization.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Apollo.h">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\stb_image_write.h">
+      <Filter>Internal Dependencies\stb</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Config.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\include\GLFW\glfw3.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\include\GLFW\glfw3native.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\internal.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\mappings.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\wgl_context.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\win32_joystick.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\win32_platform.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\imconfig.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\imgui.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\stb_rect_pack.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\stb_textedit.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\stb_truetype.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\imgui\examples\opengl3_example\imgui_impl_glfw_gl3.h">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\egl_context.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dependencies\glfw\src\osmesa_context.h">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\Terra.h">
+      <Filter>Terra\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\TerraMath.h">
+      <Filter>Terra\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\TerraPresets.h">
+      <Filter>Terra\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\TerraProfile.h">
+      <Filter>Terra\Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\TerraBVH.h">
+      <Filter>Terra\Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\TerraKDTree.h">
+      <Filter>Terra\Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\TerraPrivate.h">
+      <Filter>Terra\Source Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\App.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Console.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Graphics.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Logging.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Renderer.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Scene.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Visualization.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Config.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Satellite.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\context.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\init.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\input.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\monitor.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\wgl_context.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_init.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_joystick.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_monitor.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_thread.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_time.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\win32_window.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\window.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\imgui\imgui.cpp">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\imgui\imgui_demo.cpp">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\imgui\imgui_draw.cpp">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\imgui\examples\opengl3_example\imgui_impl_glfw_gl3.cpp">
+      <Filter>Internal Dependencies\ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\vulkan.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\egl_context.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dependencies\glfw\src\osmesa_context.c">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\Terra.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraBVH.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraKDTree.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraPresets.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraProfile.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\dependencies\glfw\src\mappings.h.in">
+      <Filter>Internal Dependencies\glfw</Filter>
+    </None>
+    <None Include="..\..\include\TerraMath.inl">
+      <Filter>Terra\Header Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

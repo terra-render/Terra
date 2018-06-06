@@ -3,4 +3,6 @@ data/
 backup/
 renderings/
 *.exe
-vs_solution/
+satellite/vs/*
+!satellite/vs/Satellite.vcxproj
+!satellite/vs/Satellite.vcxproj.filters
