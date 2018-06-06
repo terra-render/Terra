@@ -19,6 +19,7 @@
 class TerraRenderer {
   public:
     using Event = std::function<void() >;
+    using TileEvent = std::function<void ( size_t x, size_t y, size_t w, size_t h ) >;
 
   public:
     TerraRenderer ();
@@ -32,15 +33,16 @@ class TerraRenderer {
     void resize ( int width, int height );
     void set_concurrent_jobs ( int concurrent_jobs );
     void set_tile_size ( int tile_side_length );
+    void set_progressive ( bool progressive );
 
-    // Takes care of pushing new jobs if progressive() is true; processing
+    // Takes care of pushing new jobs if iterative() is true; processing
     // option changes and notying steps.
     void refresh_jobs();
 
     // Any call to step or loop resumes the rendering (unpausing).
     // Returns true if jobs were successfully launched
-    bool step ( TerraCamera* camera, HTerraScene scene, const Event& on_end = nullptr );
-    bool loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step = nullptr );
+    bool step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
+    bool loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
 
     // Pauses rendering once the current step has finished executing
     void pause_at_next_step();
@@ -52,11 +54,13 @@ class TerraRenderer {
     // Renderer state
     bool is_rendering() const;
     bool is_paused() const;
+    bool is_iterative() const;
     bool is_progressive() const;
     int  iterations() const;
 
     int concurrent_jobs() const;
     int tile_size() const;
+    ClotoThread* thread() const;
 
   private:
     void     _create_jobs();
@@ -65,7 +69,8 @@ class TerraRenderer {
     uint64_t _gen_scene_id ( const TerraCamera* camera, HTerraScene scene );
     bool     _state_changed(); // True fi
     bool     _apply_changes();
-    bool     _launch ( const TerraCamera* camera, HTerraScene scene, bool progressive );
+    bool     _launch ();
+    void     _process_messages();
 
     typedef struct TerraRenderArgs {
         TerraRenderer*  th;
@@ -74,9 +79,10 @@ class TerraRenderer {
     } TerraRenderArgs;
     friend void terra_render_launcher ( void* );
 
-    // Workers
+    // Threading
     std::unique_ptr<ClotoSlaveGroup> _workers;
     uint32_t                         _tile_counter;
+    ClotoThread*                     _this_thread;
 
     // Terra
     TerraFramebuffer                 _framebuffer;
@@ -86,11 +92,14 @@ class TerraRenderer {
 
     // Renderer state
     bool         _paused;
+    bool         _iterative;
     bool         _progressive;
     int          _tile_size;
     int          _concurrent_jobs;
     int          _iterations;
-    Event        _on_step_end; // Also called at the end of every loop iteration
+    Event        _on_step_end;   // Also called at the end of every loop iteration
+    TileEvent    _on_tile_begin;
+    TileEvent    _on_tile_end;
     TerraCamera* _target_camera;
     HTerraScene  _target_scene;
     std::mutex   _callback_mutex;

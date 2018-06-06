@@ -36,10 +36,8 @@ namespace {
     // with respect to current window
     void im_text_aligned ( const ImAlign& align, const char* msg, const ImVec4& color, const ImVec4& bg_color = IM_TRANSPARENT, const ImVec2& off = ImVec2 ( 0.f, 0.f ) ) {
         using namespace ImGui;
-
         ImVec2 text_size = CalcTextSize ( msg );
         ImVec2 text_pos;
-
         const float w = GetWindowWidth();
         const float h = GetWindowHeight();
         const float padding = 5.f;
@@ -81,12 +79,10 @@ namespace {
         if ( bg_color.w > 0.f ) {
             ImVec2 rect_tl ( text_pos );
             ImVec2 rect_br ( text_pos.x + text_size.x, text_pos.y + text_size.y );
-
             rect_tl.x -= padding;
             rect_tl.y -= padding;
             rect_br.x += padding;
             rect_br.y += padding;
-
             GetWindowDrawList()->AddRectFilled ( rect_tl, rect_br, ImColor ( bg_color ) );
         }
 
@@ -144,7 +140,6 @@ void Visualizer::set_texture_data ( const TextureData& texture ) {
     if ( create_gl_texture ) {
         glGenTextures ( 1, &_gl_texture );
         glBindTexture ( GL_TEXTURE_2D, _gl_texture );
-
         // When the window is resized and the old texture is still being shown, use nearest filter
         glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
         glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
@@ -178,6 +173,88 @@ void Visualizer::set_texture_data ( const TextureData& texture ) {
     }
 
     memcpy ( _texture.data, texture.data, sizeof ( float ) * n_values );
+    _gl_format = gl_format;
+}
+
+void Visualizer::update_tile ( const TextureData& texture, size_t x, size_t y, size_t w, size_t h ) {
+    static_assert ( is_same<remove_pointer<decltype ( TextureData::data ) >::type, float>::value, "Code needs to be updated for non-floating point textures." );
+
+    if ( texture.data == nullptr ) {
+        Log::error ( STR ( "No texture data present." ) );
+        return;
+    }
+
+    // Finding format given components
+    int gl_format;
+
+    if ( texture.components == 3 ) {
+        gl_format = GL_RGB;
+    } else if ( texture.components == 4 ) {
+        gl_format = GL_RGBA;
+    } else {
+        Log::error ( FMT ( "Invalid texture components %d", texture.components ) );
+        return;
+    }
+
+    // Need to generate new texture
+    bool create_gl_texture = _texture.data == nullptr;
+
+    if ( _texture.data != nullptr && ( _texture.width != texture.width || _texture.height != texture.height || texture.components != _texture.components ) ) {
+        if ( glIsTexture ( _gl_texture ) ) {
+            glDeleteTextures ( 1, &_gl_texture );
+        } else {
+            Log::error ( STR ( "Unexpected behavior" ) );
+        }
+
+        create_gl_texture = true;
+    }
+
+    // Creating OpenGL texture, which will contain the render results
+    if ( create_gl_texture ) {
+        glGenTextures ( 1, &_gl_texture );
+        glBindTexture ( GL_TEXTURE_2D, _gl_texture );
+        // When the window is resized and the old texture is still being shown, use nearest filter
+        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+        glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGB, texture.width, texture.height, 0, gl_format, GL_FLOAT, texture.data );
+
+        if ( !glIsTexture ( _gl_texture ) ) {
+            Log::error ( STR ( "Failed to create OpenGL texture, check debug messages." ) );
+            return;
+        }
+    }
+
+    vector<float> buffer ( w * h * texture.components, 0 );
+
+    for ( size_t i = 0; i < h; ++i ) {
+        for ( size_t j = 0; j < w * texture.components; ++j ) {
+            buffer[i * w * texture.components + j] =  texture.data[ ( y + i ) * texture.width * texture.components + x * texture.components + j];
+        }
+    }
+
+    glBindTexture ( GL_TEXTURE_2D, _gl_texture );
+    glTexSubImage2D ( GL_TEXTURE_2D, 0, x, y, w, h, gl_format, GL_FLOAT, buffer.data() );
+    // Creating local copy
+    _texture.width = texture.width;
+    _texture.height = texture.height;
+    _texture.components = texture.components;
+    int n_values = texture.width * texture.height * texture.components;
+
+    // Resizing if necessary
+    if ( create_gl_texture ) {
+        delete[] _texture.data;
+        _texture.data = nullptr;
+    }
+
+    if ( _texture.data == nullptr ) {
+        _texture.data = new float[n_values];
+    }
+
+    for ( size_t i = 0; i < h; ++i ) {
+        for ( size_t j = 0; j < w * texture.components; ++j ) {
+            _texture.data[i * w * texture.components + j] = texture.data[ ( y + i ) * texture.width * texture.components + x * texture.components + j];
+        }
+    }
 
     _gl_format = gl_format;
 }
@@ -209,7 +286,6 @@ void Visualizer::save_to_file ( const char* path ) {
     }
 
     ++ext; // Skipping `.`
-
     bool is_png = strcmp ( ext, "png" ) == 0;
     bool is_jpg = strcmp ( ext, "jpg" ) == 0 || strcmp ( ext, "jpeg" ) == 0;
     int ret = -1;
@@ -217,7 +293,6 @@ void Visualizer::save_to_file ( const char* path ) {
     if ( is_png || is_jpg ) {
         int n_values = _texture.width * _texture.height * _texture.components;
         vector<uint8_t> ldr ( n_values );
-
         bool overflow = false;
         auto clamp = [] ( float v ) {
             return min ( max ( v, 0.f ), 1.f );
@@ -255,20 +330,15 @@ void Visualizer::toggle_info() {
 void Visualizer::draw() {
     const float width  = ( float ) gfx_width ( _gfx );
     const float height = ( float ) gfx_height ( _gfx );
-
     using namespace ImGui;
-
     // No window decorations / padding / borders
     int style = ImGuiWindowFlags_NoResize |
                 ImGuiWindowFlags_NoTitleBar |
                 ImGuiWindowFlags_NoBringToFrontOnFocus;
-
     PushStyleVar ( ImGuiStyleVar_WindowRounding, 0.f );
     PushStyleVar ( ImGuiStyleVar_WindowPadding, ImVec2 ( 0.f, 0.f ) );
     PushStyleColor ( ImGuiCol_WindowBg, ImVec4 ( 0.15f, 0.15f, 0.15f, 1.f ) );
-
     ImVec2 screen_size = ImVec2 ( width, height );
-
     SetNextWindowPos ( ImVec2 ( 0.f, 0.f ) );
     SetNextWindowSize ( screen_size );
     Begin ( "moo", nullptr, style );
@@ -291,7 +361,6 @@ void Visualizer::draw() {
     }
 
     End();
-
     PopStyleVar ( 2 );
     PopStyleColor ( 1 );
 }

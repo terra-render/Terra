@@ -46,10 +46,8 @@ void Console::printf ( const char* fmt, ... ) {
 void Console::vprintf ( const char* fmt, va_list args ) {
     constexpr size_t buf_len = 4096;
     char buf[buf_len + 1];
-
     vsnprintf ( buf, buf_len, fmt, args );
     buf[buf_len] = '\0';
-
     _items.push_back ( strdup ( buf ) );
     _scroll_to_bottom = true;
 }
@@ -82,14 +80,11 @@ void Console::draw ( GFXLayer gfx ) {
     }
 
     PushStyleVar ( ImGuiStyleVar_WindowRounding, 0.f );
-
     // Anchoring bottom right corner
     int wnd_width = gfx_width ( gfx );
     int wnd_height = gfx_height ( gfx );
-
     _width = _width == 0.f ? 0.5f * wnd_width : _width;
     _height = _height == 0.f ? 0.5f * wnd_height : _height;
-
     SetNextWindowSize ( ImVec2 ( _width, _height ), ImGuiCond_Once );
     SetNextWindowPos ( ImVec2 ( wnd_width - _width, wnd_height - _height ) );
 
@@ -138,11 +133,13 @@ void Console::draw ( GFXLayer gfx ) {
     PopStyleVar();
     EndChild();
     Separator();
-
     // Command-line
     bool reclaim_focus = false;
-
     auto trim = [] ( string & s ) {
+        if ( s.empty() ) {
+            return;
+        }
+
         while ( isspace ( s.front() ) ) {
             s.erase ( s.begin() );
         }
@@ -211,7 +208,6 @@ void Console::draw ( GFXLayer gfx ) {
     }
 
     End();
-
     PopStyleVar ( 1 );
 
     if ( _font ) {

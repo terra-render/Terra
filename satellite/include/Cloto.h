@@ -39,9 +39,11 @@ bool        cloto_atomic_compare_exchange_u32 ( uint32_t* atomic, uint32_t* expe
 typedef void ClotoJobRoutine ( void* args );
 #define CLOTO_JOB(name) void name (void* args)
 
+// TODO allow local args
 typedef struct {
     ClotoJobRoutine* routine;
     void* args;
+    char _p0[64];
 } ClotoJob;
 
 void cloto_job_create ( ClotoJob* job, ClotoJobRoutine* routine, void* args );
@@ -66,6 +68,7 @@ void        cloto_workqueue_destroy ( ClotoWorkQueue* queue );
 bool        cloto_workqueue_push ( ClotoWorkQueue* queue, const ClotoJob* job );
 bool        cloto_workqueue_pop ( ClotoWorkQueue* queue, ClotoJob* job );
 bool        cloto_workqueue_steal ( ClotoWorkQueue* queue, ClotoJob* job );
+void        cloto_workqueue_clear ( ClotoWorkQueue* queue );
 
 //--------------------------------------------------------------------------------------------------
 // Task Queue (SPMC)
@@ -628,6 +631,11 @@ bool cloto_workqueue_steal ( ClotoWorkQueue* queue, ClotoJob* job ) {
     }
 
     return false;
+}
+
+void cloto_workqueue_clear ( ClotoWorkQueue* queue ) {
+    queue->top = 0;
+    queue->bottom = 0;
 }
 
 //--------------------------------------------------------------------------------------------------

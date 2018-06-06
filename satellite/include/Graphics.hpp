@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <functional>
 
+// imgui
+#include <imgui.h>
+
 // Used to avoid having TerraFramebuffers going around
 // and used also by a couple of other classes for convenience
 struct TextureData {
@@ -16,9 +19,9 @@ struct TextureData {
 // One reason to have this opaque interface is to avoid including system header libraries in other header files
 using GFXLayer = void*;
 using OnResizeCallback = std::function<void ( int, int ) >;
-using OnKeyCallback = std::function<void ( int, int ) >; // key, modifier. glfw types
+using InputHandler = std::function<void ( const ImGuiIO& ) >;   // not a callback! called on every frame, should poll on ImGuiIO
 
-GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const OnKeyCallback& on_key );
+GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler );
 void     gfx_resize ( GFXLayer gfx, int width, int height );
 int      gfx_width ( GFXLayer gfx );
 int      gfx_height ( GFXLayer gfx );

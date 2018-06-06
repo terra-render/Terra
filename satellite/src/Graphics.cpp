@@ -9,7 +9,6 @@
 #include <Logging.hpp>
 
 // imgui
-#include <imgui.h>
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
 #ifdef _WIN32
@@ -17,7 +16,7 @@
 struct _GFXLayer {
     GLFWwindow*      window;
     OnResizeCallback on_resize;
-    OnKeyCallback    on_key;
+    InputHandler     input_handler;
 
     // Cached
     int width;
@@ -48,17 +47,7 @@ static void glfw_error_callback ( int error, const char* description ) {
     fprintf ( stderr, "Error %d: %s\n", error, description );
 }
 
-void key_callback ( GLFWwindow* wnd, int key, int, int action, int mods ) {
-    _GFXLayer* gfx = ( _GFXLayer* ) glfwGetWindowUserPointer ( wnd );
-
-    if ( action == GLFW_RELEASE ) {
-        if ( gfx->on_key ) {
-            gfx->on_key ( key, mods );
-        }
-    }
-}
-
-GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const OnKeyCallback& on_key ) {
+GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler ) {
     _GFXLayer* gfx = new _GFXLayer();
     glfwSetErrorCallback ( glfw_error_callback );
     bool enable_opengl_debug = false;
@@ -97,11 +86,11 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
 
     glDebugMessageCallback ( opengl_debug_callback, gfx );
     // Initializing GFXLayer
-    gfx->on_resize = on_resize;
-    gfx->width     = width;
-    gfx->height    = height;
+    gfx->on_resize      = on_resize;
+    gfx->input_handler  = input_handler;
+    gfx->width          = width;
+    gfx->height         = height;
     glfwSetWindowUserPointer ( gfx->window, gfx );
-    glfwSetKeyCallback ( gfx->window, key_callback );
     // Setting initial
     glViewport ( 0, 0, width, height );
     return gfx;
@@ -129,6 +118,7 @@ int gfx_height ( GFXLayer gfx ) {
 
 void gfx_process_events ( GFXLayer gfx ) {
     glfwPollEvents();
+    ( ( _GFXLayer* ) gfx )->input_handler ( ImGui::GetIO() );
 }
 
 bool gfx_should_quit ( GFXLayer gfx ) {

@@ -47,26 +47,54 @@ namespace std {
 
 using namespace std;
 
+typedef struct {
+    TerraRenderer::TileEvent& event;
+    size_t x;
+    size_t y;
+    size_t w;
+    size_t h;
+} TileMsgArg;
+
+typedef struct {
+    ClotoJobRoutine* routine;
+    TileMsgArg arg;
+} TileMsg;
+
+void tile_msg_stub ( void* _arg ) {
+    TileMsgArg* arg = ( TileMsgArg* ) _arg;
+    arg->event ( arg->x, arg->y, arg->w, arg->h );
+}
+
 void terra_render_launcher ( void* _args ) {
     using Args = TerraRenderer::TerraRenderArgs;
     Args* args = ( Args* ) _args;
 
-    while ( args->th->is_paused() ) {
-        cloto_thread_yield();
+    if ( args->th->_on_tile_begin ) {
+        TileMsg msg1{ tile_msg_stub, args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
+        cloto_thread_send_message ( args->th->thread(), &msg1, sizeof ( msg1 ), CLOTO_MSG_JOB_LOCAL_ARGS );
     }
 
-    // Tracing and saving stats
     terra_render ( args->th->_target_camera, args->th->_target_scene, &args->th->_framebuffer, args->x, args->y, args->width, args->height );
+
+    if ( args->th->_on_tile_end ) {
+        TileMsg msg2{ tile_msg_stub, args->th->_on_tile_end, args->x, args->y, args->width, args->height };
+        cloto_thread_send_message ( args->th->thread(), &msg2, sizeof ( msg2 ), CLOTO_MSG_JOB_LOCAL_ARGS );
+    }
+
     cloto_atomic_fetch_add_u32 ( &args->th->_tile_counter, -1 );
 }
 
 TerraRenderer::TerraRenderer ( ) {
+    cloto_thread_register();
+    _this_thread = cloto_thread_get();
 }
 
 TerraRenderer::~TerraRenderer() {
     if ( _workers != nullptr ) {
         cloto_slavegroup_destroy ( _workers.get() );
     }
+
+    cloto_thread_dispose();
 }
 
 bool TerraRenderer::init ( int width, int height, int tile_side_length, int concurrent_jobs ) {
@@ -81,7 +109,8 @@ bool TerraRenderer::init ( int width, int height, int tile_side_length, int conc
     // Initial state
     memset ( &_framebuffer, 0, sizeof ( TerraFramebuffer ) );
     _paused          = true;
-    _progressive     = false;
+    _iterative       = true;
+    _progressive     = true;
     _tile_counter    = 0;
     _tile_size       = 0; // Triggers job creation when _apply_changes is called()
     _concurrent_jobs = 0;
@@ -124,7 +153,13 @@ void TerraRenderer::set_tile_size ( int tile_side_length ) {
     }
 }
 
+void TerraRenderer::set_progressive ( bool progressive ) {
+    _progressive = progressive;
+}
+
 void TerraRenderer::refresh_jobs() {
+    _process_messages();
+
     if ( is_paused() ) {
         return;
     }
@@ -136,7 +171,7 @@ void TerraRenderer::refresh_jobs() {
             _on_step_end();
         }
 
-        if ( is_progressive() ) {
+        if ( is_iterative() ) {
             Log::verbose ( FMT ( "Finished iteration %d", _iterations ) );
 
             // Let's give time to save the file / ..
@@ -158,7 +193,7 @@ void TerraRenderer::refresh_jobs() {
     }
 }
 
-bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_end ) {
+bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
     if ( is_rendering() ) {
         Log::error ( STR ( "Cannot launch rendering while another one is in progress." ) );
         return false;
@@ -166,11 +201,14 @@ bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& 
 
     _target_scene  = scene;
     _target_camera = camera;
-    _on_step_end   = on_end;
-    return _launch ( camera, scene, false );
+    _on_step_end   = on_step_end;
+    _on_tile_begin = on_tile_begin;
+    _on_tile_end   = on_tile_end;
+    _iterative     = false;
+    return _launch ();
 }
 
-bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step ) {
+bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
     if ( is_rendering() ) {
         Log::error ( STR ( "Cannot launch rendering while another one is in progress." ) );
         return false;
@@ -178,13 +216,16 @@ bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& 
 
     _target_scene  = scene;
     _target_camera = camera;
-    _on_step_end   = on_step;
-    return _launch ( camera, scene, true );
+    _on_step_end   = on_step_end;
+    _on_tile_begin = on_tile_begin;
+    _on_tile_end   = on_tile_end;
+    _iterative     = true;
+    return _launch ();
 }
 
 void TerraRenderer::pause_at_next_step() {
     Log::verbose ( STR ( "Pausing rendering at the end of the current step" ) );
-    _progressive = false;
+    _iterative = false;
 }
 
 const TextureData& TerraRenderer::framebuffer() {
@@ -208,6 +249,10 @@ bool TerraRenderer::is_paused() const {
     return _paused;
 }
 
+bool TerraRenderer::is_iterative() const {
+    return _iterative;
+}
+
 bool TerraRenderer::is_progressive() const {
     return _progressive;
 }
@@ -222,6 +267,10 @@ int TerraRenderer::concurrent_jobs() const {
 
 int TerraRenderer::tile_size() const {
     return _tile_size;
+}
+
+ClotoThread* TerraRenderer::thread() const {
+    return _this_thread;
 }
 
 void TerraRenderer::_create_jobs() {
@@ -247,7 +296,7 @@ void TerraRenderer::_push_jobs() {
     _num_tiles ( num_tiles_x, num_tiles_y );
     _tile_counter = num_tiles_x * num_tiles_y;
     Log::verbose ( FMT ( "Pushing %d jobs", _tile_counter ) );
-    //cloto_workqueue_clear ( &_workers->queue );
+    cloto_workqueue_clear ( &_workers->queue );
 
     for ( int i = 0; i < num_tiles_y; ++i ) {
         for ( int j = 0; j < num_tiles_x; ++j ) {
@@ -340,8 +389,8 @@ bool TerraRenderer::_apply_changes() {
     return true;
 }
 
-bool TerraRenderer::_launch ( const TerraCamera* camera, HTerraScene scene, bool progressive ) {
-    if ( camera == nullptr ||  scene == nullptr ) {
+bool TerraRenderer::_launch () {
+    if ( _target_camera == nullptr ||  _target_scene == nullptr ) {
         return false;
     }
 
@@ -354,7 +403,7 @@ bool TerraRenderer::_launch ( const TerraCamera* camera, HTerraScene scene, bool
     // Updating options
     _apply_changes();
     // Clearing the framebuffer if the scene has changes
-    uint64_t scene_id = _gen_scene_id ( camera, scene );
+    uint64_t scene_id = _gen_scene_id ( _target_camera, _target_scene );
 
     if ( _scene_id != scene_id ) {
         TerraFloat3 clear_value = terra_f3_zero;
@@ -364,10 +413,13 @@ bool TerraRenderer::_launch ( const TerraCamera* camera, HTerraScene scene, bool
 
     // Setting internal state (used only by TerraRenderer)
     _paused      = false;
-    _progressive = progressive;
     _iterations  = 0;
     _options = *terra_scene_get_options ( _target_scene );
     // Pushing jobs
     _push_jobs();
     return true;
+}
+
+void TerraRenderer::_process_messages() {
+    cloto_thread_process_messages ( _this_thread );
 }

@@ -28,6 +28,8 @@ class Visualizer {
     void init ( GFXLayer gfx );
 
     void set_texture_data ( const TextureData& data );
+    void update_tile ( const TextureData& data, size_t x, size_t y, size_t w, size_t h );
+
     void save_to_file ( const char* path );
 
     void toggle_info();

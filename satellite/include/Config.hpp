@@ -54,7 +54,7 @@ namespace Config {
         Count
     };
 
-    bool init (  );     // TODO make it easier to change default opt values?
+    bool init ();
     void dump ( int from = -1, int to = -1 );
     void save ( const char* path );
 

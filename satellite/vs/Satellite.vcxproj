@@ -91,7 +91,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <CallingConvention>VectorCall</CallingConvention>
+      <CallingConvention>Cdecl</CallingConvention>
       <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
@@ -108,7 +108,6 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalOptions>/Ze %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>

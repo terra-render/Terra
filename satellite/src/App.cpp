@@ -112,8 +112,8 @@ int App::run() {
     [ = ] ( int w, int h ) { // on resize
         _on_resize ( w, h );
     },
-    [ = ] ( int key, int mod ) { // on key
-        if ( key == GLFW_KEY_GRAVE_ACCENT ) {
+    [ = ] ( const ImGuiIO & io ) { // on key
+        if ( io.KeysDown[GLFW_KEY_GRAVE_ACCENT] && io.KeysDownDuration[GLFW_KEY_GRAVE_ACCENT] == 0 ) {
             _console.toggle();
         }
     } );
@@ -253,11 +253,21 @@ void App::_register_commands() {
     // step
     //
     _c_step = [ this ] ( const CommandArgs & args ) -> int {
-        bool ret = _renderer.step ( &_render_camera, _scene.construct_terra_scene(), [ = ]() {
-            _visualizer.set_texture_data ( _renderer.framebuffer() );
+        bool ret = _renderer.step ( &_render_camera, _scene.construct_terra_scene(),
+        [ = ]() {
             _visualizer.info().sampling = Scene::from_terra_sampling ( _renderer.options().sampling_method );
             _visualizer.info().accelerator = Scene::from_terra_accelerator ( _renderer.options().accelerator );
             _visualizer.info().spp = ( int ) _renderer.options().samples_per_pixel;
+
+            if ( !_renderer.is_progressive() ) {
+                _visualizer.set_texture_data ( _renderer.framebuffer() );
+            }
+        },
+        nullptr,
+        [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
+            if ( _renderer.is_progressive() ) {
+                _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
+            }
         } );
 
         if ( !ret ) {
@@ -271,8 +281,17 @@ void App::_register_commands() {
     // loop
     //
     _c_loop = [ this ] ( const CommandArgs & args ) -> int {
-        bool ret = _renderer.loop ( &_render_camera, _scene.construct_terra_scene(), [ = ]() {
-            _visualizer.set_texture_data ( _renderer.framebuffer() );
+        bool ret = _renderer.loop ( &_render_camera, _scene.construct_terra_scene(),
+        [ = ]() {
+            if ( !_renderer.is_progressive() ) {
+                _visualizer.set_texture_data ( _renderer.framebuffer() );
+            }
+        },
+        nullptr,
+        [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
+            if ( _renderer.is_progressive() ) {
+                _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
+            }
         } );
 
         if ( !ret ) {
