@@ -150,10 +150,8 @@ bool Scene::load ( const char* filename ) {
         return false;
     }
 
-    ApolloMaterialCollection materials;
-    ApolloTextureCollection textures;
-    apollo_create_material_collection ( &materials );
-    apollo_create_texture_collection ( &textures );
+    ApolloMaterial* materials = NULL;
+    ApolloTexture* textures = NULL;
     ApolloModel model;
 
     if ( apollo_import_model_obj ( filename, &model, &materials, &textures, false, false ) != APOLLO_SUCCESS ) {
@@ -201,19 +199,19 @@ bool Scene::load ( const char* filename ) {
         // Reading materials
         //
         const int material_idx = model.meshes[m].material_id;
-        const ApolloMaterial& material = materials.materials[material_idx];
+        const ApolloMaterial& material = materials[material_idx];
         object->material.ior = 1.5;
         // TODO
         object->material.enable_bump_map_attr = 0;
         object->material.enable_normal_map_attr = 0;
-        READ_ATTR ( object->material.emissive, material.emissive, textures.textures );
+        READ_ATTR ( object->material.emissive, material.emissive, textures );
 
         switch ( material.bsdf ) {
             case APOLLO_SPECULAR: {
                 TerraAttribute albedo, specular_color, specular_intensity;
-                READ_ATTR ( albedo, material.diffuse, textures.textures );
-                READ_ATTR ( specular_color, material.specular, textures.textures );
-                READ_ATTR ( specular_intensity, material.specular_exp, textures.textures );
+                READ_ATTR ( albedo, material.diffuse, textures );
+                READ_ATTR ( specular_color, material.specular, textures );
+                READ_ATTR ( specular_intensity, material.specular_exp, textures );
                 object->material.attributes[TERRA_PHONG_ALBEDO]             = albedo;
                 object->material.attributes[TERRA_PHONG_SPECULAR_COLOR]     = specular_color;
                 object->material.attributes[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
@@ -231,7 +229,7 @@ bool Scene::load ( const char* filename ) {
 
             case APOLLO_DIFFUSE: {
                 TerraAttribute albedo;
-                READ_ATTR ( albedo, material.diffuse, textures.textures );
+                READ_ATTR ( albedo, material.diffuse, textures );
                 object->material.attributes[TERRA_DIFFUSE_ALBEDO] = albedo;
                 object->material.attributes_count                 = TERRA_DIFFUSE_END;
                 terra_bsdf_diffuse_init ( &object->material.bsdf );
