@@ -2,6 +2,10 @@
 Unidirectional Monte Carlo Path Tracer  
 co-authored w/ https://github.com/sparkon
 
+Also contains Satellite, a nice Windows front-end client to run the path tracer on whatever obj file.
+
+Disclaimer: The following is a bit outdated, will be updated ASAP. Thank you for your collaboration.
+
 ### Features
 - Header only (C99 ~2.6k lines of code) tested on **Mingw64-6.2.0** **Clang-3.9.0** **MSVC2015**
 - Monte Carlo unidirectional integrator (global illumination, soft shadows, ambient occlusion, etc..)
@@ -17,7 +21,6 @@ co-authored w/ https://github.com/sparkon
 - Multiple importance sampling (direct light sampling)
 - Russian Roulette for path termination
 - Antialiasing via random sub-pixel jittering
-- Multithread ready (see https://github.com/c4stan/TerraPreview)
 - Incremental progressive rendering
 - Multiple (local) tonemapping operators (Linear, Reinhard, Filmic & Uncharted2)
 
