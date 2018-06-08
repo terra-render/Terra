@@ -240,6 +240,7 @@ bool Scene::load ( const char* filename ) {
         n_triangles += object->triangles_count;
     }
 
+    // TODO free materials/textures?
     Log::info ( FMT ( "Building acceleration structure for %zu triangles", n_triangles ) );
     terra_scene_commit ( _scene );
     Log::info ( FMT ( "Finished importing %s. objects(%d) textures(%d)", name, terra_scene_count_objects ( _scene ), _textures.size() ) );

@@ -332,7 +332,7 @@ ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable
 void* stb__sbgrowf ( void* arr, int increment, int itemsize );
 
 //--------------------------------------------------------------------------------------------------
-// Collection
+// Buffers
 //--------------------------------------------------------------------------------------------------
 size_t apollo_find_texture ( const ApolloTexture* textures, const char* texture_name ) {
     for ( size_t i = 0; i < sb_count ( textures ); ++i ) {
@@ -364,6 +364,13 @@ size_t apollo_find_material_lib ( const ApolloMaterialLib* libs, const char* lib
     return SIZE_MAX;
 }
 
+size_t  apollo_buffer_size ( void* buffer ) {
+    return sb_count ( buffer );
+}
+
+void apollo_buffer_free ( void* buffer ) {
+    sb_free ( buffer );
+}
 
 //--------------------------------------------------------------------------------------------------
 // File parsing routines
