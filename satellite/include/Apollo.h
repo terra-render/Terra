@@ -131,7 +131,7 @@ typedef enum {
 } ApolloBSDF;
 
 // Path-tracer subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
-typedef struct ApolloMaterial {
+typedef struct {
     float        ior;                   // Ni
     ApolloFloat3 diffuse;               // Kd
     int          diffuse_map_id;        // map_Kd
@@ -162,8 +162,6 @@ void    apollo_buffer_free ( void* buffer );
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                                        ApolloMaterial** materials, ApolloTexture** textures,
                                        bool right_handed_coords, bool flip_faces );
-//int apollo_open_material_lib(const char* filename, ApolloMaterialLib* lib);
-//int apollo_export_material_lib(const char* filename, ApolloMaterialLib* lib);
 
 #ifdef __cplusplus
 }
