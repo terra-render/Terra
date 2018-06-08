@@ -21,6 +21,10 @@ typedef enum {
 #define APOLLO_PATH 1024
 #define APOLLO_NAME 256
 
+#define APOLLO_TARGET_VERTEX_COUNT  (1 << 18)
+#define APOLLO_TARGET_INDEX_COUNT   (1 << 18)
+#define APOLLO_TARGET_MESH_COUNT    128
+
 typedef struct {
     float x;
     float y;
@@ -303,17 +307,19 @@ ApolloAdjacencyTableItem*   apollo_adjacency_table_insert ( ApolloAdjacencyTable
 ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable* table, ApolloIndex key );
 
 // https://github.com/nothings/stb/blob/master/stretchy_buffer.h
-#define sb_free   stb_sb_free
-#define sb_push   stb_sb_push
-#define sb_count  stb_sb_count
-#define sb_add    stb_sb_add
-#define sb_last   stb_sb_last
+#define sb_free     stb_sb_free
+#define sb_push     stb_sb_push
+#define sb_count    stb_sb_count
+#define sb_add      stb_sb_add
+#define sb_last     stb_sb_last
+#define sb_prealloc stb_sb_prealloc
 
-#define stb_sb_free(a)         ((a) ? free(stb__sbraw(a)),0 : 0)
-#define stb_sb_push(a,v)       (stb__sbmaybegrow(a,1), (a)[stb__sbn(a)++] = (v))
-#define stb_sb_count(a)        ((a) ? stb__sbn(a) : 0)
-#define stb_sb_add(a,n)        (stb__sbmaybegrow(a,n), stb__sbn(a)+=(n), &(a)[stb__sbn(a)-(n)])
-#define stb_sb_last(a)         ((a)[stb__sbn(a)-1])
+#define stb_sb_free(a)          ((a) ? free(stb__sbraw(a)),0 : 0)
+#define stb_sb_push(a,v)        (stb__sbmaybegrow(a,1), (a)[stb__sbn(a)++] = (v))
+#define stb_sb_count(a)         ((a) ? stb__sbn(a) : 0)
+#define stb_sb_add(a,n)         (stb__sbmaybegrow(a,n), stb__sbn(a)+=(n), &(a)[stb__sbn(a)-(n)])
+#define stb_sb_last(a)          ((a)[stb__sbn(a)-1])
+#define stb_sb_prealloc(a,n)    (stb__sbgrow(a,n))
 
 #define stb__sbraw(a)           ((int *) (a) - 2)
 #define stb__sbm(a)             stb__sbraw(a)[0]
@@ -660,8 +666,6 @@ error:
     return APOLLO_ERROR;
 }
 
-#define APOLLO_TARGET_VERTEX_COUNT 300000
-
 //--------------------------------------------------------------------------------------------------
 // Model
 //--------------------------------------------------------------------------------------------------
@@ -680,8 +684,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     while ( --dir_end != filename && *dir_end != '/' && *dir_end != '\\' )
         ;
 
-    assert ( filename_len < 1024 );
-    char base_dir[1024];
+    assert ( filename_len < APOLLO_PATH );
+    char base_dir[APOLLO_PATH];
     base_dir[0] = '\0';
     size_t base_dir_len = 0;
 
@@ -691,31 +695,41 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         strncpy ( base_dir, filename, base_dir_len );
     }
 
+    // Temporary tables
+    ApolloVertexTable vtable;
+    ApolloAdjacencyTable atable;
+    ApolloIndexTable itable;
+    // Temporary buffers
     ApolloMaterial* materials = *_materials;
     ApolloTexture* textures = *_textures;
-    // The following default sizes are quite huge. Smaller values are probably fine, if not better.
-    ApolloVertexTable vtable;
-    apollo_vertex_table_create ( &vtable, 1 << 20 );    // 1kk entries, ~4MB
-    ApolloAdjacencyTable atable;
-    apollo_adjacency_table_create ( &atable, 1 << 20 ); // 1kk entries, ~64MB
     ApolloFloat3* vertex_pos = NULL;
     ApolloFloat2* tex_coords = NULL;
     ApolloFloat3* normals = NULL;
-    ApolloIndex* indices = NULL;
-    ApolloVertex* vertices = NULL;
-    int face_count = 0;
+    size_t face_count = 0;
     typedef struct {
         size_t smoothing_group;
         size_t material;
         size_t indices_offset;
     } Mesh;
     Mesh* meshes = NULL;
-    //vv
-    ApolloMaterial* used_materials = NULL;  // TODO rename this (missing materials?)
+    ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
     ApolloMaterialLib* material_libs = NULL;
-    //
+    // Non-temporary buffers (part of the ApolloModel)
+    ApolloIndex* indices = NULL;
+    ApolloVertex* vertices = NULL;
+    // Prealloc memory
+    apollo_vertex_table_create ( &vtable, 2 * APOLLO_TARGET_VERTEX_COUNT );
+    apollo_adjacency_table_create ( &atable, 2 * APOLLO_TARGET_VERTEX_COUNT );
+    apollo_index_table_create ( &itable, APOLLO_TARGET_INDEX_COUNT );
+    sb_prealloc ( vertex_pos, APOLLO_TARGET_VERTEX_COUNT );
+    sb_prealloc ( tex_coords, APOLLO_TARGET_VERTEX_COUNT );
+    sb_prealloc ( normals, APOLLO_TARGET_VERTEX_COUNT );
+    sb_prealloc ( indices, APOLLO_TARGET_INDEX_COUNT );
+    sb_prealloc ( vertices, APOLLO_TARGET_VERTEX_COUNT );
+    sb_prealloc ( meshes, APOLLO_TARGET_MESH_COUNT );
+    sb_prealloc ( used_materials, APOLLO_TARGET_MESH_COUNT );
+    sb_prealloc ( material_libs, APOLLO_TARGET_MESH_COUNT );
     ApolloResult result;
-    //^^
     int x;
     bool material_loaded = false;
 
@@ -752,7 +766,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                     result = apollo_open_material_lib ( lib_name, sb_add ( material_libs, 1 ), textures );
 
                     if ( result != APOLLO_SUCCESS ) {
-                        return APOLLO_ERROR;
+                        goto error;
                     }
                 }
 
@@ -807,8 +821,9 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 }
 
                 if ( idx == SIZE_MAX ) {
+                    result = APOLLO_MATERIAL_NOT_FOUND;
                     APOLLO_LOG_ERR ( "Failed to find material %s @ %s", mat_name, filename );
-                    return APOLLO_MATERIAL_NOT_FOUND; // TODO free
+                    goto error;
                 }
             }
             break;
@@ -822,7 +837,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         ApolloFloat3* pos = sb_add ( vertex_pos, 1 );
 
                         if ( !apollo_read_float3 ( file, pos ) ) {
-                            return APOLLO_ERROR;
+                            result = APOLLO_INVALID_FORMAT;
+                            goto error;
                         }
 
                         if ( rh ) {
@@ -835,7 +851,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         ApolloFloat2* uv = sb_add ( tex_coords, 1 );
 
                         if ( !apollo_read_float2 ( file, uv ) ) {
-                            return APOLLO_ERROR;
+                            result = APOLLO_INVALID_FORMAT;
+                            goto error;
                         }
 
                         if ( rh ) {
@@ -848,7 +865,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         ApolloFloat3* norm = sb_add ( normals, 1 );
 
                         if ( !apollo_read_float3 ( file, norm ) ) {
-                            return APOLLO_ERROR;
+                            result = APOLLO_INVALID_FORMAT;
+                            goto error;
                         }
 
                         if ( rh ) {
@@ -908,7 +926,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                 if ( x != ' ' ) {
                     APOLLO_LOG_ERR ( "Expected space after 'f', but found %c", x );
-                    return APOLLO_INVALID_FORMAT;
+                    result = APOLLO_INVALID_FORMAT;
+                    goto error;
                 }
 
                 {
@@ -1001,16 +1020,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         // Finalize the vertex, testing for overlaps if the mesh is smooth and updating the first/last face vertex indices
                         bool duplicate = false;
 
-                        if ( sb_last ( meshes ).smoothing_group == 1 ) { // && vertex_count >= 3 ) {    // TODO ?
-                            /*for ( int i = 0; i < vertex_count && !duplicate; ++i ) {
-                                if ( apollo_equalf3 ( &vertex_pos[pos_index], &vertices[i].pos )
-                                        && apollo_equalf2 ( &tex_coords[tex_index], &vertices[i].tex )
-                                        //&& norm_index == vertices[i].norm
-                                   ) {
-                                    indices[index_count] = i;
-                                    duplicate = 1;
-                                }
-                            }*/
+                        if ( sb_last ( meshes ).smoothing_group == 1 ) {
                             ApolloVertexTableItem* lookup = apollo_vertex_table_lookup ( &vtable, &vertex_pos[pos_index] );
 
                             if ( lookup != NULL ) {
@@ -1062,8 +1072,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     }
 
     // End of file
-    // Add the index count as last offsets in order to make some later stuff easier
-    //mesh_offsets[mesh_count] = index_count; // TODO remove
 
     // Flip faces?
     if ( flip_faces ) {
@@ -1074,306 +1082,285 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         }
     }
 
-    //ApolloFloat3* face_normals = ( ApolloFloat3* ) malloc ( sizeof ( *face_normals ) * face_count );
-    //ApolloFloat3* face_tangents = ( ApolloFloat3* ) malloc ( sizeof ( *face_tangents ) * face_count );
-    //ApolloFloat3* face_bitangents = ( ApolloFloat3* ) malloc ( sizeof ( *face_bitangents ) * face_count );
-    ApolloFloat3* face_normals = NULL;
-    sb_add ( face_normals, face_count );
-    ApolloFloat3* face_tangents = NULL;
-    sb_add ( face_tangents, face_count );
-    ApolloFloat3* face_bitangents = NULL;
-    sb_add ( face_bitangents, face_count );
+    // The unnnecessary scoping is just so that it is possible to write goto error on error.
+    {
+        ApolloFloat3* face_normals = NULL;
+        sb_add ( face_normals, face_count );
+        ApolloFloat3* face_tangents = NULL;
+        sb_add ( face_tangents, face_count );
+        ApolloFloat3* face_bitangents = NULL;
+        sb_add ( face_bitangents, face_count );
 
-    // Compute face normals
-    for ( size_t i = 0; i < face_count; ++i ) {
-        ApolloFloat3 v0 = vertices[indices[i * 3]].pos;
-        ApolloFloat3 v1 = vertices[indices[i * 3 + 1]].pos;
-        ApolloFloat3 v2 = vertices[indices[i * 3 + 2]].pos;
-        // Compute two edges of the triangle in order to be able to compute the normal as the cross prod of the edges.
-        ApolloFloat3 e01;
-        e01.x = v1.x - v0.x;
-        e01.y = v1.y - v0.y;
-        e01.z = v1.z - v0.z;
-        ApolloFloat3 e02;
-        e02.x = v2.x - v0.x;
-        e02.y = v2.y - v0.y;
-        e02.z = v2.z - v0.z;
-        // x prod
-        face_normals[i].x = e01.y * e02.z - e01.z * e02.y;
-        face_normals[i].y = e01.z * e02.x - e01.x * e02.z;
-        face_normals[i].z = e01.x * e02.y - e01.y * e02.x;
-        // normalize
-        float len = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
-        face_normals[i].x /= len;
-        face_normals[i].y /= len;
-        face_normals[i].z /= len;
-    }
-
-    ApolloIndexTable itable;
-    apollo_index_table_create ( &itable, 4096 );
-
-    // Recompute the vertex normals for smooth meshes
-    for ( size_t m = 0; m < sb_count ( meshes ); ++m ) {
-        size_t mesh_index_base = meshes[m].indices_offset;
-        size_t mesh_index_count = m < sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : sb_count ( indices ) - mesh_index_base;
-        size_t mesh_face_count = mesh_index_count / 3;
-
-        if ( mesh_index_count % 3 != 0 ) {
-            APOLLO_LOG_ERR ( "Malformed .obj file @ %s", filename );
-            return APOLLO_INVALID_FORMAT;
+        // Compute face normals
+        for ( size_t i = 0; i < face_count; ++i ) {
+            ApolloFloat3 v0 = vertices[indices[i * 3]].pos;
+            ApolloFloat3 v1 = vertices[indices[i * 3 + 1]].pos;
+            ApolloFloat3 v2 = vertices[indices[i * 3 + 2]].pos;
+            // Compute two edges of the triangle in order to be able to compute the normal as the cross prod of the edges.
+            ApolloFloat3 e01;
+            e01.x = v1.x - v0.x;
+            e01.y = v1.y - v0.y;
+            e01.z = v1.z - v0.z;
+            ApolloFloat3 e02;
+            e02.x = v2.x - v0.x;
+            e02.y = v2.y - v0.y;
+            e02.z = v2.z - v0.z;
+            // x prod
+            face_normals[i].x = e01.y * e02.z - e01.z * e02.y;
+            face_normals[i].y = e01.z * e02.x - e01.x * e02.z;
+            face_normals[i].z = e01.x * e02.y - e01.y * e02.x;
+            // normalize
+            float len = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
+            face_normals[i].x /= len;
+            face_normals[i].y /= len;
+            face_normals[i].z /= len;
         }
 
-        // If the mesh isn't smooth, skip it
-        if ( meshes[m].smoothing_group == 0 ) {
-            for ( size_t i = 0; i < mesh_face_count; ++i ) {
-                vertices[indices[mesh_index_base + i * 3 + 0]].norm = face_normals[mesh_index_base / 3 + i];
-                vertices[indices[mesh_index_base + i * 3 + 1]].norm = face_normals[mesh_index_base / 3 + i];
-                vertices[indices[mesh_index_base + i * 3 + 2]].norm = face_normals[mesh_index_base / 3 + i];
+        // Recompute the vertex normals for smooth meshes
+        for ( size_t m = 0; m < sb_count ( meshes ); ++m ) {
+            size_t mesh_index_base = meshes[m].indices_offset;
+            size_t mesh_index_count = m < sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : sb_count ( indices ) - mesh_index_base;
+            size_t mesh_face_count = mesh_index_count / 3;
+
+            if ( mesh_index_count % 3 != 0 ) {
+                APOLLO_LOG_ERR ( "Malformed .obj file @ %s", filename );
+                result = APOLLO_INVALID_FORMAT;
+                goto error;
             }
 
-            continue;
-        }
-
-        // Vertex normals foreach mesh
-        //int* computed_indices = ( int* ) malloc ( sizeof ( *computed_indices ) * mesh_index_count );
-        //int computed_indices_count = 0;
-
-        for ( size_t i = 0; i < mesh_index_count; ++i ) {
-            ApolloFloat3 norm_sum;
-            norm_sum.x = norm_sum.y = norm_sum.z = 0;
-            // skip the index if the corresponding vertex has already been processed
-            bool already_computed_vertex = 0;
-            /*for ( int j = 0; j < computed_indices_count; ++j ) {
-                if ( computed_indices[j] == indices[mesh_index_base + i] ) {
-                    already_computed_vertex = 1;
-                    break;
+            // If the mesh isn't smooth, skip it
+            if ( meshes[m].smoothing_group == 0 ) {
+                for ( size_t i = 0; i < mesh_face_count; ++i ) {
+                    vertices[indices[mesh_index_base + i * 3 + 0]].norm = face_normals[mesh_index_base / 3 + i];
+                    vertices[indices[mesh_index_base + i * 3 + 1]].norm = face_normals[mesh_index_base / 3 + i];
+                    vertices[indices[mesh_index_base + i * 3 + 2]].norm = face_normals[mesh_index_base / 3 + i];
                 }
-            }*/
-            already_computed_vertex = apollo_index_table_lookup ( &itable, mesh_index_base + i );
 
-            if ( already_computed_vertex ) {
                 continue;
-            } else {
-                //computed_indices[computed_indices_count++] = indices[mesh_index_base + i];
-                apollo_index_table_insert ( &itable, mesh_index_base + i );
             }
 
-            // Foreach vertex we search for its one-ring:
-            // We go through all triangles and check if one of their vertices is this one (the i-th).
-            // If it is, that face's normal takes part into the computation.
-            /*for ( int j = 0; j < mesh_face_count; ++j ) {
-                if ( indices[mesh_index_base + j * 3] == indices[mesh_index_base + i]
-                        || indices[mesh_index_base + j * 3 + 1] == indices[mesh_index_base + i]
-                        || indices[mesh_index_base + j * 3 + 2] == indices[mesh_index_base + i] ) {
-                    norm_sum.x += face_normals[mesh_index_base / 3 + j].x;
-                    norm_sum.y += face_normals[mesh_index_base / 3 + j].y;
-                    norm_sum.z += face_normals[mesh_index_base / 3 + j].z;
+            // Vertex normals foreach mesh
+
+            for ( size_t i = 0; i < mesh_index_count; ++i ) {
+                ApolloFloat3 norm_sum;
+                norm_sum.x = norm_sum.y = norm_sum.z = 0;
+                // skip the index if the corresponding vertex has already been processed
+                bool already_computed_vertex = apollo_index_table_lookup ( &itable, mesh_index_base + i );
+
+                if ( already_computed_vertex ) {
+                    continue;
+                } else {
+                    //computed_indices[computed_indices_count++] = indices[mesh_index_base + i];
+                    apollo_index_table_insert ( &itable, mesh_index_base + i );
                 }
-            }*/
-            ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, indices[mesh_index_base + i] );
 
-            for ( size_t j = 0; j < adj_lookup->count; ++j ) {
-                size_t k    = adj_lookup->values[j];
-                norm_sum.x += face_normals[k].x;
-                norm_sum.y += face_normals[k].y;
-                norm_sum.z += face_normals[k].z;
-            }
+                ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, indices[mesh_index_base + i] );
 
-            ApolloAdjacencyTableExtension* ext = adj_lookup->next;
-
-            while ( ext != NULL ) {
-                for ( size_t j = 0; j < ext->count; ++j ) {
-                    size_t k    = ext->values[j];
+                for ( size_t j = 0; j < adj_lookup->count; ++j ) {
+                    size_t k = adj_lookup->values[j];
                     norm_sum.x += face_normals[k].x;
                     norm_sum.y += face_normals[k].y;
                     norm_sum.z += face_normals[k].z;
                 }
 
-                ext = ext->next;
+                ApolloAdjacencyTableExtension* ext = adj_lookup->next;
+
+                while ( ext != NULL ) {
+                    for ( size_t j = 0; j < ext->count; ++j ) {
+                        size_t k = ext->values[j];
+                        norm_sum.x += face_normals[k].x;
+                        norm_sum.y += face_normals[k].y;
+                        norm_sum.z += face_normals[k].z;
+                    }
+
+                    ext = ext->next;
+                }
+
+                ApolloFloat3 normal;
+                normal.x = norm_sum.x;// / face_count;
+                normal.y = norm_sum.y;// / face_count;
+                normal.z = norm_sum.z;// / face_count;
+                float len = sqrtf ( normal.x * normal.x + normal.y * normal.y + normal.z * normal.z );
+                normal.x /= len;
+                normal.y /= len;
+                normal.z /= len;
+                vertices[indices[mesh_index_base + i]].norm = normal;
             }
 
-            ApolloFloat3 normal;
-            normal.x    = norm_sum.x;// / face_count;
-            normal.y    = norm_sum.y;// / face_count;
-            normal.z    = norm_sum.z;// / face_count;
-            float len   = sqrtf ( normal.x * normal.x + normal.y * normal.y + normal.z * normal.z );
-            normal.x   /= len;
-            normal.y   /= len;
-            normal.z   /= len;
-            vertices[indices[mesh_index_base + i]].norm = normal;
+            //free ( computed_indices );
+            apollo_index_table_clear ( &itable );
         }
 
-        //free ( computed_indices );
-        apollo_index_table_clear ( &itable );
+        // Compute tangents and bitangents
+        for ( size_t i = 0; i < face_count; ++i ) {
+            if ( face_normals[i].x * face_normals[i].x > face_normals[i].y * face_normals[i].y ) {
+                float f = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].z * face_normals[i].z );
+                face_tangents[i].x = face_normals[i].z * f;
+                face_tangents[i].y = 0;
+                face_tangents[i].z = -face_normals[i].x * f;
+            } else {
+                float f = sqrtf ( face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
+                face_tangents[i].x = 0;
+                face_tangents[i].y = -face_normals[i].z * f;
+                face_tangents[i].z = face_normals[i].y * f;
+            }
+
+            // x prod
+            face_bitangents[i].x = face_normals[i].y * face_tangents[i].z - face_normals[i].z * face_tangents[i].y;
+            face_bitangents[i].y = face_normals[i].z * face_tangents[i].x - face_normals[i].x * face_tangents[i].z;
+            face_bitangents[i].z = face_normals[i].x * face_tangents[i].y - face_normals[i].y * face_tangents[i].x;
+        }
+
+        // Update ApolloMaterials
+        for ( size_t i = 0; i < sb_count ( used_materials ); ++i ) {
+            sb_push ( materials, used_materials[i] );
+        }
+
+        // Build ApolloModel
+        // Vertices
+        model->vertices = ( ApolloVertex* ) malloc ( sizeof ( ApolloVertex ) * sb_count ( vertices ) );
+        model->vertex_count = sb_count ( vertices );
+
+        for ( size_t i = 0; i < sb_count ( vertices ); ++i ) {
+            model->vertices[i].pos = vertices[i].pos;
+            model->vertices[i].tex = vertices[i].tex;
+            model->vertices[i].norm = vertices[i].norm;
+        }
+
+        // Meshes
+        model->meshes = ( ApolloMesh* ) malloc ( sizeof ( ApolloMesh ) * sb_count ( meshes ) );
+        model->mesh_count = sb_count ( meshes );
+
+        for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
+            // Faces
+            int mesh_index_base = meshes[i].indices_offset;
+            size_t mesh_index_count = i < sb_count ( meshes ) - 1 ? meshes[i + 1].indices_offset - mesh_index_base : sb_count ( indices ) - mesh_index_base;
+            int mesh_face_count = mesh_index_count / 3;
+
+            if ( mesh_index_count % 3 != 0 ) {
+                APOLLO_LOG_ERR ( "Malformed mesh file @ %s", filename );
+                result = APOLLO_INVALID_FORMAT;
+                goto error;
+            }
+
+            model->meshes[i].faces = ( ApolloMeshFace* ) malloc ( sizeof ( ApolloMeshFace ) * mesh_face_count );
+            model->meshes[i].face_count = mesh_face_count;
+
+            for ( size_t j = 0; j < mesh_face_count; ++j ) {
+                model->meshes[i].faces[j].a = indices[mesh_index_base + j * 3];
+                model->meshes[i].faces[j].b = indices[mesh_index_base + j * 3 + 1];
+                model->meshes[i].faces[j].c = indices[mesh_index_base + j * 3 + 2];
+                model->meshes[i].faces[j].normal = face_normals[mesh_index_base / 3 + j];
+                model->meshes[i].faces[j].tangent = face_tangents[mesh_index_base / 3 + j];
+                model->meshes[i].faces[j].bitangent = face_bitangents[mesh_index_base / 3 + j];
+            }
+
+            // Material
+            model->meshes[i].material_id = meshes[i].material;
+            // AABB
+            ApolloFloat3 min = vertices[indices[mesh_index_base]].pos;
+            ApolloFloat3 max = vertices[indices[mesh_index_base]].pos;
+
+            for ( int j = 1; j < mesh_index_count; ++j ) {
+                ApolloFloat3 pos = vertices[indices[mesh_index_base + j]].pos;
+
+                if ( pos.x < min.x ) {
+                    min.x = pos.x;
+                }
+
+                if ( pos.y < min.y ) {
+                    min.y = pos.y;
+                }
+
+                if ( pos.z < min.z ) {
+                    min.z = pos.z;
+                }
+
+                if ( pos.x > max.x ) {
+                    max.x = pos.x;
+                }
+
+                if ( pos.y > max.y ) {
+                    max.y = pos.y;
+                }
+
+                if ( pos.z > max.z ) {
+                    max.z = pos.z;
+                }
+            }
+
+            model->meshes[i].aabb.min = min;
+            model->meshes[i].aabb.max = max;
+            // Sphere
+            ApolloFloat3 center;
+            center.x = ( max.x + min.x ) / 2.f;
+            center.y = ( max.y + min.y ) / 2.f;
+            center.z = ( max.z + min.z ) / 2.f;
+            float max_dist = 0;
+
+            for ( size_t j = 1; j < mesh_index_count; ++j ) {
+                ApolloFloat3 pos = vertices[indices[mesh_index_base + j]].pos;
+                ApolloFloat3 center_to_pos;
+                center_to_pos.x = pos.x - center.x;
+                center_to_pos.y = pos.y - center.y;
+                center_to_pos.z = pos.z - center.z;
+                float dist = sqrtf ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
+
+                if ( dist > max_dist ) {
+                    max_dist = dist;
+                }
+            }
+
+            model->meshes[i].bounding_sphere.center.x = center.x;
+            model->meshes[i].bounding_sphere.center.y = center.y;
+            model->meshes[i].bounding_sphere.center.z = center.z;
+            model->meshes[i].bounding_sphere.radius = max_dist;
+        }
     }
+    // AABB
+    {
+        ApolloFloat3 min = vertices[0].pos;
+        ApolloFloat3 max = vertices[0].pos;
 
-    apollo_index_table_destroy ( &itable );
-
-    // Compute tangents and bitangents
-    for ( size_t i = 0; i < face_count; ++i ) {
-        if ( face_normals[i].x * face_normals[i].x > face_normals[i].y * face_normals[i].y ) {
-            float f = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].z * face_normals[i].z );
-            face_tangents[i].x = face_normals[i].z * f;
-            face_tangents[i].y = 0;
-            face_tangents[i].z = -face_normals[i].x * f;
-        } else {
-            float f = sqrtf ( face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
-            face_tangents[i].x = 0;
-            face_tangents[i].y = -face_normals[i].z * f;
-            face_tangents[i].z = face_normals[i].y * f;
+        for ( size_t j = 1; j < sb_count ( vertices ); ++j ) {
+            ApolloFloat3 pos = vertices[j].pos;
+            min.x = pos.x < min.x ? pos.x : min.x;
+            min.y = pos.y < min.y ? pos.y : min.y;
+            min.z = pos.z < min.z ? pos.z : min.z;
+            max.x = pos.x > max.x ? pos.x : max.x;
+            max.y = pos.y > max.y ? pos.y : max.y;
+            max.z = pos.z > max.z ? pos.z : max.z;
         }
 
-        // x prod
-        face_bitangents[i].x = face_normals[i].y * face_tangents[i].z - face_normals[i].z * face_tangents[i].y;
-        face_bitangents[i].y = face_normals[i].z * face_tangents[i].x - face_normals[i].x * face_tangents[i].z;
-        face_bitangents[i].z = face_normals[i].x * face_tangents[i].y - face_normals[i].y * face_tangents[i].x;
+        model->aabb.min = min;
+        model->aabb.max = max;
     }
-
-    // Update ApolloMaterials
-    for ( size_t i = 0; i < sb_count ( used_materials ); ++i ) {
-        sb_push ( materials, used_materials[i] );
-    }
-
-    // Build ApolloModel
-    // Vertices
-    model->vertices     = ( ApolloVertex* ) malloc ( sizeof ( ApolloVertex ) * sb_count ( vertices ) );
-    model->vertex_count = sb_count ( vertices );
-
-    for ( size_t i = 0; i < sb_count ( vertices ); ++i ) {
-        model->vertices[i].pos  = vertices[i].pos;
-        model->vertices[i].tex  = vertices[i].tex;
-        model->vertices[i].norm = vertices[i].norm;
-    }
-
-    // Meshes
-    model->meshes = ( ApolloMesh* ) malloc ( sizeof ( ApolloMesh ) * sb_count ( meshes ) );
-    model->mesh_count = sb_count ( meshes );
-
-    for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
-        // Faces
-        int mesh_index_base = meshes[i].indices_offset;
-        size_t mesh_index_count = i < sb_count ( meshes ) - 1 ? meshes[i + 1].indices_offset - mesh_index_base : sb_count ( indices ) - mesh_index_base;
-        int mesh_face_count = mesh_index_count / 3;
-
-        if ( mesh_index_count % 3 != 0 ) {
-            APOLLO_LOG_ERR ( "Malformed mesh file @ %s", filename );
-            return APOLLO_INVALID_FORMAT;
-        }
-
-        model->meshes[i].faces = ( ApolloMeshFace* ) malloc ( sizeof ( ApolloMeshFace ) * mesh_face_count );
-        model->meshes[i].face_count = mesh_face_count;
-
-        for ( size_t j = 0; j < mesh_face_count; ++j ) {
-            model->meshes[i].faces[j].a         = indices[mesh_index_base + j * 3];
-            model->meshes[i].faces[j].b         = indices[mesh_index_base + j * 3 + 1];
-            model->meshes[i].faces[j].c         = indices[mesh_index_base + j * 3 + 2];
-            model->meshes[i].faces[j].normal    = face_normals[mesh_index_base / 3 + j];
-            model->meshes[i].faces[j].tangent   = face_tangents[mesh_index_base / 3 + j];
-            model->meshes[i].faces[j].bitangent = face_bitangents[mesh_index_base / 3 + j];
-        }
-
-        // Material
-        model->meshes[i].material_id = meshes[i].material;
-        // AABB
-        ApolloFloat3 min = vertices[indices[mesh_index_base]].pos;
-        ApolloFloat3 max = vertices[indices[mesh_index_base]].pos;
-
-        for ( int j = 1; j < mesh_index_count; ++j ) {
-            ApolloFloat3 pos = vertices[indices[mesh_index_base + j]].pos;
-
-            if ( pos.x < min.x ) {
-                min.x = pos.x;
-            }
-
-            if ( pos.y < min.y ) {
-                min.y = pos.y;
-            }
-
-            if ( pos.z < min.z ) {
-                min.z = pos.z;
-            }
-
-            if ( pos.x > max.x ) {
-                max.x = pos.x;
-            }
-
-            if ( pos.y > max.y ) {
-                max.y = pos.y;
-            }
-
-            if ( pos.z > max.z ) {
-                max.z = pos.z;
-            }
-        }
-
-        model->meshes[i].aabb.min = min;
-        model->meshes[i].aabb.max = max;
-        // Sphere
+    // Sphere
+    {
         ApolloFloat3 center;
-        center.x = ( max.x + min.x ) / 2.f;
-        center.y = ( max.y + min.y ) / 2.f;
-        center.z = ( max.z + min.z ) / 2.f;
+        center.x = ( model->aabb.max.x + model->aabb.min.x ) / 2.f;
+        center.y = ( model->aabb.max.y + model->aabb.min.y ) / 2.f;
+        center.z = ( model->aabb.max.z + model->aabb.min.z ) / 2.f;
         float max_dist = 0;
 
-        for ( size_t j = 1; j < mesh_index_count; ++j ) {
-            ApolloFloat3 pos = vertices[indices[mesh_index_base + j]].pos;
+        for ( size_t j = 1; j < sb_count ( vertices ); ++j ) {
+            ApolloFloat3 pos = vertices[j].pos;
             ApolloFloat3 center_to_pos;
             center_to_pos.x = pos.x - center.x;
             center_to_pos.y = pos.y - center.y;
             center_to_pos.z = pos.z - center.z;
-            float dist = sqrtf ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
+            float dist = ( float ) sqrt ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
 
             if ( dist > max_dist ) {
                 max_dist = dist;
             }
         }
 
-        model->meshes[i].bounding_sphere.center.x = center.x;
-        model->meshes[i].bounding_sphere.center.y = center.y;
-        model->meshes[i].bounding_sphere.center.z = center.z;
-        model->meshes[i].bounding_sphere.radius   = max_dist;
+        model->bounding_sphere.center.x = center.x;
+        model->bounding_sphere.center.y = center.y;
+        model->bounding_sphere.center.z = center.z;
+        model->bounding_sphere.radius = max_dist;
     }
-
-    // AABB
-    ApolloFloat3 min = vertices[0].pos;
-    ApolloFloat3 max = vertices[0].pos;
-
-    for ( size_t j = 1; j < sb_count ( vertices ); ++j ) {
-        ApolloFloat3 pos = vertices[j].pos;
-        min.x = pos.x < min.x ? pos.x : min.x;
-        min.y = pos.y < min.y ? pos.y : min.y;
-        min.z = pos.z < min.z ? pos.z : min.z;
-        max.x = pos.x > max.x ? pos.x : max.x;
-        max.y = pos.y > max.y ? pos.y : max.y;
-        max.z = pos.z > max.z ? pos.z : max.z;
-    }
-
-    model->aabb.min = min;
-    model->aabb.max = max;
-    // Sphere
-    ApolloFloat3 center;
-    center.x = ( max.x + min.x ) / 2.f;
-    center.y = ( max.y + min.y ) / 2.f;
-    center.z = ( max.z + min.z ) / 2.f;
-    float max_dist = 0;
-
-    for ( size_t j = 1; j < sb_count ( vertices ); ++j ) {
-        ApolloFloat3 pos = vertices[j].pos;
-        ApolloFloat3 center_to_pos;
-        center_to_pos.x = pos.x - center.x;
-        center_to_pos.y = pos.y - center.y;
-        center_to_pos.z = pos.z - center.z;
-        float dist = ( float ) sqrt ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
-
-        if ( dist > max_dist ) {
-            max_dist = dist;
-        }
-    }
-
-    model->bounding_sphere.center.x = center.x;
-    model->bounding_sphere.center.y = center.y;
-    model->bounding_sphere.center.z = center.z;
-    model->bounding_sphere.radius   = max_dist;
     fclose ( file );
 
     for ( size_t i = 0; i < sb_count ( material_libs ); ++i ) {
@@ -1384,6 +1371,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     *_textures = textures;
     apollo_vertex_table_destroy ( &vtable );
     apollo_adjacency_table_destroy ( &atable );
+    apollo_index_table_destroy ( &itable );
     sb_free ( used_materials );
     sb_free ( material_libs );
     sb_free ( vertex_pos );
@@ -1393,6 +1381,19 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     sb_free ( vertices );
     sb_free ( meshes );
     return APOLLO_SUCCESS;
+error:
+    apollo_vertex_table_destroy ( &vtable );
+    apollo_adjacency_table_destroy ( &atable );
+    apollo_index_table_destroy ( &itable );
+    sb_free ( used_materials );
+    sb_free ( material_libs );
+    sb_free ( vertex_pos );
+    sb_free ( tex_coords );
+    sb_free ( normals );
+    sb_free ( indices );
+    sb_free ( vertices );
+    sb_free ( meshes );
+    return result;
 }
 
 //--------------------------------------------------------------------------------------------------
