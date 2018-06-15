@@ -41,6 +41,7 @@ class TerraRenderer {
 
     // Any call to step or loop resumes the rendering (unpausing).
     // Returns true if jobs were successfully launched
+    void clear();
     bool step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
     bool loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
 

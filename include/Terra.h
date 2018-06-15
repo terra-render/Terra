@@ -193,7 +193,7 @@ TerraSceneOptions*  terra_scene_get_options ( HTerraScene scene );
 void                terra_scene_destroy ( HTerraScene scene );
 
 bool                terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, size_t height );
-void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer, const TerraFloat3* value );
+void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer );
 void                terra_framebuffer_destroy ( TerraFramebuffer* framebuffer );
 
 void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );

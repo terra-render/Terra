@@ -427,7 +427,8 @@ success:
         return 0;
     };
     _c_clear = [this] ( const CommandArgs & args ) -> int {
-        _console.clear();
+        _renderer.clear();
+        _visualizer.set_texture_data ( _renderer.framebuffer() );
         return 0;
     };
     _c_map["clear"]  = _c_clear;

@@ -477,10 +477,12 @@ bool terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, siz
     return true;
 }
 
-void terra_framebuffer_clear ( TerraFramebuffer* framebuffer, const TerraFloat3* value ) {
+void terra_framebuffer_clear ( TerraFramebuffer* framebuffer ) {
     for ( size_t i = 0; i < framebuffer->height; ++i ) {
         for ( size_t j = 0; j < framebuffer->width; ++j ) {
-            framebuffer->pixels[i * framebuffer->width + j] = *value;
+            framebuffer->pixels[i * framebuffer->width + j] = terra_f3_zero;
+            framebuffer->results[i * framebuffer->width + j].acc = terra_f3_zero;
+            framebuffer->results[i * framebuffer->width + j].samples = 0;
         }
     }
 }

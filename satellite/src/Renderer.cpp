@@ -193,6 +193,10 @@ void TerraRenderer::refresh_jobs() {
     }
 }
 
+void TerraRenderer::clear() {
+    terra_framebuffer_clear ( &_framebuffer );
+}
+
 bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
     if ( is_rendering() ) {
         Log::error ( STR ( "Cannot launch rendering while another one is in progress." ) );
@@ -325,18 +329,14 @@ uint64_t TerraRenderer::_gen_scene_id ( const TerraCamera* camera, HTerraScene s
 }
 
 bool TerraRenderer::_state_changed() {
-    if ( _framebuffer.pixels == nullptr ) {
-        return false;
-    }
-
     return _framebuffer.width != _next_width ||
            _framebuffer.height != _next_height ||
            _tile_size != _next_tile_size ||
-           _concurrent_jobs != _concurrent_jobs;
+           _concurrent_jobs != _next_concurrent_jobs;
 }
 
 bool TerraRenderer::_apply_changes() {
-    bool state_changed      = _state_changed();
+    bool threading_changed = _tile_size != _next_tile_size || _concurrent_jobs != _next_concurrent_jobs;
     bool resolution_changed = _next_width != _framebuffer.width || _next_height != _framebuffer.height;
 
     if ( resolution_changed ) {
@@ -355,7 +355,7 @@ bool TerraRenderer::_apply_changes() {
         _next_height = ( int ) _framebuffer.height;
     }
 
-    if ( state_changed ) {
+    if ( threading_changed ) {
         Log::verbose ( STR ( "Creating Terra render jobs" ) );
 
         if ( _workers != nullptr ) {
@@ -406,8 +406,7 @@ bool TerraRenderer::_launch () {
     uint64_t scene_id = _gen_scene_id ( _target_camera, _target_scene );
 
     if ( _scene_id != scene_id ) {
-        TerraFloat3 clear_value = terra_f3_zero;
-        terra_framebuffer_clear ( &_framebuffer, &clear_value );
+        terra_framebuffer_clear ( &_framebuffer );
         _scene_id = scene_id;
     }
 
