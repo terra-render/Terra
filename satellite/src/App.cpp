@@ -108,7 +108,9 @@ App::~App() {
 }
 
 int App::run() {
-    _gfx = gfx_init ( 1600, 900, "Satellite",
+    size_t w = 800;
+    size_t h = 600;
+    _gfx = gfx_init ( w, h, "Satellite",
     [ = ] ( int w, int h ) { // on resize
         _on_resize ( w, h );
     },
@@ -124,7 +126,7 @@ int App::run() {
 
     _init_ui();
     Log::flush();
-    _renderer.init ( 1600, 900, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
+    _renderer.init ( w, h, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
     _visualizer.init ( _gfx );
     _register_commands();
     _boot();

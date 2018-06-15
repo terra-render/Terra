@@ -108,6 +108,11 @@ inline float terra_lenf3 ( const TerraFloat3* vec ) {
                vec->z * vec->z );
 }
 
+inline float terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
+    TerraFloat3 ba = terra_subf3 ( a, b );
+    return terra_lenf3 ( &ba );
+}
+
 inline float terra_distance_squaredf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     TerraFloat3 delta = terra_subf3 ( b, a );
     return terra_dotf3 ( &delta, &delta );
@@ -138,6 +143,14 @@ inline size_t terra_mini ( size_t a, size_t b ) {
     return a < b ? a : b;
 }
 
+inline float terra_maxf3 ( const TerraFloat3* vec ) {
+    return fmaxf ( vec->x, fmaxf ( vec->y, vec->z ) );
+}
+
+inline float terra_min3 ( const TerraFloat3* vec ) {
+    return fminf ( vec->x, fminf ( vec->y, vec->z ) );
+}
+
 inline void terra_swapf ( float* a, float* b ) {
     float t = *a;
     *a = *b;
@@ -165,7 +178,9 @@ inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, fl
     return terra_f3_set ( x, y, z );
 }
 
-
-inline float terra_absf ( float a ) {
-    return a >= 0 ? a : -a;
+inline float terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c ) {
+    TerraFloat3 ab = terra_subf3 ( b, a );
+    TerraFloat3 ac = terra_subf3 ( c, a );
+    TerraFloat3 cross = terra_crossf3 ( &ab, &ac );
+    return terra_lenf3 ( &cross ) / 2;
 }

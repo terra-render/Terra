@@ -65,18 +65,23 @@ static inline float       terra_dotf3 ( const TerraFloat3* a, const TerraFloat3*
 static inline TerraFloat3 terra_crossf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3 terra_negf3 ( const TerraFloat3* vec );
 static inline float       terra_lenf3 ( const TerraFloat3* vec );
+static inline float       terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline float       terra_distance_squaredf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3 terra_normf3 ( const TerraFloat3* vec );
 static inline float       terra_maxf ( float a, float b );
 static inline float       terra_minf ( float a, float b );
 static inline size_t      terra_maxi ( size_t a, size_t b );
 static inline size_t      terra_mini ( size_t a, size_t b );
+static inline float       terra_maxf3 ( const TerraFloat3* vec );
+static inline float       terra_min3 ( const TerraFloat3* vec );
 static inline void        terra_swapf ( float* a, float* b );
 static inline TerraFloat3 terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec );
 static inline bool        terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float       terra_lerp ( float a, float b, float t );
 static inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, float t );
 static inline float       terra_absf ( float a );
+
+static inline float       terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c );
 
 #include "TerraMath.inl"
 

@@ -11,23 +11,37 @@
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
 //--------------------------------------------------------------------------------------------------
+// Light radiance (L) is stored inside the object materials as a TerraAttribute named emissive.
+// This struct contains the power (or Radiant flux, Phi) of the light (radiance integrated over
+// surface area and hemisphere) and the surface area.
+// If emissive is a float3, power is computed as emissive * area * PI.
+// If emissive is a texture, TODO (as of now it samples the middle and uses that)
+typedef struct {
+    TerraFloat3  power;
+    float        area;
+    TerraObject* object;
+    float*       triangle_area;
+} TerraLight;
+
 // A copy of the current options is stored and returned when the getter is called.
 // On commit it gets diffed with the one in use before updating it and the scene state is updated appropriately.
 // The dirty_objects flag is set on scene object add, cleared on commit.
 typedef struct {
-    TerraSceneOptions opts;
-    TerraObject* objects;
-    size_t objects_pop;
-    size_t objects_cap;
-    TerraLight* lights;
-    size_t lights_pop;
-    size_t lights_cap;
+    TerraSceneOptions   opts;
+    TerraObject*        objects;
+    size_t              objects_pop;
+    size_t              objects_cap;
+    TerraLight*         lights;
+    size_t              lights_pop;
+    size_t              lights_cap;
+    TerraFloat3         total_light_power;
     union {
-        TerraKDTree kdtree;
-        TerraBVH bvh;
+        TerraKDTree     kdtree;
+        TerraBVH        bvh;
     };
-    TerraSceneOptions new_opts;
-    bool dirty_objects;
+    TerraSceneOptions   new_opts;
+    bool                dirty_objects;
+    bool                dirty_lights;
 } TerraScene;
 
 #define TERRA_SCENE_PREALLOCATED_OBJECTS    64
@@ -189,6 +203,46 @@ bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, f
 }
 
 //--------------------------------------------------------------------------------------------------
+void terra_build_rotation_around_normal ( TerraShadingSurface* surface ) {
+    TerraFloat3 normalt;
+    TerraFloat3 normalbt;
+    TerraFloat3* normal = &surface->normal;
+
+    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
+        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
+    } else {
+        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
+    }
+
+    normalbt = terra_crossf3 ( normal, &normalt );
+    surface->rot.rows[0] = terra_f4 ( normalt.x, surface->normal.x, normalbt.x, 0.f );
+    surface->rot.rows[1] = terra_f4 ( normalt.y, surface->normal.y, normalbt.y, 0.f );
+    surface->rot.rows[2] = terra_f4 ( normalt.z, surface->normal.z, normalbt.z, 0.f );
+    surface->rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+}
+
+void terra_lookatf4x4 ( TerraFloat4x4* mat_out, const TerraFloat3* normal ) {
+    TerraFloat3 normalt;
+    TerraFloat3 normalbt;
+
+    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
+        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
+    } else {
+        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
+    }
+
+    normalbt = terra_crossf3 ( normal, &normalt );
+    mat_out->rows[0] = terra_f4 ( normalt.x, normal->x, normalbt.x, 0.f );
+    mat_out->rows[1] = terra_f4 ( normalt.y, normal->y, normalbt.y, 0.f );
+    mat_out->rows[2] = terra_f4 ( normalt.z, normal->z, normalbt.z, 0.f );
+    mat_out->rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+}
+
+//--------------------------------------------------------------------------------------------------
 void terra_attribute_init_constant ( TerraAttribute* attr, const TerraFloat3* value ) {
     attr->eval = NULL;
     attr->state = NULL;
@@ -245,6 +299,7 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
     }
 
     surface->emissive = terra_eval_attribute ( &material->emissive, &texcoord, point );
+    terra_build_rotation_around_normal ( surface );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -272,6 +327,7 @@ TerraObject* terra_scene_add_object ( HTerraScene _scene, size_t triangles_count
     scene->objects[scene->objects_pop].properties = ( TerraTriangleProperties* ) terra_malloc ( sizeof ( TerraTriangleProperties ) * triangles_count );
     scene->objects[scene->objects_pop].triangles_count = triangles_count;
     scene->dirty_objects = true;
+    scene->dirty_lights = true;     // TODO
     return &scene->objects[scene->objects_pop++];
 }
 
@@ -283,16 +339,26 @@ size_t terra_scene_count_objects ( HTerraScene _scene ) {
 void terra_scene_commit ( HTerraScene _scene ) {
     // TODO: Transform objects' vertices into world space ?
     TerraScene* scene = ( TerraScene* ) _scene;
-    // Checking if it is necessary to rebuild the acceleration structure.
+    // Check if it is necessary to rebuild the acceleration structure.
     bool dirty_accelerator = scene->dirty_objects;
 
     if ( scene->opts.accelerator != scene->new_opts.accelerator ) {
         dirty_accelerator = true;
     }
 
-    // Commit the new options values and rebuild if necessary.
+    // Destroy previous acceleration structure, if necessary.
+    if ( dirty_accelerator ) {
+        if ( scene->opts.accelerator == kTerraAcceleratorBVH ) {
+            terra_bvh_destroy ( &scene->bvh );
+        } else if ( scene->opts.accelerator == kTerraAcceleratorKDTree ) {
+            terra_kdtree_destroy ( &scene->kdtree );
+        }
+    }
+
+    // Commit the new options values, lose the old ones.
     scene->opts = scene->new_opts;
 
+    // Rebuild the acceleration structure, if necessary.
     if ( dirty_accelerator ) {
         if ( scene->opts.accelerator == kTerraAcceleratorBVH ) {
             terra_bvh_create ( &scene->bvh, scene->objects, scene->objects_pop );
@@ -301,16 +367,59 @@ void terra_scene_commit ( HTerraScene _scene ) {
         }
     }
 
-    // TODO lights
-    //
-    // Clear the scene dirty objects flag.
+    // lights
+    if ( scene->dirty_lights ) {
+        scene->lights_pop = 0;
+        scene->total_light_power = terra_f3_zero;
+
+        for ( size_t i = 0; i < scene->objects_pop; ++i ) {
+            TerraFloat2 uv = terra_f2_set ( 0.5, 0.5 );
+            TerraFloat3 emissive = terra_eval_attribute ( &scene->objects[i].material.emissive, &uv, NULL );
+
+            if ( terra_f3_is_zero ( &emissive ) ) {
+                continue;
+            }
+
+            size_t idx = scene->lights_pop;
+            float area = 0;
+            scene->lights[idx].triangle_area = terra_malloc ( sizeof ( float ) * scene->objects[i].triangles_count );
+
+            for ( size_t j = 0; j < scene->objects[i].triangles_count; ++j ) {
+                TerraTriangle* tri = &scene->objects[i].triangles[j];
+                float a = terra_triangle_area ( &tri->a, &tri->b, &tri->c );
+                scene->lights[idx].triangle_area[j] = a;
+                area += a;
+            }
+
+            TerraFloat3 power = terra_mulf3 ( &emissive, area * terra_PI );
+            scene->total_light_power = terra_addf3 ( &scene->total_light_power, &power );
+
+            if ( scene->lights_pop == scene->lights_cap ) {
+                scene->lights = ( TerraLight* ) terra_realloc ( scene->lights, scene->lights_cap * 2 );
+                scene->lights_cap *= 2;
+            }
+
+            scene->lights[idx].object = &scene->objects[i];
+            scene->lights[idx].area = area;
+            scene->lights[idx].power = power;
+            ++scene->lights_pop;
+        }
+    }
+
+    // Clear the scene dirty flags.
     scene->dirty_objects = false;
+    scene->dirty_lights = false;
 }
 
 void terra_scene_clear ( HTerraScene _scene ) {
     TerraScene* scene = ( TerraScene* ) _scene;
     // TODO also free memory?
     scene->objects_pop = 0;
+
+    for ( size_t i = 0; i < scene->lights_pop; ++i ) {
+        terra_free ( scene->lights[i].triangle_area );
+    }
+
     scene->lights_pop = 0;
     scene->dirty_objects = true;
 }
@@ -404,26 +513,6 @@ TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuf
 }
 
 //--------------------------------------------------------------------------------------------------
-void terra_build_rotation_around_normal ( TerraShadingSurface* surface ) {
-    TerraFloat3 normalt;
-    TerraFloat3 normalbt;
-    TerraFloat3* normal = &surface->normal;
-
-    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
-        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
-    } else {
-        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
-    }
-
-    normalbt = terra_crossf3 ( normal, &normalt );
-    surface->rot.rows[0] = terra_f4 ( normalt.x, surface->normal.x, normalbt.x, 0.f );
-    surface->rot.rows[1] = terra_f4 ( normalt.y, surface->normal.y, normalbt.y, 0.f );
-    surface->rot.rows[2] = terra_f4 ( normalt.z, surface->normal.z, normalbt.z, 0.f );
-    surface->rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
-}
-
 void terra_ray_create ( TerraRay* ray, TerraFloat3* point, TerraFloat3* direction, TerraFloat3* normal, float sign ) {
     TerraFloat3 offset = terra_mulf3 ( normal, 0.0001f * sign );
     ray->origin = terra_addf3 ( point, &offset );
@@ -433,7 +522,7 @@ void terra_ray_create ( TerraRay* ray, TerraFloat3* point, TerraFloat3* directio
     ray->inv_direction.z = 1.f / ray->direction.z;
 }
 
-bool terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingSurface* surface_out, TerraFloat3* intersection_point ) {
+TerraObject* terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingSurface* surface_out, TerraFloat3* intersection_point ) {
     TerraPrimitiveRef primitive;
     TerraClockTime t = TERRA_CLOCK();
     bool miss = false;
@@ -447,37 +536,31 @@ bool terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMat
             miss = true;
         }
     } else {
-        return false;
+        return NULL;
     }
 
     TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, TERRA_CLOCK() - t );
 
     if ( miss ) {
-        return false;
+        return NULL;
     }
 
     TerraObject* object = &scene->objects[primitive.object_idx];
     *material_out = &object->material;
     terra_triangle_init_shading ( &object->triangles[primitive.triangle_idx], &object->material, &object->properties[primitive.triangle_idx], intersection_point, surface_out );
-    return true;
+    return object;
 }
 
-TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float* e1 ) {
-    // Compute total light emitted so that we can later weight
-    // TODO cache this ?
-    float total_light_power = 0;
+TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float e, float* pdf ) {
+    // e1 is a random float between 0 and 1
+    /*float alpha_acc = *e1;
+    size_t light_idx = SIZE_MAX;
+    // TODO is this ok?
+    float total_power = scene->total_light_power.x + scene->total_light_power.y + scene->total_light_power.z;
 
-    for ( int i = 0; i < scene->lights_pop; ++i ) {
-        total_light_power += scene->lights[i].emissive;
-    }
-
-    // Pick a light
-    // e1 is a random float between 0 and
-    float alpha_acc = *e1;
-    int light_idx = -1;
-
-    for ( int i = 0; i < scene->lights_pop; ++i ) {
-        const float alpha = scene->lights[i].emissive / total_light_power;
+    for ( size_t i = 0; i < scene->lights_pop; ++i ) {
+        float light_power = scene->lights[i].power.x + scene->lights[i].power.y + scene->lights[i].power.z;
+        float alpha = light_power / total_power;
         alpha_acc -= alpha;
 
         if ( alpha_acc <= 0 ) {
@@ -490,99 +573,165 @@ TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float
         }
     }
 
-    assert ( light_idx >= 0 );
-    return &scene->lights[light_idx];
+    assert ( light_idx != SIZE_MAX );
+    return &scene->lights[light_idx];*/
+    // TODO
+    size_t i = e * scene->lights_pop;
+    *pdf = 1.f / scene->lights_pop;
+    return &scene->lights[i];
 }
 
-float terra_light_pdf ( const TerraLight* light, float distance ) {
-    return 1 / ( terra_PI * light->radius * light->radius );
+size_t terra_light_pick_triangle ( const TerraLight* light, float e, float* pdf ) {
+    size_t i = e * light->object->triangles_count;
+    *pdf = 1.f / light->object->triangles_count;
+    return i;
 }
 
-void terra_lookatf4x4 ( TerraFloat4x4* mat_out, const TerraFloat3* normal ) {
-    TerraFloat3 normalt;
-    TerraFloat3 normalbt;
-
-    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
-        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
-    } else {
-        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
-    }
-
-    normalbt = terra_crossf3 ( normal, &normalt );
-    mat_out->rows[0] = terra_f4 ( normalt.x, normal->x, normalbt.x, 0.f );
-    mat_out->rows[1] = terra_f4 ( normalt.y, normal->y, normalbt.y, 0.f );
-    mat_out->rows[2] = terra_f4 ( normalt.z, normal->z, normalbt.z, 0.f );
-    mat_out->rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
-}
-
-TerraFloat3 terra_light_sample_disk ( const TerraLight* light, const TerraFloat3* surface_point, float e1, float e2 ) {
-    // pick an offset from the disk center
-    TerraFloat3 disk_offset;
-    disk_offset.x = light->radius * sqrtf ( e1 ) * cosf ( 2 * terra_PI * e2 );
-    disk_offset.z = light->radius * sqrtf ( e1 ) * sinf ( 2 * terra_PI * e2 );
-    disk_offset.y = 0;
-    // direction from surface to picked light
-    TerraFloat3 light_dir = terra_subf3 ( &light->center, surface_point ); // TODO flip?
-    light_dir = terra_normf3 ( &light_dir );
-    // move the offset from the ideal flat disk to the actual bounding sphere section disk
-    TerraFloat4x4 sample_rotation;
-    terra_lookatf4x4 ( &sample_rotation, &light_dir );
-    disk_offset = terra_transformf3 ( &sample_rotation, &disk_offset );
-    // actual sample point and direction from surface
-    TerraFloat3 sample_point = terra_addf3 ( &light->center, &disk_offset );
-    TerraFloat3 sample_dir = terra_subf3 ( &sample_point, surface_point );
-    //float sample_dist = terra_lenf3(&sample_dir);
-    sample_dir = terra_normf3 ( &sample_dir );
-    return sample_point;
+void terra_light_sample_triangle ( const TerraLight* light, size_t triangle_idx, float e1, float e2,
+                                   TerraFloat3* pos, TerraFloat2* uv, TerraFloat3* norm, float* pdf ) {
+    TerraTriangle* tri = &light->object->triangles[triangle_idx];
+    float s = sqrtf ( e1 );
+    float a = 1 - s;
+    float b = e2 * s;
+    float c = 1 - a - b;
+    // Pos
+    TerraFloat3 pos_a = terra_mulf3 ( &tri->a, a );
+    TerraFloat3 pos_b = terra_mulf3 ( &tri->b, b );
+    TerraFloat3 pos_c = terra_mulf3 ( &tri->c, c );
+    *pos = terra_addf3 ( &pos_a, &pos_b );
+    *pos = terra_addf3 ( pos, &pos_c );
+    // UV
+    TerraTriangleProperties* trip = &light->object->properties[triangle_idx];
+    TerraFloat2 uv_a = terra_mulf2 ( &trip->texcoord_a, a );
+    TerraFloat2 uv_b = terra_mulf2 ( &trip->texcoord_b, b );
+    TerraFloat2 uv_c = terra_mulf2 ( &trip->texcoord_c, c );
+    *uv = terra_addf2 ( &uv_a, &uv_b );
+    *uv = terra_addf2 ( uv, &uv_c );
+    // Norm
+    TerraFloat3 norm_a = terra_mulf3 ( &trip->normal_a, a );
+    TerraFloat3 norm_b = terra_mulf3 ( &trip->normal_b, b );
+    TerraFloat3 norm_c = terra_mulf3 ( &trip->normal_c, c );
+    *norm = terra_addf3 ( &norm_a, &norm_b );
+    *norm = terra_addf3 ( norm, &norm_c );
+    *norm = terra_normf3 ( norm );
+    // PDF
+    *pdf = 1.f / light->triangle_area[triangle_idx];
 }
 
 #define _randf() (float)rand() / RAND_MAX
-TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
+
+TerraFloat3 terra_compute_direct ( const TerraScene* scene, TerraShadingSurface* surface, TerraMaterial* material, TerraFloat3* p, TerraFloat3* wo ) {
+    // Pick light to sample
+    TerraLight* light;
+    float light_pdf;
+    {
+        float e = _randf() - terra_Epsilon;
+        light = terra_light_pick_power_proportional ( scene, e, &light_pdf );
+    }
+    // Pick triangle to sample
+    size_t tri_idx;
+    float tri_pdf;
+    {
+        float e = _randf();
+        tri_idx = terra_light_pick_triangle ( light, e, &tri_pdf );
+    }
+    // Sample triangle
+    TerraFloat3 sample_pos;
+    TerraFloat2 sample_uv;
+    TerraFloat3 sample_norm;
+    float sample_pdf;
+    {
+        float e1 = _randf();
+        float e2 = _randf();
+        terra_light_sample_triangle ( light, tri_idx, e1, e2, &sample_pos, &sample_uv, &sample_norm, &sample_pdf );
+    }
+    // Raycast
+    TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
+    TerraFloat3 wi = terra_normf3 ( &p_to_light );
+    TerraMaterial* light_material;
+    TerraShadingSurface light_surface;
+    {
+        TerraFloat3 intersection_point;
+        TerraRay ray;
+        terra_ray_create ( &ray, p, &wi, &surface->normal, 1 );
+        TerraObject* hit = terra_find_closest ( scene, &ray, &light_material, &light_surface, &intersection_point );
+
+        if ( hit != light->object ) {
+            return terra_f3_zero;
+        }
+    }
+    // Compute scattered radiance
+    float pdf;
+    TerraFloat3 f;
+    {
+        f = material->bsdf.eval ( surface, &wi, wo );
+        TerraFloat3 light_wo = terra_negf3 ( &wi );
+        pdf = terra_lenf3 ( &p_to_light ) / terra_dotf3 ( &light_wo, &sample_norm ) * light_pdf * tri_pdf * sample_pdf;
+    }
+    TerraFloat3 L = terra_pointf3 ( &light_surface.emissive, &f );
+    L = terra_mulf3 ( &L, 1 / pdf );
+    return L;
+}
+
+TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray ) {
     TerraFloat3 Lo = terra_f3_zero;
     TerraFloat3 throughput = terra_f3_one;
     TerraRay ray = *primary_ray;
 
-    for ( int bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
-        const TerraMaterial* material;
+    for ( size_t bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
+        TerraFloat3 wo = terra_negf3 ( &ray.direction );
+        // Raycast
+        TerraMaterial* material;
         TerraShadingSurface surface;
         TerraFloat3 intersection_point;
 
-        if ( terra_find_closest ( scene, &ray, &material, &surface, &intersection_point ) == false ) {
+        if ( terra_find_closest ( scene, &ray, &material, &surface, &intersection_point ) == NULL ) {
             TerraFloat3 env_color = terra_eval_attribute ( &scene->opts.environment_map, &ray.direction, &intersection_point );
             throughput = terra_pointf3 ( &throughput, &env_color );
-            Lo = terra_addf3 ( &Lo, &throughput );
+            //Lo = terra_addf3 ( &Lo, &throughput );
             break;
         }
 
-        terra_build_rotation_around_normal ( &surface );
-        TerraFloat3 wo = terra_negf3 ( &ray.direction );
-        TerraFloat3 emissive = surface.emissive;
-        emissive = terra_pointf3 ( &throughput, &emissive );
-        Lo = terra_addf3 ( &Lo, &emissive );
-        float e0 = _randf();
-        float e1 = _randf();
-        float e2 = _randf();
-        TerraFloat3 wi = material->bsdf.sample ( &surface, e0, e1, e2, &wo );
-        float       bsdf_pdf = terra_maxf ( material->bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
-        float       light_pdf = 0.f;
-        // BSDF Contribution
-        TerraFloat3 bsdf_radiance = material->bsdf.eval ( &surface, &wi, &wo );
-        float       bsdf_weight = bsdf_pdf * bsdf_pdf / ( light_pdf * light_pdf + bsdf_pdf * bsdf_pdf );
-        TerraFloat3 bsdf_contribution = terra_mulf3 ( &bsdf_radiance, bsdf_weight / bsdf_pdf );
-        throughput = terra_pointf3 ( &throughput, &bsdf_contribution );
+        // Emissive on first hit
+        if ( bounce == 0 ) {
+            TerraFloat3 emissive = surface.emissive;
+            emissive = terra_pointf3 ( &throughput, &emissive );
+            Lo = terra_addf3 ( &Lo, &emissive );
+        }
+
+        // Direct lighting
+        {
+            TerraFloat3 Ld = terra_compute_direct ( scene, &surface, material, &intersection_point, &wo );
+            Ld = terra_pointf3 ( &Ld, &throughput );
+            Lo = terra_addf3 ( &Lo, &Ld );
+        }
+        // Sample BSDF for path continuation
+        TerraFloat3 wi;
+        float pdf;
+        {
+            float e0 = _randf();
+            float e1 = _randf();
+            float e2 = _randf();
+            wi = material->bsdf.sample ( &surface, e0, e1, e2, &wo );
+            pdf = terra_maxf ( material->bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
+        }
+        // Update throughput
+        TerraFloat3 f = material->bsdf.eval ( &surface, &wi, &wo );
+        TerraFloat3 L = terra_mulf3 ( &f, terra_dotf3 ( &surface.normal, &wi ) / pdf );
+        throughput = terra_pointf3 ( &throughput, &L );
         // Russian roulette
-        float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
-        float e3 = 0.5f;
-        e3 = ( float ) rand() / RAND_MAX;
+        {
+            float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
+            float e3 = 0.5f;
+            e3 = ( float ) rand() / RAND_MAX;
 
-        if ( e3 > p ) {
-            break;
+            if ( e3 > p ) {
+                break;
+            }
+
+            throughput = terra_mulf3 ( &throughput, 1.f / ( p + terra_Epsilon ) );
         }
-
-        throughput = terra_mulf3 ( &throughput, 1.f / ( p + terra_Epsilon ) );
-        // Next ray (Skip if last?)
+        // Next ray
         float sNoL = terra_dotf3 ( &surface.normal, &wi );
         terra_ray_create ( &ray, &intersection_point, &wi, &surface.normal, sNoL < 0.f ? -1.f : 1.f );
     }

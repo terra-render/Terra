@@ -159,14 +159,7 @@ typedef struct {
     uint32_t triangle_idx : 24;
 } TerraPrimitiveRef;
 
-// scene
-typedef struct {
-    TerraFloat3 center;
-    float       radius;
-    TerraAABB   aabb;
-    float       emissive;
-} TerraLight;
-
+// Scene
 typedef struct {
     TerraFloat3 position;
     TerraFloat3 direction;

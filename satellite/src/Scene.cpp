@@ -361,6 +361,11 @@ void Scene::dump_opts() {
     Log::info ( FMT ( "Samples per pixel = %d", _opts.samples_per_pixel ) );
     Log::info ( FMT ( "Accelerator       = %s", Scene::from_terra_accelerator ( _opts.accelerator ) ) );
     Log::info ( FMT ( "Sampling          = %s", Scene::from_terra_sampling ( _opts.sampling_method ) ) );
+    Log::info ( FMT ( "Bounces           = %d", _opts.bounces ) );
+    Log::info ( FMT ( "Subpixel jitter   = %f", _opts.subpixel_jitter ) );
+    Log::info ( FMT ( "Screen gamma      = %f", _opts.gamma ) );
+    Log::info ( FMT ( "Exposure          = %f", _opts.manual_exposure ) );
+    Log::info ( FMT ( "Tonemap           = %s", Scene::from_terra_tonemap ( _opts.tonemapping_operator ) ) );
 }
 
 HTerraScene Scene::construct_terra_scene() {

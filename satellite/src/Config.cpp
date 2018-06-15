@@ -212,7 +212,7 @@ namespace Config {
         int n_threads =  ( int ) thread::hardware_concurrency();
         add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
         add_opt ( JOB_TILE_SIZE,        16,             "tile_size",    "Side length of area to be processed by a single worker." );
-        add_opt ( RENDER_MAX_BOUNCES,   2,              "bounces",      "Maximum ray bounces" );
+        add_opt ( RENDER_MAX_BOUNCES,   1,              "bounces",      "Maximum ray bounces" );
         add_opt ( RENDER_SAMPLES,       1,              "samples",      "Samples per pixel" );
         add_opt ( RENDER_GAMMA,         2.2f,           "gamma",        "Gamma" );
         add_opt ( RENDER_EXPOSURE,      1.f,            "exposure",     "Manual exposure" );
