@@ -1,21 +1,13 @@
 #include <string.h>
 
+#define TERRA_SYSTEM_HEADERS
+#include "TerraPrivate.h"
 #include "TerraProfile.h"
 #include "Terra.h"
 
 // .c env
 
 #ifdef TERRA_PROFILE
-#ifdef _WIN32
-    #define _CRT_SECURE_NO_WARNINGS
-    #define NOMINMAX
-    #include <Windows.h>
-    #define ATOMIC_ADD InterlockedIncrement
-    __declspec ( thread ) uint32_t t_terra_profile_thread_id;
-#else
-    // TODO
-    #error
-#endif
 #define TERRA_PID t_terra_profile_thread_id
 
 TerraProfileDatabase g_terra_profile_database;
@@ -328,10 +320,6 @@ TERRA_PROFILE_DEFINE_UPDATE ( time, TerraClockTime )
 // time goes to the bottom because otherwise it fucks up MVS 2017 Intellisense...
 
 #ifdef _WIN32
-// TODO make a header that only wraps including windows.h with proper defines and use it everywhere?
-#define NOMINMAX
-#define _CRT_SECURE_NO_WARNINGS
-#include <Windows.h>
 
 LARGE_INTEGER terra_clock_frequency;
 

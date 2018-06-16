@@ -1,3 +1,4 @@
+#include "TerraMath.h"
 //--------------------------------------------------------------------------------------------------
 // Math implementation
 //--------------------------------------------------------------------------------------------------
@@ -22,6 +23,10 @@ inline TerraFloat3 terra_f3_set1 ( float xyz ) {
     return ret;
 }
 
+TerraFloat3 terra_f3_ptr ( float* d ) {
+    return terra_f3_set ( d[0], d[1], d[2] );
+}
+
 inline TerraFloat4 terra_f4 ( float x, float y, float z, float w ) {
     TerraFloat4 ret;
     ret.x = x;
@@ -29,6 +34,10 @@ inline TerraFloat4 terra_f4 ( float x, float y, float z, float w ) {
     ret.z = z;
     ret.w = w;
     return ret;
+}
+
+TerraFloat4 terra_f4_ptr ( float* d ) {
+    return terra_f4 ( d[0], d[1], d[2], d[3] );
 }
 
 inline bool terra_equalf3 ( TerraFloat3* a, TerraFloat3* b ) {

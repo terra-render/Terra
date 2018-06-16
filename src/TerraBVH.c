@@ -162,7 +162,7 @@ void terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_c
 
     // build the scene aabb and the volumes aabb
     for ( int j = 0; j < objects_count; ++j ) {
-        for ( int i = 0; i < objects[j].triangles_count; ++i, ++p ) {
+        for ( size_t i = 0; i < objects[j].triangles_count; ++i, ++p ) {
             terra_aabb_fit_triangle ( &scene_aabb, &objects[j].triangles[i] );
             terra_aabb_fit_triangle ( &volumes[p].aabb, &objects[j].triangles[i] );
             volumes[p].type = 1;

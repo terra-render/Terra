@@ -169,6 +169,7 @@
     <ClInclude Include="..\include\Logging.hpp" />
     <ClInclude Include="..\include\Renderer.hpp" />
     <ClInclude Include="..\include\Scene.hpp" />
+    <ClInclude Include="..\include\stb_image.h" />
     <ClInclude Include="..\include\Visualization.hpp" />
     <ClInclude Include="..\src\stb_image_write.h" />
   </ItemGroup>
@@ -178,6 +179,7 @@
     <ClCompile Include="..\..\src\TerraKDTree.c" />
     <ClCompile Include="..\..\src\TerraPresets.c" />
     <ClCompile Include="..\..\src\TerraProfile.c" />
+    <ClCompile Include="..\..\src\TerraTextures.cpp" />
     <ClCompile Include="..\dependencies\gl3w\src\gl3w.c" />
     <ClCompile Include="..\dependencies\glfw\src\context.c" />
     <ClCompile Include="..\dependencies\glfw\src\egl_context.c" />

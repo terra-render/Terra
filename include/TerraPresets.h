@@ -10,14 +10,14 @@ extern "C" {
 
 // BSDF
 #define TERRA_DIFFUSE_ALBEDO    0
-#define TERRA_DIFFUSE_END       1
+#define TERRA_DIFFUSE_ATTRS_COUNT 1
 void terra_bsdf_diffuse_init ( TerraBSDF* bsdf );
 
 // attribute float3: <ks, kd, intensity> ?
 #define TERRA_PHONG_ALBEDO             1
 #define TERRA_PHONG_SPECULAR_COLOR     0
 #define TERRA_PHONG_SPECULAR_INTENSITY 2
-#define TERRA_PHONG_END                3
+#define TERRA_PHONG_ATTRS_COUNT        3
 void terra_bsdf_phong_init ( TerraBSDF* bsdf );
 
 // PROFILE

@@ -1,9 +1,13 @@
 #ifndef _APOLLO_H_
 #define _APOLLO_H_
 
+// libc
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+// stb
+#include "stb_image.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,6 +15,7 @@ extern "C" {
 
 typedef enum {
     APOLLO_SUCCESS = 0,
+    APOLLO_INVALID_ARG,
     APOLLO_MATERIAL_FILE_NOT_FOUND = 1,
     APOLLO_FILE_NOT_FOUND = 2,
     APOLLO_MATERIAL_NOT_FOUND = 3,
@@ -18,9 +23,7 @@ typedef enum {
     APOLLO_ERROR
 } ApolloResult;
 
-#define APOLLO_PATH 1024
-#define APOLLO_NAME 256
-
+#define APOLLO_PATH                 1024
 #define APOLLO_TARGET_VERTEX_COUNT  (1 << 18)
 #define APOLLO_TARGET_INDEX_COUNT   (1 << 18)
 #define APOLLO_TARGET_MESH_COUNT    128
@@ -30,34 +33,11 @@ typedef struct {
     float y;
 } ApolloFloat2;
 
-bool apollo_equalf2 ( const ApolloFloat2* a, const ApolloFloat2* b ) {
-    return a->x == b->x && a->y == b->y;
-}
-
-ApolloFloat2 apollo_f2_set ( float x, float y ) {
-    ApolloFloat2 f2;
-    f2.x = x;
-    f2.y = y;
-    return f2;
-}
-
 typedef struct {
     float x;
     float y;
     float z;
 } ApolloFloat3;
-
-bool apollo_equalf3 ( const ApolloFloat3* a, const ApolloFloat3* b ) {
-    return a->x == b->x && a->y == b->y && a->z == b->z;
-}
-
-ApolloFloat3 apollo_f3_set ( float x, float y, float z ) {
-    ApolloFloat3 f3;
-    f3.x = x;
-    f3.y = y;
-    f3.z = z;
-    return f3;
-}
 
 typedef struct {
     float x;
@@ -92,9 +72,9 @@ typedef struct {
 } ApolloVertex;
 
 typedef struct {
-    ApolloIndex a;
-    ApolloIndex b;
-    ApolloIndex c;
+    ApolloIndex  a;
+    ApolloIndex  b;
+    ApolloIndex  c;
     ApolloFloat3 normal;
     ApolloFloat3 tangent;
     ApolloFloat3 bitangent;
@@ -102,19 +82,19 @@ typedef struct {
 
 typedef struct {
     ApolloMeshFace* faces;
-    size_t face_count;
-    size_t material_id;
-    ApolloAABB aabb;
-    ApolloSphere bounding_sphere;
+    size_t          face_count;
+    size_t          material_id;
+    ApolloAABB      aabb;
+    ApolloSphere    bounding_sphere;
 } ApolloMesh;
 
 typedef struct {
     ApolloVertex* vertices;
-    size_t vertex_count;
-    ApolloMesh* meshes;
-    size_t mesh_count;
-    ApolloAABB aabb;
-    ApolloSphere bounding_sphere;
+    size_t        vertex_count;
+    ApolloMesh*   meshes;
+    size_t        mesh_count;
+    ApolloAABB    aabb;
+    ApolloSphere  bounding_sphere;
 } ApolloModel;
 
 // ------------------------------------------------------------------------------------------------------
@@ -130,7 +110,7 @@ typedef enum {
     APOLLO_PBR
 } ApolloBSDF;
 
-// Path-tracer subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
+// Path-tracer friendly subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
 typedef struct {
     float        ior;                   // Ni
     ApolloFloat3 diffuse;               // Kd
@@ -149,15 +129,29 @@ typedef struct {
     int          emissive_map_id;       // map_Ke
     int          normal_map_id;         // norm
     ApolloBSDF   bsdf;
-    char         name[APOLLO_NAME];
+
+    char         name[APOLLO_PATH];
 } ApolloMaterial;
 
+typedef enum {
+    APOLLO_TEXTURE_TYPE_UINT8,
+    APOLLO_TEXTURE_TYPE_FLOAT32
+} ApolloTextureType;
+
+#define APOLLO_INVALID_TEXTURE -1
 typedef struct {
-    char name[APOLLO_NAME];
+    char  path[APOLLO_PATH];
+    int   width;
+    int   height;
+    int   channels;
+    int   type;
+    void* data;
 } ApolloTexture;
 
-size_t  apollo_buffer_size ( void* buffer );
-void    apollo_buffer_free ( void* buffer );
+size_t       apollo_buffer_size      ( void* buffer );
+void         apollo_model_free       ( ApolloModel* model );
+void         apollo_materials_free   ( ApolloMaterial* material );
+void         apollo_textures_free    ( ApolloTexture* textures );
 
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                                        ApolloMaterial** materials, ApolloTexture** textures,
@@ -198,34 +192,40 @@ extern "C" {
 #define APOLLO_LOG_WARN(fmt, ...) fprintf(stdout, "Apollo Warning: " fmt "\n", __VA_ARGS__)
 #endif
 
+// libc
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 
-size_t          apollo_find_texture ( const ApolloTexture* textures, const char* texture_name );
-size_t          apollo_find_material ( const ApolloMaterial* materials, const char* mat_name );
+static bool         apollo_equalf2          ( const ApolloFloat2* a, const ApolloFloat2* b );
+static ApolloFloat2 apollo_f2_set           ( float x, float y );
+static bool         apollo_equalf3          ( const ApolloFloat3* a, const ApolloFloat3* b );
+ApolloFloat3        apollo_f3_set           ( float x, float y, float z );
 
-ApolloResult    apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* idx_out );
-bool            apollo_read_float2 ( FILE* file, ApolloFloat2* val );
-bool            apollo_read_float3 ( FILE* file, ApolloFloat3* val );
+size_t              apollo_find_texture     ( const ApolloTexture* textures, const char* texture_name );
+size_t              apollo_find_material    ( const ApolloMaterial* materials, const char* mat_name );
+
+ApolloResult        apollo_read_texture     ( FILE* file, ApolloTexture* textures, size_t* idx_out );
+bool                apollo_read_float2      ( FILE* file, ApolloFloat2* val );
+bool                apollo_read_float3      ( FILE* file, ApolloFloat3* val );
 
 // Material Libraries are files containing one or more material definitons.
 // Model files like obj shall then reference those materials by name.
 typedef struct {
-    FILE* file;
+    FILE*           file;
     ApolloMaterial* materials;
-    char filename[APOLLO_PATH];
+    char            filename[APOLLO_PATH];
 } ApolloMaterialLib;
 
 ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures );
 
 // Tables are used to speed up model load times
 typedef struct {
-    size_t count;
-    size_t capacity;
-    size_t access_mask;
-    bool is_zero_id_slot_used;
-    ApolloIndex* items;
+    size_t          count;
+    size_t          capacity;
+    size_t          access_mask;
+    bool            is_zero_id_slot_used;
+    ApolloIndex*    items;
 } ApolloIndexTable;
 
 void            apollo_index_table_create ( ApolloIndexTable* table, size_t capacity );
@@ -241,16 +241,16 @@ bool            apollo_index_table_lookup ( ApolloIndexTable* table, ApolloIndex
 
 typedef struct {
     ApolloFloat3 key;
-    uint32_t value;
+    uint32_t     value;
 } ApolloVertexTableItem;
 
 typedef struct {
-    size_t count;
-    size_t capacity;
-    size_t access_mask;
-    bool is_zero_key_item_used;
-    ApolloVertexTableItem zero_key_item;
-    ApolloVertexTableItem* items;
+    size_t                  count;
+    size_t                  capacity;
+    size_t                  access_mask;
+    bool                    is_zero_key_item_used;
+    ApolloVertexTableItem   zero_key_item;
+    ApolloVertexTableItem*  items;
 } ApolloVertexTable;
 
 void                    apollo_vertex_table_create ( ApolloVertexTable* table, size_t capacity );
@@ -269,15 +269,15 @@ ApolloVertexTableItem*  apollo_vertex_table_lookup ( ApolloVertexTable* table, c
 #define APOLLO_ADJACENCY_ITEM_CAPACITY 11
 
 typedef struct ApolloAdjacencyTableExtension {
-    uint32_t count;
-    uint32_t values[APOLLO_ADJACENCY_EXTENSION_CAPACITY];   // face indices
+    uint32_t                              count;
+    uint32_t                              values[APOLLO_ADJACENCY_EXTENSION_CAPACITY];   // face indices
     struct ApolloAdjacencyTableExtension* next;
 } ApolloAdjacencyTableExtension;
 
 typedef struct {
     ApolloIndex key;
-    uint32_t count;
-    uint32_t values[APOLLO_ADJACENCY_ITEM_CAPACITY];    // face indices
+    uint32_t    count;
+    uint32_t    values[APOLLO_ADJACENCY_ITEM_CAPACITY];    // face indices
     ApolloAdjacencyTableExtension* next;
 } ApolloAdjacencyTableItem;
 
@@ -287,11 +287,11 @@ bool        apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, u
 bool        apollo_adjacency_item_contains ( ApolloAdjacencyTableItem* item, uint32_t value );
 
 typedef struct {
-    size_t count;
-    size_t capacity;
-    size_t access_mask;
-    bool is_zero_key_item_used;
-    ApolloAdjacencyTableItem zero_key_item;
+    size_t                    count;
+    size_t                    capacity;
+    size_t                    access_mask;
+    bool                      is_zero_key_item_used;
+    ApolloAdjacencyTableItem  zero_key_item;
     ApolloAdjacencyTableItem* items;
 } ApolloAdjacencyTable;
 
@@ -334,7 +334,7 @@ void* stb__sbgrowf ( void* arr, int increment, int itemsize );
 //--------------------------------------------------------------------------------------------------
 size_t apollo_find_texture ( const ApolloTexture* textures, const char* texture_name ) {
     for ( size_t i = 0; i < sb_count ( textures ); ++i ) {
-        if ( strcmp ( texture_name, textures[i].name ) == 0 ) {
+        if ( strcmp ( texture_name, textures[i].path ) == 0 ) {
             return i;
         }
     }
@@ -366,20 +366,32 @@ size_t  apollo_buffer_size ( void* buffer ) {
     return sb_count ( buffer );
 }
 
-void apollo_buffer_free ( void* buffer ) {
-    sb_free ( buffer );
+void apollo_model_free ( ApolloModel* model ) {
+    if ( model ) {
+        free ( model->meshes );
+        free ( model->vertices );
+    }
+}
+
+void apollo_materials_free ( ApolloMaterial* materials ) {
+    sb_free ( materials );
+}
+
+void apollo_textures_free ( ApolloTexture* textures ) {
+    int textures_count = sb_count ( textures );
+
+    for ( int i = 0; i < textures_count; ++i ) {
+        free ( textures[i].data );
+    }
+
+    sb_free ( textures );
 }
 
 //--------------------------------------------------------------------------------------------------
 // File parsing routines
 //--------------------------------------------------------------------------------------------------
-// TODO: The overall error reporting should be improved, once finer grained
-// APOLLO_ERRORs are spread around they should also be moved here.
-// >= 0 valid texture index
-// -1 -> format error
-// -2 -> texture error
 ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* idx_out ) {
-    char map_name[APOLLO_NAME];
+    char map_name[APOLLO_PATH];
 
     if ( fscanf ( file, "%s", map_name ) != 1 ) {
         return APOLLO_INVALID_FORMAT;
@@ -388,9 +400,25 @@ ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* 
     size_t idx = apollo_find_texture ( textures, map_name );
 
     if ( idx == SIZE_MAX ) {
+        size_t name_len = strlen ( map_name );
+        ApolloTexture texture;
+        strncpy ( texture.path, map_name, 256 );
+
+        if ( name_len >= 4 && strcmp ( map_name + name_len - 5, ".hdr" ) == 0 ) {
+            texture.data = stbi_loadf ( map_name, &texture.width, &texture.height, &texture.channels, 0 );
+            texture.type = APOLLO_TEXTURE_TYPE_FLOAT32;
+        } else {
+            texture.data = stbi_load ( map_name, &texture.width, &texture.height, &texture.channels, 0 );
+            texture.type = APOLLO_TEXTURE_TYPE_UINT8;
+        }
+
+        if ( texture.data == nullptr ) {
+            APOLLO_LOG_ERR ( "Failed to open texture %s", map_name );
+            return APOLLO_FILE_NOT_FOUND;
+        }
+
         idx = sb_count ( textures );
-        ApolloTexture* texture = sb_add ( textures, 1 );
-        strncpy ( texture->name, map_name, 256 );
+        sb_push ( textures, texture );
     }
 
     *idx_out = idx;
@@ -426,16 +454,16 @@ bool apollo_read_float3 ( FILE* file, ApolloFloat3* val ) {
 // Material
 //--------------------------------------------------------------------------------------------------
 void apollo_material_clear ( ApolloMaterial* mat ) {
-    mat->bump_map_id = -1;
-    mat->diffuse_map_id = -1;
-    mat->disp_map_id = -1;
-    mat->emissive_map_id = -1;
-    mat->metallic_map_id = -1;
-    mat->normal_map_id = -1;
-    mat->roughness_map_id = -1;
-    mat->specular_map_id = -1;
-    mat->specular_exp_map_id = -1;
-    mat->name[0] = '\0';
+    mat->bump_map_id         = APOLLO_INVALID_TEXTURE;
+    mat->diffuse_map_id      = APOLLO_INVALID_TEXTURE;
+    mat->disp_map_id         = APOLLO_INVALID_TEXTURE;
+    mat->emissive_map_id     = APOLLO_INVALID_TEXTURE;
+    mat->metallic_map_id     = APOLLO_INVALID_TEXTURE;
+    mat->normal_map_id       = APOLLO_INVALID_TEXTURE;
+    mat->roughness_map_id    = APOLLO_INVALID_TEXTURE;
+    mat->specular_map_id     = APOLLO_INVALID_TEXTURE;
+    mat->specular_exp_map_id = APOLLO_INVALID_TEXTURE;
+    mat->name[0]             = '\0';
 }
 
 ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures ) {
@@ -675,6 +703,8 @@ error:
 // Model
 //--------------------------------------------------------------------------------------------------
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** _materials, ApolloTexture** _textures, bool rh, bool flip_faces ) {
+    assert ( _materials != nullptr && _textures != nullptr );
+
     FILE* file = NULL;
     file = fopen ( filename, "r" );
 
@@ -683,6 +713,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         return APOLLO_FILE_NOT_FOUND;
     }
 
+    // Extracting base directory to lookup material file
     size_t filename_len = strlen ( filename );
     const char* dir_end = filename + filename_len;
 
@@ -701,27 +732,31 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     }
 
     // Temporary tables
-    ApolloVertexTable vtable;
+    ApolloVertexTable    vtable;
     ApolloAdjacencyTable atable;
-    ApolloIndexTable itable;
+    ApolloIndexTable     itable;
+
     // Temporary buffers
     ApolloMaterial* materials = *_materials;
-    ApolloTexture* textures = *_textures;
-    ApolloFloat3* vertex_pos = NULL;
-    ApolloFloat2* tex_coords = NULL;
-    ApolloFloat3* normals = NULL;
-    size_t face_count = 0;
+    ApolloTexture*  textures = *_textures;
+    ApolloFloat3*   vertex_pos = NULL;
+    ApolloFloat2*   tex_coords = NULL;
+    ApolloFloat3*   normals = NULL;
+    size_t          face_count = 0;
+
     typedef struct {
         size_t smoothing_group;
         size_t material;
         size_t indices_offset;
     } Mesh;
-    Mesh* meshes = NULL;
-    ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
+
+    Mesh*              meshes = NULL;
+    ApolloMaterial*    used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
     ApolloMaterialLib* material_libs = NULL;
     // Non-temporary buffers (part of the ApolloModel)
-    ApolloIndex* indices = NULL;
-    ApolloVertex* vertices = NULL;
+    ApolloIndex*       indices = NULL;
+    ApolloVertex*      vertices = NULL;
+
     // Prealloc memory
     apollo_vertex_table_create ( &vtable, 2 * APOLLO_TARGET_VERTEX_COUNT );
     apollo_adjacency_table_create ( &atable, 2 * APOLLO_TARGET_VERTEX_COUNT );
@@ -1831,6 +1866,33 @@ ApolloAdjacencyTableItem* apollo_adjacency_table_lookup ( ApolloAdjacencyTable* 
 
     return NULL;
 }
+
+//--------------------------------------------------------------------------------------------------
+// Math routines
+//--------------------------------------------------------------------------------------------------
+static bool apollo_equalf2 ( const ApolloFloat2* a, const ApolloFloat2* b ) {
+    return a->x == b->x && a->y == b->y;
+}
+
+static ApolloFloat2 apollo_f2_set ( float x, float y ) {
+    ApolloFloat2 f2;
+    f2.x = x;
+    f2.y = y;
+    return f2;
+}
+
+static bool apollo_equalf3 ( const ApolloFloat3* a, const ApolloFloat3* b ) {
+    return a->x == b->x && a->y == b->y && a->z == b->z;
+}
+
+static ApolloFloat3 apollo_f3_set ( float x, float y, float z ) {
+    ApolloFloat3 f3;
+    f3.x = x;
+    f3.y = y;
+    f3.z = z;
+    return f3;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 // STB SB

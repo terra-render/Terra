@@ -4,9 +4,13 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 
 // Terra
 #include <Terra.h>
+
+// Apollo
+#include <Apollo.h>
 
 //
 // Handles loading of models and materials (using Apollo).
@@ -67,10 +71,14 @@ class Scene {
     // Currently it stops at the first one (TODO)
     TerraCamera default_camera();
 
+    std::string material_find ( TerraPrimitiveRef ref );
+    void        material_attr_set ( const char* name, const TerraFloat3* constant );
+    void        material_attr_set ( const char* name, const char* path );
 
   private:
-    bool          _set_opt_safe ( int opt, const void* data );
-    TerraTexture* _allocate_texture ( const char* texture );
+    ApolloMaterial* _find_material ( TerraPrimitiveRef ref );
+    bool           _set_opt_safe ( int opt, const void* data );
+    TerraTexture*  _allocate_texture ( ApolloTexture* apollo_texture );
 
     std::string       _name;
     TerraCamera       _default_camera;
@@ -78,6 +86,10 @@ class Scene {
     TerraSceneOptions _opts;
     bool              _first_load = true;
 
-    // Hopefully temporary
-    std::vector<std::unique_ptr<TerraTexture>> _textures;
+    ApolloMaterial* _materials;
+    ApolloTexture*  _textures;
+    ApolloModel     _models;
+
+    std::vector<TerraTexture>          _terra_textures;
+    std::unordered_map<size_t, size_t> _material_map;
 };

@@ -11,7 +11,7 @@
 #include <Cloto.h>
 
 namespace {
-    // fnv1a - Generic unsafe hash, I would really be surprised if this resulted in collisions
+    // fnv1a - Generic non-cryptographic hash,
     constexpr uint64_t fnv_basis = 14695981039346656037ull;
     constexpr uint64_t fnv_prime = 1099511628211ull;
 
@@ -406,7 +406,7 @@ bool TerraRenderer::_launch () {
     uint64_t scene_id = _gen_scene_id ( _target_camera, _target_scene );
 
     if ( _scene_id != scene_id ) {
-        TerraFloat3 clear_value = terra_f3_zero;
+        TerraFloat3 clear_value = TERRA_F3_ZERO;
         terra_framebuffer_clear ( &_framebuffer, &clear_value );
         _scene_id = scene_id;
     }

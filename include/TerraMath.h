@@ -40,10 +40,8 @@ typedef struct TerraAABB {
     TerraFloat3 max;
 } TerraAABB;
 
-
-#define terra_ior_air 1.f
-#define terra_f3_zero terra_f3_set1(0.f)
-#define terra_f3_one terra_f3_set1(1.f)
+extern const TerraFloat3 TERRA_F3_ZERO;
+extern const TerraFloat3 TERRA_F3_ONE;
 
 //--------------------------------------------------------------------------------------------------
 // Math functions
@@ -51,7 +49,9 @@ typedef struct TerraAABB {
 static inline TerraFloat2 terra_f2_set ( float x, float y );
 static inline TerraFloat3 terra_f3_set ( float x, float y, float z );
 static inline TerraFloat3 terra_f3_set1 ( float xyz );
+static inline TerraFloat3 terra_f3_ptr ( float* d );
 static inline TerraFloat4 terra_f4 ( float x, float y, float z, float w );
+static inline TerraFloat4 terra_f4_ptr ( float* d );
 static inline bool        terra_equalf3 ( TerraFloat3* a, TerraFloat3* b );
 static inline TerraFloat3 terra_addf3 ( const TerraFloat3* left, const TerraFloat3* right );
 static inline TerraFloat2 terra_addf2 ( const TerraFloat2* left, const TerraFloat2* right );
@@ -77,6 +77,8 @@ static inline bool        terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float       terra_lerp ( float a, float b, float t );
 static inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, float t );
 static inline float       terra_absf ( float a );
+static inline uint64_t    terra_next_pow2 ( uint64_t val );
+
 
 #include "TerraMath.inl"
 

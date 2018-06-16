@@ -74,8 +74,8 @@ class TerraRenderer {
 
     typedef struct TerraRenderArgs {
         TerraRenderer*  th;
-        int             x, y;
-        int             width, height;
+        size_t          x, y;
+        size_t          width, height;
     } TerraRenderArgs;
     friend void terra_render_launcher ( void* );
 

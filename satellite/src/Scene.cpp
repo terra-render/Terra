@@ -13,7 +13,9 @@
 // Terra
 #include <TerraPresets.h>
 
-// Apollo
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #define APOLLO_IMPLEMENTATION
 #include <Apollo.h>
 
@@ -33,7 +35,7 @@ namespace {
         int tidx = apollo_attr##_map_id;\
         TerraTexture* texture = nullptr;\
         TerraFloat3   constant = to_constant(apollo_attr);\
-        if (tidx != -1) { texture = _allocate_texture(textures[tidx].name); }\
+        if (tidx != -1) { texture = _allocate_texture(_textures + tidx); }\
         if (texture == nullptr) { terra_attribute_init_constant(&attr, &constant); }\
         else { terra_attribute_init_texture(&attr, texture);}}
 
@@ -131,8 +133,11 @@ const char* Scene::from_terra_sampling ( TerraSamplingMethod v ) {
     return nullptr;
 }
 
-Scene::Scene() {
+Scene::Scene() :
+    _materials ( nullptr ),
+    _textures ( nullptr ) {
     memset ( &_scene, 0, sizeof ( HTerraScene ) );
+    memset ( &_models, 0, sizeof ( ApolloModel ) );
 }
 
 Scene::~Scene() {
@@ -150,11 +155,7 @@ bool Scene::load ( const char* filename ) {
         return false;
     }
 
-    ApolloMaterial* materials = NULL;
-    ApolloTexture* textures = NULL;
-    ApolloModel model;
-
-    if ( apollo_import_model_obj ( filename, &model, &materials, &textures, false, false ) != APOLLO_SUCCESS ) {
+    if ( apollo_import_model_obj ( filename, &_models, &_materials, &_textures, false, false ) != APOLLO_SUCCESS ) {
         Log::error ( "Failed to import %s", filename );
         return false;
     }
@@ -169,42 +170,65 @@ bool Scene::load ( const char* filename ) {
 
     name = name != '\0' ? name + 1 : name;
     _name = name;
+
     //
     // Importing into Terra Scene
     //
-    Log::info ( FMT ( "Read %d objects from %s", model.mesh_count, name ) );
+    Log::info ( FMT ( "Read %d objects from %s", _models.mesh_count, name ) );
     _scene = terra_scene_create();
     uint64_t n_triangles = 0;
 
-    for ( int m = 0; m < model.mesh_count; ++m ) {
-        TerraObject* object = terra_scene_add_object ( _scene, model.meshes[m].face_count );
+    for ( int m = 0; m < _models.mesh_count; ++m ) {
+        size_t object_idx = terra_scene_count_objects ( _scene );
+        TerraObject* object = terra_scene_add_object ( _scene, _models.meshes[m].face_count );
+
         //
         // Reading geometry
         //
 
         for ( int i = 0; i < object->triangles_count; ++i ) {
-            const ApolloMeshFace* apollo_face = &model.meshes[m].faces[i];
-            object->triangles[i].b = * ( TerraFloat3* ) &model.vertices[apollo_face->b].pos;
-            object->triangles[i].a = * ( TerraFloat3* ) &model.vertices[apollo_face->a].pos;
-            object->triangles[i].c = * ( TerraFloat3* ) &model.vertices[apollo_face->c].pos;
-            object->properties[i].normal_a = * ( TerraFloat3* ) &model.vertices[apollo_face->a].norm;
-            object->properties[i].normal_b = * ( TerraFloat3* ) &model.vertices[apollo_face->b].norm;
-            object->properties[i].normal_c = * ( TerraFloat3* ) &model.vertices[apollo_face->c].norm;
-            object->properties[i].texcoord_a = * ( TerraFloat2* ) &model.vertices[apollo_face->a].tex;
-            object->properties[i].texcoord_b = * ( TerraFloat2* ) &model.vertices[apollo_face->b].tex;
-            object->properties[i].texcoord_c = * ( TerraFloat2* ) &model.vertices[apollo_face->c].tex;
+            const ApolloMeshFace* apollo_face = &_models.meshes[m].faces[i];
+            object->triangles[i].b           = * ( TerraFloat3* ) &_models.vertices[apollo_face->b].pos;
+            object->triangles[i].a           = * ( TerraFloat3* ) &_models.vertices[apollo_face->a].pos;
+            object->triangles[i].c           = * ( TerraFloat3* ) &_models.vertices[apollo_face->c].pos;
+            object->properties[i].normal_a   = * ( TerraFloat3* ) &_models.vertices[apollo_face->a].norm;
+            object->properties[i].normal_b   = * ( TerraFloat3* ) &_models.vertices[apollo_face->b].norm;
+            object->properties[i].normal_c   = * ( TerraFloat3* ) &_models.vertices[apollo_face->c].norm;
+            object->properties[i].texcoord_a = * ( TerraFloat2* ) &_models.vertices[apollo_face->a].tex;
+            object->properties[i].texcoord_b = * ( TerraFloat2* ) &_models.vertices[apollo_face->b].tex;
+            object->properties[i].texcoord_c = * ( TerraFloat2* ) &_models.vertices[apollo_face->c].tex;
         }
 
         //
         // Reading materials
         //
-        const int material_idx = model.meshes[m].material_id;
-        const ApolloMaterial& material = materials[material_idx];
-        object->material.ior = 1.5;
-        // TODO
-        object->material.enable_bump_map_attr = 0;
-        object->material.enable_normal_map_attr = 0;
-        READ_ATTR ( object->material.emissive, material.emissive, textures );
+        const int material_idx = _models.meshes[m].material_id;
+        const ApolloMaterial& material = _materials[material_idx];
+
+        _material_map[object_idx] = material_idx;
+
+        terra_material_init ( &object->material );
+
+        // IOR
+        TerraFloat3 ior = terra_f3_set1 ( 1.5f );
+        TerraAttribute ior_attr;
+        terra_attribute_init_constant ( &ior_attr, &ior );
+        terra_material_ior ( &object->material, &ior_attr );
+
+        // Emissive
+        TerraAttribute emissive_attr;
+        READ_ATTR ( emissive_attr, material.emissive, textures );
+        terra_material_emissive ( &object->material, &emissive_attr );
+
+        // Bump mapping TODO
+        if ( material.bump_map_id != APOLLO_INVALID_TEXTURE ) {
+
+        }
+
+        // Normal mapping TODO
+        if ( material.normal_map_id != APOLLO_INVALID_TEXTURE ) {
+
+        }
 
         switch ( material.bsdf ) {
             case APOLLO_SPECULAR: {
@@ -212,10 +236,9 @@ bool Scene::load ( const char* filename ) {
                 READ_ATTR ( albedo, material.diffuse, textures );
                 READ_ATTR ( specular_color, material.specular, textures );
                 READ_ATTR ( specular_intensity, material.specular_exp, textures );
-                object->material.attributes[TERRA_PHONG_ALBEDO]             = albedo;
-                object->material.attributes[TERRA_PHONG_SPECULAR_COLOR]     = specular_color;
-                object->material.attributes[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
-                object->material.attributes_count                           = TERRA_PHONG_END;
+                object->material.bsdf_attrs[TERRA_PHONG_ALBEDO]             = albedo;
+                object->material.bsdf_attrs[TERRA_PHONG_SPECULAR_COLOR]     = specular_color;
+                object->material.bsdf_attrs[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
                 terra_bsdf_phong_init ( &object->material.bsdf );
                 break;
             }
@@ -230,8 +253,7 @@ bool Scene::load ( const char* filename ) {
             case APOLLO_DIFFUSE: {
                 TerraAttribute albedo;
                 READ_ATTR ( albedo, material.diffuse, textures );
-                object->material.attributes[TERRA_DIFFUSE_ALBEDO] = albedo;
-                object->material.attributes_count                 = TERRA_DIFFUSE_END;
+                object->material.bsdf_attrs[TERRA_DIFFUSE_ALBEDO] = albedo;
                 terra_bsdf_diffuse_init ( &object->material.bsdf );
                 break;
             }
@@ -240,20 +262,29 @@ bool Scene::load ( const char* filename ) {
         n_triangles += object->triangles_count;
     }
 
-    // TODO free materials/textures?
     Log::info ( FMT ( "Building acceleration structure for %zu triangles", n_triangles ) );
     terra_scene_commit ( _scene );
-    Log::info ( FMT ( "Finished importing %s. objects(%d) textures(%d)", name, terra_scene_count_objects ( _scene ), _textures.size() ) );
+    Log::info ( FMT ( "Finished importing %s. objects(%d) textures(%d)", name, terra_scene_count_objects ( _scene ), apollo_buffer_size ( _textures ) ) );
     return true;
 }
 
 void Scene::clear() {
-    if ( _scene != NULL ) {
-        terra_scene_clear ( _scene );
+    for ( TerraTexture& texture : _terra_textures ) {
+        terra_texture_destroy ( &texture );
     }
 
-    _textures.clear();
+    _terra_textures.clear();
+
+    if ( _scene != NULL ) {
+        terra_scene_destroy ( _scene );
+    }
+
+    apollo_textures_free ( _textures );
+    apollo_materials_free ( _materials );
+    apollo_model_free ( &_models );
     memset ( &_scene, 0, sizeof ( HTerraScene ) );
+
+    _material_map.clear();
 }
 
 void Scene::reset_options() {
@@ -378,6 +409,30 @@ TerraCamera Scene::default_camera() {
     return _default_camera;
 }
 
+std::string Scene::material_find ( TerraPrimitiveRef ref ) {
+    ApolloMaterial* mat = _find_material ( ref );
+    return mat ? mat->name : "";
+}
+
+void Scene::material_attr_set ( const char* name, const TerraFloat3* constant ) {
+
+}
+
+void Scene::material_attr_set ( const char* name, const char* path ) {
+
+}
+
+ApolloMaterial* Scene::_find_material ( TerraPrimitiveRef ref ) {
+    auto res = _material_map.find ( ref.object_idx );
+
+    if ( res == _material_map.end() ) {
+        Log::error ( FMT ( "Invalid primitive ref %d:%d", ref.object_idx, ref.triangle_idx ) );
+        return nullptr;
+    }
+
+    _materials + res->second;
+}
+
 bool Scene::_set_opt_safe ( int opt, const void* data ) {
     assert ( data != nullptr );
 
@@ -447,6 +502,28 @@ bool Scene::_set_opt_safe ( int opt, const void* data ) {
     return true;
 }
 
-TerraTexture* Scene::_allocate_texture ( const char* path ) {
-    return nullptr;
+TerraTexture* Scene::_allocate_texture ( ApolloTexture* apollo_texture ) {
+    TerraTexture texture;
+
+    int sampler                 = kTerraSamplerBilinear;
+    TerraTextureAddress address = kTerraTextureAddressWrap;
+
+    bool ret = false;
+
+    if ( apollo_texture->type == APOLLO_TEXTURE_TYPE_UINT8 ) {
+        ret = terra_texture_create ( &texture, ( uint8_t* ) apollo_texture->data, apollo_texture->width, apollo_texture->height, apollo_texture->channels, sampler, address );
+    } else if ( apollo_texture->type == APOLLO_TEXTURE_TYPE_FLOAT32 ) {
+        ret = terra_texture_create_fp ( &texture, ( float* ) apollo_texture->data, apollo_texture->width, apollo_texture->height, apollo_texture->channels, sampler, address );
+    } else {
+        Log::error ( FMT ( "Invalid type %d texture %s", apollo_texture->type, apollo_texture->path ) );
+        return nullptr;
+    }
+
+    if ( !ret ) {
+        Log::error ( FMT ( "Failed to create texture %dx%d %s", apollo_texture->width, apollo_texture->height, apollo_texture->path ) );
+        return nullptr;
+    }
+
+    _terra_textures.emplace_back ( std::move ( texture ) );
+    return &_terra_textures.back();
 }

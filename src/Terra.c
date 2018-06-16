@@ -2,11 +2,11 @@
 
 #include <string.h>
 
-#include "TerraPrivate.h"
 #include "TerraBVH.h"
 #include "TerraKDTree.h"
 #include "TerraProfile.h"
 #include "TerraPresets.h"
+#include "TerraPrivate.h"
 
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
@@ -14,61 +14,35 @@
 // A copy of the current options is stored and returned when the getter is called.
 // On commit it gets diffed with the one in use before updating it and the scene state is updated appropriately.
 // The dirty_objects flag is set on scene object add, cleared on commit.
-typedef struct {
+typedef struct TerraScene {
     TerraSceneOptions opts;
-    TerraObject* objects;
-    size_t objects_pop;
-    size_t objects_cap;
-    TerraLight* lights;
-    size_t lights_pop;
-    size_t lights_cap;
+    TerraObject*      objects;
+    size_t            objects_pop;
+    size_t            objects_cap;
+    TerraLight*       lights;
+    size_t            lights_pop;
+    size_t            lights_cap;
+
     union {
         TerraKDTree kdtree;
-        TerraBVH bvh;
+        TerraBVH    bvh;
     };
+
     TerraSceneOptions new_opts;
-    bool dirty_objects;
+    bool              dirty_objects;
 } TerraScene;
 
 #define TERRA_SCENE_PREALLOCATED_OBJECTS    64
 #define TERRA_SCENE_PREALLOCATED_LIGHTS     16
 
-//--------------------------------------------------------------------------------------------------
-// Terra internal routines
-//--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* ray, TerraSamplerRandom* random_sampler, TerraSampler2D* hemisphere_sampler );
-TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuffer* frame, size_t x, size_t y, float jitter, float r1, float r2 );
-void        terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface );
+const TerraFloat3 TERRA_F3_ZERO = { 0.f, 0.f, 0.f };
+const TerraFloat3 TERRA_F3_ONE  = { 1.f, 1.f, 1.f };
 
 //--------------------------------------------------------------------------------------------------
 // Terra implementation
 //--------------------------------------------------------------------------------------------------
-#if 0
-#include <immintrin.h>
-__m128 terra_sse_loadf3 ( const TerraFloat3* xyz ) {
-    __m128 x = _mm_load_ss ( &xyz->x );
-    __m128 y = _mm_load_ss ( &xyz->y );
-    __m128 z = _mm_load_ss ( &xyz->z );
-    __m128 xy = _mm_movelh_ps ( x, y );
-    return _mm_shuffle_ps ( xy, z, _MM_SHUFFLE ( 2, 0, 2, 0 ) );
-}
-
-__m128 terra_sse_cross ( __m128 a, __m128 b ) {
-    return _mm_sub_ps (
-               _mm_mul_ps ( _mm_shuffle_ps ( a, a, _MM_SHUFFLE ( 3, 0, 2, 1 ) ), _mm_shuffle_ps ( b, b, _MM_SHUFFLE ( 3, 1, 0, 2 ) ) ),
-               _mm_mul_ps ( _mm_shuffle_ps ( a, a, _MM_SHUFFLE ( 3, 1, 0, 2 ) ), _mm_shuffle_ps ( b, b, _MM_SHUFFLE ( 3, 0, 2, 1 ) ) )
-           );
-}
-
-float terra_sse_dotf3 ( __m128 a, __m128 b ) {
-    __m128 dp = _mm_dp_ps ( a, b, 0xFF );
-    return * ( float* ) &dp;
-}
-#endif
-
 bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out ) {
     const TerraTriangle* tri = triangle;
-#if 1
     TerraFloat3 e1, e2, h, s, q;
     float a, f, u, v, t;
     e1 = terra_subf3 ( &tri->b, &tri->a );
@@ -109,53 +83,6 @@ bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle*
     }
 
     return false;
-#else
-    __m128 tri_a = terra_sse_loadf3 ( &tri->a );
-    __m128 tri_b = terra_sse_loadf3 ( &tri->b );
-    __m128 tri_c = terra_sse_loadf3 ( &tri->c );
-    __m128 ray_ori = terra_sse_loadf3 ( &ray->origin );
-    __m128 ray_dir = terra_sse_loadf3 ( &ray->direction );
-    __m128 e1, e2, h, s, q;
-    float a, f, u, v, t;
-    e1 = _mm_sub_ps ( tri_b, tri_a );
-    e2 = _mm_sub_ps ( tri_c, tri_a );
-    h = terra_sse_cross ( ray_dir, e2 );
-    a = terra_sse_dotf3 ( e1, h );
-
-    if ( a > -terra_Epsilon && a < terra_Epsilon ) {
-        return false;
-    }
-
-    f = 1.f / a;
-    s = _mm_sub_ps ( ray_ori, tri_a );
-    u = f * terra_sse_dotf3 ( s, h );
-
-    if ( u < 0.f || u > 1.f ) {
-        return false;
-    }
-
-    q = terra_sse_cross ( s, e1 );
-    v = f * terra_sse_dotf3 ( ray_dir, q );
-
-    if ( v < 0.f || u + v > 1.f ) {
-        return false;
-    }
-
-    t = f * terra_sse_dotf3 ( e2, q );
-
-    if ( t > 0.00001 ) {
-        TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
-        *point_out = terra_addf3 ( &offset, &ray->origin );
-
-        if ( t_out != NULL ) {
-            *t_out = t;
-        }
-
-        return true;
-    }
-
-    return false;
-#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -188,25 +115,83 @@ bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, f
     return false;
 }
 
-//--------------------------------------------------------------------------------------------------
-void terra_attribute_init_constant ( TerraAttribute* attr, const TerraFloat3* value ) {
-    attr->eval = NULL;
-    attr->state = NULL;
-    attr->finalize = NULL;
-    attr->value = *value;
+/*
+ *  Creates a constant value attribute
+ */
+void terra_attribute_init_constant ( TerraAttribute* attr, const TerraFloat3* constant ) {
+    TERRA_ASSERT ( attr && constant );
+    attr->constant._flag    = TERRA_ATTR_CONSTANT_FLAG;
+    attr->constant.constant = *constant;
 }
 
+/*
+ * Creates a constant
+ */
 void terra_attribute_init_texture ( TerraAttribute* attr, TerraTexture* texture ) {
-    attr->state = texture;
-    attr->eval = terra_texture_sample;
-    attr->finalize = terra_texture_finalize;
+    TERRA_ASSERT ( attr && texture );
+    attr->fn.state = ( intptr_t ) texture;
+    attr->fn.eval  = terra_texture_sampler ( texture );
 }
 
-void terra_attribute_init_cubemap ( TerraAttribute* attr, TerraTexture* texture ) {
-    attr->state = texture;
-    attr->eval = terra_texture_sample_latlong;
-    attr->finalize = terra_texture_finalize;
+/*
+ * Returns true if `attr` was initialized by `_attribute_init_constant`
+ */
+bool terra_attribute_is_constant ( const TerraAttribute* attr ) {
+    TERRA_ASSERT ( attr );
+    return attr->constant._flag == 0xffffffff;
 }
+
+/*
+ * Initializes a material with default values
+ */
+const TerraFloat3 kTerraMaterialDefaultIor = { 1.5f, 1.5f, 1.5f };
+void terra_material_init ( TerraMaterial* material ) {
+    TERRA_ASSERT ( material );
+
+    terra_attribute_init_constant ( &material->attrs[TerraAttributeIor], &kTerraMaterialDefaultIor );
+    terra_attribute_init_constant ( &material->attrs[TerraAttributeEmissive], &TERRA_F3_ZERO );
+    terra_attribute_init_constant ( &material->attrs[TerraAttributeBumpMap], &TERRA_F3_ZERO );
+    terra_attribute_init_constant ( &material->attrs[TerraAttributeNormalMap], &TERRA_F3_ZERO );
+    material->bsdf.attrs_count = 0;
+    material->_flags           = 0;
+}
+
+/*
+ *  Sets a bsdf attribute.
+ *  material.bsdf should have been initialized
+ */
+void terra_material_bsdf_attr ( TerraMaterial* material, TerraBSDFAttribute bsdf_attr, const TerraAttribute* attr ) {
+    TERRA_ASSERT ( material && attr );
+    TERRA_ASSERT ( bsdf_attr < material->bsdf.attrs_count );
+    material->bsdf_attrs[bsdf_attr] = *attr;
+}
+
+void terra_material_ior ( TerraMaterial* material, const TerraAttribute* attr ) {
+    TERRA_ASSERT ( material && attr );
+    material->attrs[TerraAttributeIor] = *attr;
+}
+
+void terra_material_emissive ( TerraMaterial* material, const TerraAttribute* attr ) {
+    TERRA_ASSERT ( material && attr );
+    material->attrs[TerraAttributeEmissive] = *attr;
+}
+
+/*
+*  Enables bump mapping
+*/
+void terra_material_bump_map ( TerraMaterial* material, const TerraAttribute* attr ) {
+    TERRA_ASSERT ( material && attr );
+    material->attrs[TerraAttributeBumpMap] = *attr;
+}
+
+/*
+*  Enables normal mapping
+*/
+void terra_material_normal_map ( TerraMaterial* material, const TerraAttribute* attr ) {
+    TERRA_ASSERT ( material && attr );
+    material->attrs[TerraAttributeNormalMap] = *attr;
+}
+
 
 void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface ) {
     // Computing UV coordinates
@@ -237,14 +222,15 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
     texcoord = terra_addf2 ( &texcoord, &tc );
     texcoord = texcoord;
 
-    // Calculating screen space derivatives of UV coordinates
-    //TerraFloat2 dduv = terra_triangle_ss_derivatives ( point, surface );
-
-    for ( int i = 0; i < material->attributes_count; ++i ) {
-        surface->attributes[i] = terra_eval_attribute ( &material->attributes[i], &texcoord, point );
+    // Evaluating bsdf attributes
+    for ( size_t i = 0; i < material->bsdf.attrs_count; ++i ) {
+        surface->bsdf_attrs[i] = terra_attribute_eval ( material->bsdf_attrs + i, &surface->uv );
     }
 
-    surface->emissive = terra_eval_attribute ( &material->emissive, &texcoord, point );
+    // Evaluating material attributes
+    for ( size_t i = 0; i < TerraAttributeCount; ++i ) {
+        surface->attrs[i] = terra_attribute_eval ( material->attrs + i, surface );
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -348,20 +334,25 @@ void terra_scene_destroy ( HTerraScene _scene ) {
     terra_free ( scene );
 }
 
+TerraObject* terra_scene_object ( HTerraScene _scene, uint32_t object_idx ) {
+    TerraScene* scene = ( TerraScene* ) _scene;
+    return &scene->objects[object_idx];
+}
+
 //--------------------------------------------------------------------------------------------------
 bool terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, size_t height ) {
     if ( width == 0 || height == 0 ) {
         return false;
     }
 
-    framebuffer->width = width;
-    framebuffer->height = height;
-    framebuffer->pixels = ( TerraFloat3* ) terra_malloc ( sizeof ( TerraFloat3 ) * width * height );
+    framebuffer->width   = width;
+    framebuffer->height  = height;
+    framebuffer->pixels  = ( TerraFloat3* ) terra_malloc ( sizeof ( TerraFloat3 ) * width * height );
     framebuffer->results = ( TerraRawIntegrationResult* ) terra_malloc ( sizeof ( TerraRawIntegrationResult ) * width * height );
 
     for ( size_t i = 0; i < width * height; ++i ) {
-        framebuffer->pixels[i] = terra_f3_zero;
-        framebuffer->results[i].acc = terra_f3_zero;
+        framebuffer->pixels[i]          = TERRA_F3_ZERO;
+        framebuffer->results[i].acc     = TERRA_F3_ZERO;
         framebuffer->results[i].samples = 0;
     }
 
@@ -387,16 +378,14 @@ void terra_framebuffer_destroy ( TerraFramebuffer* framebuffer ) {
 
 //--------------------------------------------------------------------------------------------------
 // TODO move jitter, r1, r2 out, ad dx,dy as params
-TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuffer* frame, size_t x, size_t y, float jitter, float r1, float r2 ) {
-    float dx = -jitter + 2 * r1 * jitter;
-    float dy = -jitter + 2 * r2 * jitter;
+TerraFloat3 terra_pixel_dir ( const TerraCamera* camera, size_t x, size_t y, size_t width, size_t height ) {
     // [0:1], y points down
-    float ndc_x = ( x + 0.5f + dx ) / frame->width;
-    float ndc_y = ( y + 0.5f + dy ) / frame->height;
+    float ndc_x = ( x + 0.5f ) / width;
+    float ndc_y = ( y + 0.5f ) / height;
     // [-1:1], y points up
     float screen_x = 2 * ndc_x - 1;
     float screen_y = 1 - 2 * ndc_y;
-    float aspect_ratio = ( float ) frame->width / ( float ) frame->height;
+    float aspect_ratio = ( float ) width / height;
     // [-aspect_ratio * tan(fov/2):aspect_ratio * tan(fov/2)]
     float camera_x = screen_x * aspect_ratio * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
     float camera_y = screen_y * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
@@ -435,15 +424,27 @@ void terra_ray_create ( TerraRay* ray, TerraFloat3* point, TerraFloat3* directio
 
 bool terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingSurface* surface_out, TerraFloat3* intersection_point ) {
     TerraPrimitiveRef primitive;
+
+    if ( !terra_find_closest_prim ( scene, ray, &primitive, intersection_point ) ) {
+        return false;
+    }
+
+    TerraObject* object = &scene->objects[primitive.object_idx];
+    *material_out = &object->material;
+    terra_triangle_init_shading ( &object->triangles[primitive.triangle_idx], &object->material, &object->properties[primitive.triangle_idx], intersection_point, surface_out );
+    return true;
+}
+
+bool terra_find_closest_prim ( TerraScene* scene, const TerraRay* ray, TerraPrimitiveRef* ref, TerraFloat3* intersection_point ) {
     TerraClockTime t = TERRA_CLOCK();
     bool miss = false;
 
     if ( scene->opts.accelerator == kTerraAcceleratorBVH ) {
-        if ( !terra_bvh_traverse ( &scene->bvh, scene->objects, ray, intersection_point, &primitive ) ) {
+        if ( !terra_bvh_traverse ( &scene->bvh, scene->objects, ray, intersection_point, ref ) ) {
             miss = true;
         }
     } else if ( scene->opts.accelerator == kTerraAcceleratorKDTree ) {
-        if ( !terra_kdtree_traverse ( &scene->kdtree, ray, intersection_point, &primitive ) ) {
+        if ( !terra_kdtree_traverse ( &scene->kdtree, ray, intersection_point, ref ) ) {
             miss = true;
         }
     } else {
@@ -456,9 +457,6 @@ bool terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMat
         return false;
     }
 
-    TerraObject* object = &scene->objects[primitive.object_idx];
-    *material_out = &object->material;
-    terra_triangle_init_shading ( &object->triangles[primitive.triangle_idx], &object->material, &object->properties[primitive.triangle_idx], intersection_point, surface_out );
     return true;
 }
 
@@ -467,7 +465,7 @@ TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float
     // TODO cache this ?
     float total_light_power = 0;
 
-    for ( int i = 0; i < scene->lights_pop; ++i ) {
+    for ( size_t i = 0; i < scene->lights_pop; ++i ) {
         total_light_power += scene->lights[i].emissive;
     }
 
@@ -476,7 +474,7 @@ TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float
     float alpha_acc = *e1;
     int light_idx = -1;
 
-    for ( int i = 0; i < scene->lights_pop; ++i ) {
+    for ( size_t i = 0; i < scene->lights_pop; ++i ) {
         const float alpha = scene->lights[i].emissive / total_light_power;
         alpha_acc -= alpha;
 
@@ -540,17 +538,17 @@ TerraFloat3 terra_light_sample_disk ( const TerraLight* light, const TerraFloat3
 
 #define _randf() (float)rand() / RAND_MAX
 TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
-    TerraFloat3 Lo = terra_f3_zero;
-    TerraFloat3 throughput = terra_f3_one;
+    TerraFloat3 Lo         = TERRA_F3_ZERO;
+    TerraFloat3 throughput = TERRA_F3_ONE;
     TerraRay ray = *primary_ray;
 
-    for ( int bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
+    for ( size_t bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
         const TerraMaterial* material;
         TerraShadingSurface surface;
         TerraFloat3 intersection_point;
 
         if ( terra_find_closest ( scene, &ray, &material, &surface, &intersection_point ) == false ) {
-            TerraFloat3 env_color = terra_eval_attribute ( &scene->opts.environment_map, &ray.direction, &intersection_point );
+            TerraFloat3 env_color = terra_attribute_eval ( &scene->opts.environment_map, &ray.direction );
             throughput = terra_pointf3 ( &throughput, &env_color );
             Lo = terra_addf3 ( &Lo, &throughput );
             break;
@@ -558,7 +556,7 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
 
         terra_build_rotation_around_normal ( &surface );
         TerraFloat3 wo = terra_negf3 ( &ray.direction );
-        TerraFloat3 emissive = surface.emissive;
+        TerraFloat3 emissive = surface.attrs[TerraAttributeEmissive];
         emissive = terra_pointf3 ( &throughput, &emissive );
         Lo = terra_addf3 ( &Lo, &emissive );
         float e0 = _randf();
@@ -590,6 +588,14 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
     return Lo;
 }
 
+TerraFloat3 terra_attribute_eval ( const TerraAttribute* attr, const void* addr ) {
+    if ( terra_attribute_is_constant ( attr ) ) {
+        return attr->constant.constant;
+    }
+
+    return attr->fn.eval ( attr->fn.state, addr );
+}
+
 TerraFloat3 terra_tonemapping_uncharted2 ( const TerraFloat3* x ) {
     // http://www.slideshare.net/ozlael/hable-john-uncharted2-hdr-lighting
     const float A = 0.15f;
@@ -605,7 +611,22 @@ TerraFloat3 terra_tonemapping_uncharted2 ( const TerraFloat3* x ) {
     return ret;
 }
 
-//--------------------------------------------------------------------------------------------------
+/*
+    Casta a ray into the scene and returns the index of the first primitive hit.
+*/
+bool terra_pick ( TerraPrimitiveRef* ref, const TerraCamera* camera, HTerraScene _scene, size_t x, size_t y, size_t width, size_t height ) {
+    TerraRay ray = terra_camera_ray ( camera, x, y, width, height, NULL );
+    TerraScene* scene = ( TerraScene* ) _scene;
+
+    TerraFloat3       unused;
+
+    return terra_find_closest_prim ( scene, &ray, ref, &unused );
+}
+
+/*
+    Main rendering routine.
+    Renders the  tile specified by <x y width height>
+*/
 void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height ) {
     TerraScene* scene = ( TerraScene* ) _scene;
     TerraClockTime t = TERRA_CLOCK();
@@ -636,7 +657,7 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
 
     for ( size_t i = y; i < y + height; ++i ) {
         for ( size_t j = x; j < x + width; ++j ) {
-            TerraFloat3 acc = terra_f3_zero;
+            TerraFloat3 acc = TERRA_F3_ZERO;
             // Init sampler
             TerraSampler2D hemisphere_sampler;
             hemisphere_sampler.sampler = NULL;
@@ -656,9 +677,7 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
             TerraSampler2D* hemisphere_sampler_ptr = hemisphere_sampler.sampler == NULL ? NULL : &hemisphere_sampler;
 
             for ( size_t s = 0; s < spp; ++s ) {
-                float r1 = terra_sampler_random_next ( &random_sampler );
-                float r2 = terra_sampler_random_next ( &random_sampler );
-                TerraRay ray = terra_camera_ray ( camera, framebuffer, j, i, scene->opts.subpixel_jitter, r1, r2, &rot );
+                TerraRay ray = terra_camera_ray ( camera, j, i, framebuffer->width, framebuffer->height, &rot );
                 TerraClockTime t = TERRA_CLOCK();
                 TerraFloat3 cur = terra_trace ( scene, &ray );
                 TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, TERRA_CLOCK() - t );
@@ -733,8 +752,8 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
     TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, TERRA_CLOCK() - t );
 }
 
-TerraRay terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* rot_opt ) {
-    TerraFloat3 dir = terra_get_pixel_pos ( camera, framebuffer, x, y, jitter, r1, r2 );
+TerraRay terra_camera_ray ( const TerraCamera* camera, size_t x, size_t y, size_t width, size_t height, const TerraFloat4x4* rot_opt ) {
+    TerraFloat3 dir = terra_pixel_dir ( camera, x, y, width, height );
 
     if ( rot_opt == NULL ) {
         TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
@@ -758,176 +777,6 @@ TerraRay terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* f
     ray.inv_direction.y = 1.f / ray.direction.y;
     ray.inv_direction.z = 1.f / ray.direction.z;
     return ray;
-}
-
-//--------------------------------------------------------------------------------------------------
-
-bool terra_texture_init ( TerraTexture* texture, size_t width, size_t height, size_t components, const void* data ) {
-    texture->pixels = terra_malloc ( width * height * components );
-    memcpy ( texture->pixels, data, width * height * components );
-    texture->width = ( uint16_t ) width;
-    texture->height = ( uint16_t ) height;
-    texture->components = ( uint8_t ) components;
-    texture->depth = 1;
-}
-
-bool terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height, size_t components, const float* data ) {
-    texture->pixels = terra_malloc ( sizeof ( float ) * width * height * components );
-    memcpy ( texture->pixels, data, sizeof ( float ) * width * height * components );
-    texture->width = ( uint16_t ) width;
-    texture->height = ( uint16_t ) height;
-    texture->components = ( uint8_t ) components;
-    texture->depth = 4; // ?
-}
-
-TerraFloat3 terra_texture_read ( TerraTexture* texture, size_t x, size_t y ) {
-    switch ( texture->address_mode ) {
-        case kTerraTextureAddressClamp:
-            x = terra_mini ( x, texture->width - 1 );
-            y = terra_mini ( y, texture->height - 1 );
-            break;
-
-        case kTerraTextureAddressWrap:
-            x = x % texture->width;
-            y = y % texture->height;
-            break;
-
-        case kTerraTextureAddressMirror: {
-            if ( ( x / texture->width ) % 2 == 0 ) {
-                x = x % texture->width;
-                y = y % texture->height;
-            } else {
-                x = texture->width - ( x % texture->width );
-                y = texture->height - ( y % texture->height );
-            }
-
-            break;
-        }
-
-        default:
-            assert ( false );
-    }
-
-    if ( texture->depth == 1 ) {
-        assert ( texture->components <= 3 );
-        uint8_t* pixel = ( ( uint8_t* ) texture->pixels ) + ( y * texture->width + x ) * texture->components;
-        return terra_f3_set ( pixel[0] / 255.f, pixel[1] / 255.f, pixel[2] / 255.f );
-    } else if ( texture->depth == 4 ) {
-        assert ( texture->components <= 3 );
-        float* pixel = ( ( float* ) texture->pixels ) + ( y * texture->width + x ) * texture->components;
-        return * ( TerraFloat3* ) pixel;
-    }
-
-    assert ( false );
-    return terra_f3_zero;
-}
-
-TerraFloat3 terra_texture_sample ( void* _texture, const void* _uv, const void* _xyz ) {
-    TerraTexture* texture = ( TerraTexture* ) _texture;
-    TerraFloat2* uv = ( TerraFloat2* ) _uv;
-    size_t ix = ( size_t ) uv->x;
-    size_t iy = ( size_t ) uv->y;
-    TerraFloat3 sample;
-
-    switch ( texture->filter ) {
-        case kTerraFilterPoint:
-            sample = terra_texture_read ( texture, ix, iy );
-            break;
-
-        case kTerraFilterBilinear: {
-            // TL
-            size_t x1 = ix;
-            size_t y1 = iy;
-            // TR
-            size_t x2 = terra_mini ( ix + 1, texture->width - 1 );
-            size_t y2 = iy;
-            // BL
-            size_t x3 = ix;
-            size_t y3 = terra_mini ( iy + 1, texture->height - 1 );
-            // BR
-            size_t x4 = terra_mini ( ix + 1, texture->width - 1 );
-            size_t y4 = terra_mini ( iy + 1, texture->height - 1 );
-            // Read
-            TerraFloat3 n1 = terra_texture_read ( texture, x1, y1 );
-            TerraFloat3 n2 = terra_texture_read ( texture, x2, y2 );
-            TerraFloat3 n3 = terra_texture_read ( texture, x3, y3 );
-            TerraFloat3 n4 = terra_texture_read ( texture, x4, y4 );
-            // Compute weights for Bilinear filter
-            float w_u = uv->x - ix;
-            float w_v = uv->y - iy;
-            float w_ou = 1.f - w_u;
-            float w_ov = 1.f - w_v;
-            // Mix
-            sample.x = ( n1.x * w_ou + n2.x * w_u ) * w_ov + ( n3.x * w_ou + n4.x * w_u ) * w_v;
-            sample.y = ( n1.y * w_ou + n2.y * w_u ) * w_ov + ( n3.y * w_ou + n4.y * w_u ) * w_v;
-            sample.z = ( n1.z * w_ou + n2.z * w_u ) * w_ov + ( n3.z * w_ou + n4.z * w_u ) * w_v;
-            break;
-        }
-
-        case kTerraFilterTrilinear:
-            // TODO
-            break;
-
-        case kTerraFilterAnisotropic:
-            // TODO
-            break;
-
-        default:
-            assert ( false );
-            break;
-    }
-
-    return sample;
-}
-
-TerraFloat3 terra_texture_sample_latlong ( void* _texture, const void* _dir, const void* _xyz ) {
-    TerraTexture* texture = ( TerraTexture* ) _texture;
-    TerraFloat3* dir = ( TerraFloat3* ) _dir;
-    TerraFloat3 d = terra_normf3 ( dir );
-    float theta = acosf ( d.y );
-    float phi = atan2f ( d.z, d.x ) + terra_PI;
-    TerraFloat2 uv;
-    size_t u = ( phi / ( 2 * terra_PI ) ) * texture->width;
-    size_t v = ( theta / ( terra_PI ) ) * texture->height;
-    return terra_texture_read ( texture, u, v );
-}
-
-void terra_texture_destroy ( TerraTexture* texture ) {
-    terra_free ( texture->pixels );
-    texture->pixels = NULL;
-}
-
-void terra_texture_finalize ( void* _texture ) {
-#ifndef TERRA_TEXTURE_NO_SRGB
-    TerraTexture* texture = ( TerraTexture* ) _texture;
-
-    if ( texture != NULL && texture->pixels != NULL ) {
-        size_t size = texture->width * texture->height * texture->components;
-
-        if ( texture->depth == 1 ) {
-            for ( size_t i = 0; i < size; ++i ) {
-                uint8_t* pixel = ( uint8_t* ) texture->pixels + i;
-                *pixel = ( uint8_t ) ( powf ( *pixel / 255.f, 2.2f ) * 255 );
-            }
-        } else if ( texture->depth == 4 ) {
-            for ( size_t i = 0; i < size; ++i ) {
-                float* pixel = ( float* ) texture->pixels + i;
-                *pixel = powf ( *pixel, 2.2f );
-            }
-        } else {
-            assert ( false );
-        }
-    }
-
-#endif
-}
-
-TerraFloat3 terra_eval_attribute ( const TerraAttribute* attribute, const void* uv, const TerraFloat3* xyz ) {
-    if ( attribute->state != NULL ) {
-        return attribute->eval ( attribute->state, uv, xyz );
-    }
-
-    return attribute->value;
 }
 
 //--------------------------------------------------------------------------------------------------

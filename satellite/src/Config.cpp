@@ -20,8 +20,16 @@
 using namespace std;
 
 #ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
     #include <Windows.h>
 #endif
+
+
 
 namespace Config {
     namespace {
@@ -210,7 +218,7 @@ namespace Config {
         add_opt ( CMD_RENDER,           Type::Exec,     "render",       "Renders the loaded scene." );
         add_opt ( CMD_SAVE,             Type::Str,      "save",         "Saves the rendererd scene to the specified file." );
         int n_threads =  ( int ) thread::hardware_concurrency();
-        add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
+        add_opt ( JOB_N_WORKERS,        1,      "workers",      "Number of worker threads used by the renderer." );
         add_opt ( JOB_TILE_SIZE,        16,             "tile_size",    "Side length of area to be processed by a single worker." );
         add_opt ( RENDER_MAX_BOUNCES,   2,              "bounces",      "Maximum ray bounces" );
         add_opt ( RENDER_SAMPLES,       1,              "samples",      "Samples per pixel" );
