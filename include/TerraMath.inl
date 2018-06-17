@@ -147,6 +147,10 @@ inline size_t terra_mini ( size_t a, size_t b ) {
     return a < b ? a : b;
 }
 
+inline uint16_t terra_minu16 ( uint16_t a, uint16_t b ) {
+    return a < b ? a : b;
+}
+
 inline void terra_swapf ( float* a, float* b ) {
     float t = *a;
     *a = *b;

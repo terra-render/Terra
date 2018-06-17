@@ -31,7 +31,7 @@ typedef enum {
     kTerraSamplerTrilinear   = 1 << 1, // isotropic mipmaps (requires ray differentials)
     kTerraSamplerAnisotropic = 1 << 2, // anisotropic mipmaps (requires ray differentials) (includes TerraTrilinear)
     kTerraSamplerSpherical   = 1 << 3, // texture lookup using spherical coordinates as <u v>
-    kTerraSamplerSRGB        = 1 << 4  // texture is converted to srgb prior to sampling
+    kTerraSamplerSRGB        = 1 << 4  // the provided texture is in sRGB (gets linearized at creation). sRGB ICC Profile http://color.org/chardata/rgb/sRGB.pdf
 } TerraSamplerFlags;
 
 // Addressing policy for out of range texture coordinates
@@ -170,6 +170,7 @@ typedef struct {
 //
 // Rendering options
 //
+//
 typedef enum {
     kTerraTonemappingOperatorNone,
     kTerraTonemappingOperatorLinear,
@@ -178,22 +179,62 @@ typedef enum {
     kTerraTonemappingOperatorUncharted2
 } TerraTonemappingOperator;
 
+//
+// Collision detection
 typedef enum {
     kTerraAcceleratorBVH,
     kTerraAcceleratorKDTree
 } TerraAccelerator;
 
+//
+// Sampling methods to be used at first bounce
+//
 typedef enum {
     kTerraSamplingMethodRandom,
     kTerraSamplingMethodStratified,
     kTerraSamplingMethodHalton
 } TerraSamplingMethod;
 
+//
+// Antialiasing (supersampling) options
+// Note that some supersampling methods require the number of samples per pixel
+// to be a multiple of a specific number to produce optimal results. You can force
+// the number of samples to be overwitten in `terra_scene_commit(.., adjust_samples)`
+// You can then read the number of samples being used from `terra_scene_get_options`
+//
+// `TerraAAPattern` controls how subsequent rays are traced.
+typedef enum {
+    kTerraAAPatternNone,            // Every ray passes through the pixel's center
+    kTerraAAPatternRandom,          // Randomly generated samples
+    kTerraAAPatternLowDiscrepancy,  // Sample points are generated from a low discrepancy (halton) sequence
+    kTerraAAPatternGrid,            // (Ordered grid) Uniformly distributed samples
+    kTerraAAPatternPoissonDisc,     // Minimal low-frequency samples
+} TerraAAPattern;
+
+//
+// `TerraAAFlags` enables extra control over the samples
+typedef enum {
+    kTerraDefault    = 0,     // Samples are uniformely weighted (box filter)
+    kTerraAAWeighted = 1,     // Weights samples using gaussian filter
+    kTerraAAAdaptive = 1 << 1 // Adapts sample patterns to pixel subregions with higher variance. Does not change the total number of samples.
+} TerraAAFlags;
+
+//
+// Rendering options for a single scene.
+// Options are finalized at `terra_scene_commit`. Subsequent edits won't affect
+// the rendering.
+// See the respective types and functions for documentation and usage.
 typedef struct {
-    TerraAttribute              environment_map;
-    TerraTonemappingOperator    tonemapping_operator;
-    TerraAccelerator            accelerator;
-    TerraSamplingMethod         sampling_method;
+    TerraTonemappingOperator tonemapping_operator;
+
+    TerraAccelerator         accelerator;
+    TerraSamplingMethod      sampling_method;
+
+    TerraAAPattern          antialiasing_pattern;
+    TerraAAFlags            antialiasing_flags;
+
+    TerraAttribute          environment_map;
+
 
     bool    direct_sampling;
 
@@ -244,13 +285,13 @@ typedef struct {
 typedef void*   HTerraScene;
 
 HTerraScene         terra_scene_create              ();
-TerraObject*        terra_scene_add_object          ( HTerraScene scene, size_t triangle_count );
+TerraObject*         terra_scene_add_object          ( HTerraScene scene, size_t triangle_count );
 size_t              terra_scene_count_objects       ( HTerraScene scene );
 void                terra_scene_commit              ( HTerraScene scene );
 void                terra_scene_clear               ( HTerraScene scene );
-TerraSceneOptions*  terra_scene_get_options         ( HTerraScene scene );
+TerraSceneOptions*   terra_scene_get_options         ( HTerraScene scene );
 void                terra_scene_destroy             ( HTerraScene scene );
-TerraObject*        terra_scene_object              ( HTerraScene scene, uint32_t object_idx ) ;
+TerraObject*         terra_scene_object              ( HTerraScene scene, uint32_t object_idx ) ;
 
 bool                terra_framebuffer_create        ( TerraFramebuffer* framebuffer, size_t width, size_t height );
 void                terra_framebuffer_clear         ( TerraFramebuffer* framebuffer, const TerraFloat3* value );

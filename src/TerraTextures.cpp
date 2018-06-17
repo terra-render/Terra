@@ -87,7 +87,7 @@ bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t 
 
     texture->width = ( uint16_t ) width;
     texture->height = ( uint16_t ) height;
-    texture->sampler = sampler;
+    texture->sampler = ( uint8_t ) sampler;
     texture->depth = depth;
     texture->address = address;
     texture->mipmaps = nullptr;
@@ -208,19 +208,19 @@ static texel_read_fn texel_read_fns[] = {
 TerraFloat3 terra_texture_read_texel ( const TerraTexture* texture, int mip, uint16_t x, uint16_t y ) {
     TERRA_ASSERT ( texture->depth == 1 || texture->depth == 4 ); // Rethink the addressing otherwise
 
-    x = terra_mini ( x, texture->width - 1 );
-    y = terra_mini ( y, texture->height - 1 );
+    x = terra_minu16 ( x, texture->width - 1 );
+    y = terra_minu16 ( y, texture->height - 1 );
     size_t lin_idx = y * texture->width + x;
     const TerraMap* map = texture->mipmaps + mip;
     return texel_read_fns[texture->depth / 4] ( map, lin_idx ); // .. Almost (:
 }
 
 float terra_texture_address_wrap ( float v ) {
-    return v < 0.f ? fmod ( -v, 1.f ) : ( v > 1.f ? fmod ( v, 1.f ) : v );
+    return v < 0.f ? fmodf ( -v, 1.f ) : ( v > 1.f ? fmodf ( v, 1.f ) : v );
 }
 
 float terra_texture_address_mirror ( float v ) {
-    return v < 0.f ? 1.f - fmod ( -v, 1.f ) : ( v > 1.f ? 1.f - fmod ( v, 1.f ) : v );
+    return v < 0.f ? 1.f - fmodf ( -v, 1.f ) : ( v > 1.f ? 1.f - fmodf ( v, 1.f ) : v );
 }
 
 float terra_texture_address_clamp ( float v ) {

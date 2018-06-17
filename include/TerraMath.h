@@ -1,6 +1,8 @@
 #ifndef _TERRA_MATH_H_
 #define _TERRA_MATH_H_
 
+#include <stdint.h>
+
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
 //--------------------------------------------------------------------------------------------------
@@ -71,6 +73,7 @@ static inline float       terra_maxf ( float a, float b );
 static inline float       terra_minf ( float a, float b );
 static inline size_t      terra_maxi ( size_t a, size_t b );
 static inline size_t      terra_mini ( size_t a, size_t b );
+static inline uint16_t    terra_minu16 ( uint16_t a, uint16_t b );
 static inline void        terra_swapf ( float* a, float* b );
 static inline TerraFloat3 terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec );
 static inline bool        terra_f3_is_zero ( const TerraFloat3* f3 );

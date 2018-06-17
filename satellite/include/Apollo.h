@@ -63,7 +63,7 @@ typedef struct {
     float radius;
 } ApolloSphere;
 
-typedef size_t ApolloIndex;
+typedef uint64_t ApolloIndex;
 
 typedef struct {
     ApolloFloat3 pos;
@@ -232,7 +232,7 @@ void            apollo_index_table_create ( ApolloIndexTable* table, size_t capa
 void            apollo_index_table_destroy ( ApolloIndexTable* table );
 void            apollo_index_table_clear ( ApolloIndexTable* table );
 uint64_t        apollo_index_hash ( ApolloIndex key );
-ApolloIndex*    apollo_index_table_get_item ( const ApolloIndexTable* table, uint32_t hash );
+ApolloIndex*    apollo_index_table_get_item ( const ApolloIndexTable* table, uint64_t hash );
 ApolloIndex*    apollo_index_table_get_next ( const ApolloIndexTable* table, ApolloIndex* item );
 size_t          apollo_index_table_item_distance ( const ApolloIndexTable* table, ApolloIndex* a, ApolloIndex* b );
 void            apollo_index_table_resize ( ApolloIndexTable* table, size_t new_capacity );
@@ -297,7 +297,7 @@ typedef struct {
 
 void                        apollo_adjacency_table_create ( ApolloAdjacencyTable* table, size_t capacity );
 void                        apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table );
-ApolloAdjacencyTableItem*   apollo_adjacency_table_get_item ( ApolloAdjacencyTable* table, uint32_t hash );
+ApolloAdjacencyTableItem*   apollo_adjacency_table_get_item ( ApolloAdjacencyTable* table, uint64_t hash );
 ApolloAdjacencyTableItem*   apollo_adjacency_table_get_next ( ApolloAdjacencyTable* table, ApolloAdjacencyTableItem* item );
 int                         apollo_adjacency_table_distance ( const ApolloAdjacencyTable* table, const ApolloAdjacencyTableItem* a, const ApolloAdjacencyTableItem* b );
 void                        apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, size_t new_capacity );
@@ -319,7 +319,7 @@ ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable
 #define stb_sb_last(a)          ((a)[stb__sbn(a)-1])
 #define stb_sb_prealloc(a,n)    (stb__sbgrow(a,n))
 
-#define stb__sbraw(a)           ((int *) (a) - 2)
+#define stb__sbraw(a)           ((size_t *) (a) - 2)
 #define stb__sbm(a)             stb__sbraw(a)[0]
 #define stb__sbn(a)             stb__sbraw(a)[1]
 
@@ -442,7 +442,7 @@ ApolloResult apollo_read_texture ( FILE* file, ApolloTexture** textures, size_t*
 }
 
 bool apollo_read_float2 ( FILE* file, ApolloFloat2* val ) {
-    float x, y, z;
+    float x, y;
 
     if ( fscanf ( file, "%f %f", &x, &y ) != 2 ) {
         return false;
@@ -1104,7 +1104,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             vertex->tex = tex_index != -1 ? tex_coords[tex_index] : apollo_f2_set ( 0, 0 );
                             vertex->norm = norm_index != -1 ? normals[norm_index] : apollo_f3_set ( 0, 0, 0 );
                             *index = sb_count ( vertices ) - 1;
-                            ApolloVertexTableItem item = { vertex->pos, sb_count ( vertices ) - 1 };
+                            ApolloVertexTableItem item = { vertex->pos, ( uint32_t ) sb_count ( vertices ) - 1 };
                             apollo_vertex_table_insert ( &vtable, &item );
                         }
 
@@ -1119,11 +1119,11 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                         // Store the first and last vertex index for later
                         if ( first_vertex_index == -1 && face_vertex_count == 0 ) {
-                            first_vertex_index = *index;
+                            first_vertex_index = ( size_t ) * index;
                         }
 
                         if ( face_vertex_count >= 2 ) {
-                            last_vertex_index = *index;
+                            last_vertex_index = ( size_t ) * index;
                         }
 
                         ++face_vertex_count;
@@ -1313,7 +1313,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
             model->meshes[i].faces = ( ApolloMeshFace* ) malloc ( sizeof ( ApolloMeshFace ) * mesh_face_count );
             model->meshes[i].face_count = mesh_face_count;
 
-            for ( size_t j = 0; j < mesh_face_count; ++j ) {
+            for ( size_t j = 0; j < ( size_t ) mesh_face_count; ++j ) {
                 model->meshes[i].faces[j].a = indices[mesh_index_base + j * 3];
                 model->meshes[i].faces[j].b = indices[mesh_index_base + j * 3 + 1];
                 model->meshes[i].faces[j].c = indices[mesh_index_base + j * 3 + 2];
@@ -1328,7 +1328,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
             ApolloFloat3 min = vertices[indices[mesh_index_base]].pos;
             ApolloFloat3 max = vertices[indices[mesh_index_base]].pos;
 
-            for ( int j = 1; j < mesh_index_count; ++j ) {
+            for ( int j = 1; j < ( int ) mesh_index_count; ++j ) {
                 ApolloFloat3 pos = vertices[indices[mesh_index_base + j]].pos;
 
                 if ( pos.x < min.x ) {
@@ -1496,7 +1496,7 @@ uint64_t apollo_index_hash ( ApolloIndex key ) {
     return key;
 }
 
-ApolloIndex* apollo_index_table_get_item ( const ApolloIndexTable* table, uint32_t hash ) {
+ApolloIndex* apollo_index_table_get_item ( const ApolloIndexTable* table, uint64_t hash ) {
     return table->items + ( hash & table->access_mask );
 }
 
@@ -1527,7 +1527,7 @@ void apollo_index_table_resize ( ApolloIndexTable* table, size_t new_capacity ) 
 
     for ( ApolloIndex* old_item = old_items; old_item != old_items + old_capacity; ++old_item ) {
         if ( *old_item != 0 ) { // is used
-            uint32_t hash = apollo_index_hash ( *old_item );
+            uint64_t hash = apollo_index_hash ( *old_item );
             ApolloIndex* new_item = apollo_index_table_get_item ( table, hash );
 
             while ( *new_item != 0 ) { // find an unused slot
@@ -1547,7 +1547,7 @@ void apollo_index_table_insert ( ApolloIndexTable* table, ApolloIndex item ) {
     }
 
     if ( item != 0 ) {
-        uint32_t hash = apollo_index_hash ( item );
+        uint64_t hash = apollo_index_hash ( item );
         ApolloIndex* dest = apollo_index_table_get_item ( table, hash );
 
         while ( *dest != 0 ) { // find an unused slot
@@ -1564,7 +1564,7 @@ void apollo_index_table_insert ( ApolloIndexTable* table, ApolloIndex item ) {
 
 bool apollo_index_table_lookup ( ApolloIndexTable* table, ApolloIndex item ) {
     if ( item != 0 ) {
-        uint32_t hash = apollo_index_hash ( item );
+        uint64_t hash = apollo_index_hash ( item );
         ApolloIndex* slot = apollo_index_table_get_item ( table, hash );
 
         while ( *slot != 0 && *slot != item ) { // find an unused slot or the item we're looking for
@@ -1800,7 +1800,7 @@ void apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table ) {
     table->items = NULL;
 }
 
-ApolloAdjacencyTableItem* apollo_adjacency_table_get_item ( ApolloAdjacencyTable* table, uint32_t hash ) {
+ApolloAdjacencyTableItem* apollo_adjacency_table_get_item ( ApolloAdjacencyTable* table, uint64_t hash ) {
     return table->items + ( hash & table->access_mask );
 }
 
@@ -1829,7 +1829,7 @@ void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, size_t new_cap
     table->capacity = new_capacity;
 
     for ( ApolloAdjacencyTableItem* old_item = old_items; old_item != old_items + old_capacity; ++old_item ) {
-        uint32_t hash = apollo_index_hash ( old_item->key );
+        uint64_t hash = apollo_index_hash ( old_item->key );
         ApolloAdjacencyTableItem* new_item = apollo_adjacency_table_get_item ( table, hash );
 
         while ( new_item->key != 0 ) {
@@ -1848,7 +1848,7 @@ ApolloAdjacencyTableItem* apollo_adjacency_table_insert ( ApolloAdjacencyTable* 
     }
 
     if ( key != 0 ) {
-        uint32_t hash = apollo_index_hash ( key );
+        uint64_t hash = apollo_index_hash ( key );
         ApolloAdjacencyTableItem* item = apollo_adjacency_table_get_item ( table, hash );
 
         while ( item->key != 0 ) {
@@ -1868,7 +1868,7 @@ ApolloAdjacencyTableItem* apollo_adjacency_table_insert ( ApolloAdjacencyTable* 
 
 ApolloAdjacencyTableItem* apollo_adjacency_table_lookup ( ApolloAdjacencyTable* table, ApolloIndex key ) {
     if ( key != 0 ) {
-        uint32_t hash = apollo_index_hash ( key );
+        uint64_t hash = apollo_index_hash ( key );
         ApolloAdjacencyTableItem* item = apollo_adjacency_table_get_item ( table, hash );
 
         while ( item->key != 0 && item->key != key ) {

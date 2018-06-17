@@ -178,7 +178,7 @@ bool Scene::load ( const char* filename ) {
     _scene = terra_scene_create();
     uint64_t n_triangles = 0;
 
-    for ( int m = 0; m < _models.mesh_count; ++m ) {
+    for ( size_t m = 0; m < _models.mesh_count; ++m ) {
         size_t object_idx = terra_scene_count_objects ( _scene );
         TerraObject* object = terra_scene_add_object ( _scene, _models.meshes[m].face_count );
 
@@ -186,7 +186,7 @@ bool Scene::load ( const char* filename ) {
         // Reading geometry
         //
 
-        for ( int i = 0; i < object->triangles_count; ++i ) {
+        for ( size_t i = 0; i < object->triangles_count; ++i ) {
             const ApolloMeshFace* apollo_face = &_models.meshes[m].faces[i];
             object->triangles[i].b           = * ( TerraFloat3* ) &_models.vertices[apollo_face->b].pos;
             object->triangles[i].a           = * ( TerraFloat3* ) &_models.vertices[apollo_face->a].pos;
@@ -434,7 +434,7 @@ ApolloMaterial* Scene::_find_material ( TerraPrimitiveRef ref ) {
         return nullptr;
     }
 
-    _materials + res->second;
+    return _materials + res->second;
 }
 
 bool Scene::_set_opt_safe ( int opt, const void* data ) {
