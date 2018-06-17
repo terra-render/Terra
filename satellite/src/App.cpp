@@ -447,5 +447,5 @@ success:
 
 
 void App::_boot() {
-    _c_load ( { "../scenes/cornell-box/cornell-box-glossy.obj" } );
+    _c_load ( { "../scenes/debug/textures/floor.obj" } );
 }

@@ -23,7 +23,7 @@ typedef enum {
     APOLLO_ERROR
 } ApolloResult;
 
-#define APOLLO_PATH                 1024
+#define APOLLO_PATH                 4096
 #define APOLLO_TARGET_VERTEX_COUNT  (1 << 18)
 #define APOLLO_TARGET_INDEX_COUNT   (1 << 18)
 #define APOLLO_TARGET_MESH_COUNT    128
@@ -205,7 +205,7 @@ ApolloFloat3        apollo_f3_set           ( float x, float y, float z );
 size_t              apollo_find_texture     ( const ApolloTexture* textures, const char* texture_name );
 size_t              apollo_find_material    ( const ApolloMaterial* materials, const char* mat_name );
 
-ApolloResult        apollo_read_texture     ( FILE* file, ApolloTexture* textures, size_t* idx_out );
+ApolloResult        apollo_read_texture     ( FILE* file, ApolloTexture** textures, size_t* idx_out, const char* base );
 bool                apollo_read_float2      ( FILE* file, ApolloFloat2* val );
 bool                apollo_read_float3      ( FILE* file, ApolloFloat3* val );
 
@@ -217,7 +217,7 @@ typedef struct {
     char            filename[APOLLO_PATH];
 } ApolloMaterialLib;
 
-ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures );
+ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture** textures, const char* base );
 
 // Tables are used to speed up model load times
 typedef struct {
@@ -390,25 +390,41 @@ void apollo_textures_free ( ApolloTexture* textures ) {
 //--------------------------------------------------------------------------------------------------
 // File parsing routines
 //--------------------------------------------------------------------------------------------------
-ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* idx_out ) {
+ApolloResult apollo_read_texture ( FILE* file, ApolloTexture** textures, size_t* idx_out, const char* base_dir ) {
     char map_name[APOLLO_PATH];
 
     if ( fscanf ( file, "%s", map_name ) != 1 ) {
         return APOLLO_INVALID_FORMAT;
     }
 
-    size_t idx = apollo_find_texture ( textures, map_name );
+    size_t idx = apollo_find_texture ( *textures, map_name );
 
     if ( idx == SIZE_MAX ) {
         size_t name_len = strlen ( map_name );
         ApolloTexture texture;
         strncpy ( texture.path, map_name, 256 );
 
+        char abspath[APOLLO_PATH + 1] = "";
+        size_t base_dir_len = strlen ( base_dir );
+
+        assert ( base_dir_len < APOLLO_PATH );
+        strcat ( abspath, base_dir );
+
+        char* p = abspath + base_dir_len - 1;
+
+        if ( *p != '/' && *p != '\\' ) {
+            * ( ++p  ) = '/';
+            * ( p + 1 ) = '\0';
+        }
+
+        strcat ( ++p, map_name );
+
+
         if ( name_len >= 4 && strcmp ( map_name + name_len - 5, ".hdr" ) == 0 ) {
-            texture.data = stbi_loadf ( map_name, &texture.width, &texture.height, &texture.channels, 0 );
+            texture.data = stbi_loadf ( abspath, &texture.width, &texture.height, &texture.channels, 0 );
             texture.type = APOLLO_TEXTURE_TYPE_FLOAT32;
         } else {
-            texture.data = stbi_load ( map_name, &texture.width, &texture.height, &texture.channels, 0 );
+            texture.data = stbi_load ( abspath, &texture.width, &texture.height, &texture.channels, 0 );
             texture.type = APOLLO_TEXTURE_TYPE_UINT8;
         }
 
@@ -417,8 +433,8 @@ ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* 
             return APOLLO_FILE_NOT_FOUND;
         }
 
-        idx = sb_count ( textures );
-        sb_push ( textures, texture );
+        idx = sb_count ( *textures );
+        sb_push ( *textures, texture );
     }
 
     *idx_out = idx;
@@ -454,6 +470,7 @@ bool apollo_read_float3 ( FILE* file, ApolloFloat3* val ) {
 // Material
 //--------------------------------------------------------------------------------------------------
 void apollo_material_clear ( ApolloMaterial* mat ) {
+    memset ( mat, 0, sizeof ( ApolloMaterial ) );
     mat->bump_map_id         = APOLLO_INVALID_TEXTURE;
     mat->diffuse_map_id      = APOLLO_INVALID_TEXTURE;
     mat->disp_map_id         = APOLLO_INVALID_TEXTURE;
@@ -466,7 +483,7 @@ void apollo_material_clear ( ApolloMaterial* mat ) {
     mat->name[0]             = '\0';
 }
 
-ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures ) {
+ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture** textures, const char* base ) {
     FILE* file = NULL;
     file = fopen ( filename, "r" );
 
@@ -481,7 +498,17 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
 
     while ( fscanf ( file, "%s", key ) != EOF ) {
         // New material tag
-        if ( strcmp ( key, "mat" ) == 0 || strcmp ( key, "newmtl" ) == 0 ) {
+        if ( *key == '#' ) {
+            const char* k = key;
+
+            while ( * ( k ++ ) != '\0' );
+
+            if ( * ( k - 1 ) == '\n' ) {
+                continue;
+            }
+
+            while ( fgetc ( file ) != '\n' );
+        } else if ( strcmp ( key, "mat" ) == 0 || strcmp ( key, "newmtl" ) == 0 ) {
             char mat_name[32];
 
             if ( fscanf ( file, "%s", mat_name ) != 1 ) {
@@ -520,7 +547,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             sb_last ( materials ).diffuse = Kd;
         } else if ( strcmp ( key, "map_Kd" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).diffuse_map_id = idx;
@@ -541,7 +568,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             sb_last ( materials ).specular = Kd;
         } else if ( strcmp ( key, "map_Ks" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).specular_map_id = idx;
@@ -564,7 +591,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         // Bump mapping
         else if ( strcmp ( key, "bump" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).bump_map_id = idx;
@@ -586,7 +613,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Pr" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).roughness_map_id = idx;
@@ -609,7 +636,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Pm" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).metallic_map_id = idx;
@@ -632,7 +659,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Ke" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).emissive_map_id = idx;
@@ -645,7 +672,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         // Normal map
         else if ( strcmp ( key, "normal" ) == 0 ) {
             size_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, textures, &idx, base );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).normal_map_id = idx;
@@ -729,6 +756,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         ++dir_end;
         base_dir_len = dir_end - filename;
         strncpy ( base_dir, filename, base_dir_len );
+        base_dir[base_dir_len] = '\0';
     }
 
     // Temporary tables
@@ -738,7 +766,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
     // Temporary buffers
     ApolloMaterial* materials = *_materials;
-    ApolloTexture*  textures = *_textures;
     ApolloFloat3*   vertex_pos = NULL;
     ApolloFloat2*   tex_coords = NULL;
     ApolloFloat3*   normals = NULL;
@@ -803,7 +830,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 size_t idx = apollo_find_material_lib ( material_libs, lib_name );
 
                 if ( idx == SIZE_MAX ) {
-                    result = apollo_open_material_lib ( lib_name, sb_add ( material_libs, 1 ), textures );
+                    result = apollo_open_material_lib ( lib_name, sb_add ( material_libs, 1 ), _textures, base_dir );
 
                     if ( result != APOLLO_SUCCESS ) {
                         goto error;
@@ -1408,7 +1435,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     }
 
     *_materials = materials;
-    *_textures = textures;
     apollo_vertex_table_destroy ( &vtable );
     apollo_adjacency_table_destroy ( &atable );
     apollo_index_table_destroy ( &itable );

@@ -219,8 +219,7 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
     TerraFloat2 tb = terra_mulf2 ( &properties->texcoord_b, uv.x );
     TerraFloat2 tc = terra_mulf2 ( &properties->texcoord_a, 1 - uv.x - uv.y );
     TerraFloat2 texcoord = terra_addf2 ( &ta, &tb );
-    texcoord = terra_addf2 ( &texcoord, &tc );
-    texcoord = texcoord;
+    surface->uv = terra_addf2 ( &texcoord, &tc );
 
     // Evaluating bsdf attributes
     for ( size_t i = 0; i < material->bsdf.attrs_count; ++i ) {
@@ -234,7 +233,6 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
 }
 
 //--------------------------------------------------------------------------------------------------
-
 HTerraScene terra_scene_create() {
     TerraScene* scene = ( TerraScene* ) terra_malloc ( sizeof ( TerraScene ) );
     memset ( scene, 0, sizeof ( TerraScene ) );
@@ -565,11 +563,15 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         TerraFloat3 wi = material->bsdf.sample ( &surface, e0, e1, e2, &wo );
         float       bsdf_pdf = terra_maxf ( material->bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
         float       light_pdf = 0.f;
+
         // BSDF Contribution
         TerraFloat3 bsdf_radiance = material->bsdf.eval ( &surface, &wi, &wo );
         float       bsdf_weight = bsdf_pdf * bsdf_pdf / ( light_pdf * light_pdf + bsdf_pdf * bsdf_pdf );
         TerraFloat3 bsdf_contribution = terra_mulf3 ( &bsdf_radiance, bsdf_weight / bsdf_pdf );
         throughput = terra_pointf3 ( &throughput, &bsdf_contribution );
+
+        return bsdf_radiance;
+
         // Russian roulette
         float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
         float e3 = 0.5f;

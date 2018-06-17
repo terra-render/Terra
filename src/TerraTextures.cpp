@@ -7,6 +7,8 @@
 // libc
 #include <string.h> // memset
 
+#include "../satellite/src/stb_image_write.h"
+
 // TODO: Might want to cache these ?
 int terra_mimaps_count ( const TerraTexture* texture ) {
     return 0;
@@ -20,14 +22,45 @@ TerraMap terra_map_create_mip ( uint16_t w, uint16_t h, const TerraMap* src ) {
     return *src;
 }
 
-TerraMap terra_map_create_mip0 ( const TerraTexture* texture, const void* data ) {
-    size_t size = 4 * texture->depth * texture->width * texture->height;
+// Padding to 4 components, subsequent mips just downscale
+TerraMap terra_map_create_mip0 ( size_t width, size_t height, size_t components, size_t depth, const void* data ) {
+    TERRA_ASSERT ( depth == 1 || depth == 4 );
+
+    size_t size = 4 * depth * width * height;
 
     TerraMap map;
-    map.width = texture->width;
-    map.height = texture->height;
+    map.width  = ( uint16_t ) width;
+    map.height = ( uint16_t ) height;
     map.data.p = ( uint8_t* ) terra_malloc ( size );
-    memcpy ( map.data.p, data, size );
+
+    if ( depth == 1 ) {
+        uint8_t*       w = map.data.p;
+        const uint8_t* r = ( const uint8_t* ) data;
+
+        for ( size_t i = 0; i < width * height; ++i ) {
+            int c = 0;
+
+            // Copying
+            while ( c++ < ( int ) components ) {
+                * ( w++ ) = * ( r++ );
+            }
+
+            // Padding
+            c = 5 - c;
+
+            while ( c-- > 0 ) {
+                * ( w++ ) = * ( r - components );
+            }
+        }
+    }
+
+    if ( depth == 4 ) {
+        for ( size_t i = 0; i < width * height; ++i ) {
+
+        }
+    }
+
+    stbi_write_png ( "example.png", map.width, map.height, 4, map.data.p, map.width );
 
     return map;
 }
@@ -43,6 +76,7 @@ void terra_map_destroy ( TerraMap* map ) {
 bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t width, size_t height, size_t depth, size_t components, size_t sampler, TerraTextureAddress address ) {
     TERRA_ASSERT ( texture && data );
     TERRA_ASSERT ( width > 0 && height > 0 && components > 0 );
+    TERRA_ASSERT ( width < ( uint16_t ) - 1 && height < ( uint16_t ) - 1 );
 
     // TODO: Convert texture coordinates at finalize()
 
@@ -76,7 +110,7 @@ bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t 
     TERRA_ZEROMEM_ARRAY ( texture->mipmaps, n_mipmaps );
 
     // Generating mipmaps
-    texture->mipmaps[0] = terra_map_create_mip0 ( texture, data );
+    texture->mipmaps[0] = terra_map_create_mip0 ( width, height, components, depth, data );
 
     TerraMap* last_mip = texture->mipmaps;
     uint16_t  w = texture->width >> 1;
@@ -166,41 +200,66 @@ TerraFloat3 terra_map_read_texel_fp ( const TerraMap* map, size_t idx ) {
 }
 
 typedef TerraFloat3 ( *texel_read_fn ) ( const TerraMap*, size_t );
+static texel_read_fn texel_read_fns[] = {
+    &terra_map_read_texel,
+    &terra_map_read_texel_fp
+};
+
 TerraFloat3 terra_texture_read_texel ( const TerraTexture* texture, int mip, uint16_t x, uint16_t y ) {
     TERRA_ASSERT ( texture->depth == 1 || texture->depth == 4 ); // Rethink the addressing otherwise
 
-    texel_read_fn fns[] = {
-        &terra_map_read_texel,
-        &terra_map_read_texel_fp
-    };
-
     x = terra_mini ( x, texture->width - 1 );
     y = terra_mini ( y, texture->height - 1 );
-    size_t lin_idx = y % texture->height + x;
+    size_t lin_idx = y * texture->width + x;
     const TerraMap* map = texture->mipmaps + mip;
-    return fns[texture->depth / 4] ( map, lin_idx ); // .. Almost (:
+    return texel_read_fns[texture->depth / 4] ( map, lin_idx ); // .. Almost (:
 }
 
-uint16_t terra_texture_texel_int ( float coord, uint16_t dim ) {
-    return ( uint16_t ) ( coord - .5f ) * dim;
+float terra_texture_address_wrap ( float v ) {
+    return v < 0.f ? fmod ( -v, 1.f ) : ( v > 1.f ? fmod ( v, 1.f ) : v );
+}
+
+float terra_texture_address_mirror ( float v ) {
+    return v < 0.f ? 1.f - fmod ( -v, 1.f ) : ( v > 1.f ? 1.f - fmod ( v, 1.f ) : v );
+}
+
+float terra_texture_address_clamp ( float v ) {
+    return v < 0.f ? 0.f : ( v > 1.f ? 1.f : v );
+}
+
+typedef float ( *terra_texture_address_fn ) ( float );
+static terra_texture_address_fn address_fns[] = {
+    terra_texture_address_wrap,
+    terra_texture_address_mirror,
+    terra_texture_address_clamp,
+};
+
+void terra_texture_texel_int ( const TerraTexture* texture, const TerraFloat2* uv, uint16_t* x, uint16_t* y ) {
+    const float w = ( float ) texture->width;
+    const float h = ( float ) texture->height;
+    const float iw = 1.f / w;
+    const float ih = 1.f / h;
+
+    const float rx = uv->x - .5f * iw;
+    const float ry = uv->y - .5f * ih;
+
+    *x = ( uint16_t ) ( address_fns[texture->address] ( rx ) * w );
+    *y = ( uint16_t ) ( address_fns[texture->address] ( ry ) * h );
 }
 
 TerraFloat3 terra_texture_sample_mip_nearest ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
     const float iw = 1.f / texture->width;
     const float ih = 1.f / texture->height; // Maybe cache ?
-    uint16_t x = terra_texture_texel_int ( uv->x * iw, texture->width );
-    uint16_t y = terra_texture_texel_int ( uv->y * ih, texture->height );
+    uint16_t x, y;
+    terra_texture_texel_int ( texture, uv, &x, &y );
     return terra_texture_read_texel ( texture, mip, x, y );
 }
 
-TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
-    const float iw = 1.f / texture->width;
-    const float ih = 1.f / texture->height; // Maybe cache ?
-    const float sx = uv->x * iw;
-    const float sy = uv->y * ih;
+TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int mip, const TerraFloat2* _uv ) {
+    TerraFloat2 uv = terra_f2_set ( _uv->x * texture->width, _uv->y * texture->height );
 
-    uint16_t x1 = terra_texture_texel_int ( sx - .5f, texture->width );
-    uint16_t y1 = terra_texture_texel_int ( sy - .5f, texture->height );
+    uint16_t x1, y1;
+    terra_texture_texel_int ( texture, _uv, &x1, &y1 );
 
     uint16_t x2 = x1 + 1;
     uint16_t y2 = y1;
@@ -216,10 +275,10 @@ TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int
     TerraFloat3 t3 = terra_texture_read_texel ( texture, mip, x3, y3 );
     TerraFloat3 t4 = terra_texture_read_texel ( texture, mip, x4, y4 );
 
-    float ix;
-    float iy;
-    float w_u = modff ( uv->x, &ix );
-    float w_v = modff ( uv->y, &iy );
+    float ix = floorf ( uv.x );
+    float iy = floorf ( uv.y );
+    float w_u = uv.x - ix;
+    float w_v = uv.y - iy;
     float w_ou = 1.f - w_u;
     float w_ov = 1.f - w_v;
 
@@ -231,13 +290,13 @@ TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int
 }
 
 typedef TerraFloat3 ( *texture_sample_fn ) ( const TerraTexture* texture, int mip, const TerraFloat2* uv );
-TerraFloat3 terra_texture_sample_mip ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
-    texture_sample_fn fns[] = {
-        terra_texture_sample_mip_bilinear,
-        terra_texture_sample_mip_nearest
-    };
+static texture_sample_fn sample_fns[] = {
+    terra_texture_sample_mip_nearest,
+    terra_texture_sample_mip_bilinear
+};
 
-    return fns[texture->sampler & 0x1] ( texture, mip, uv );
+TerraFloat3 terra_texture_sample_mip ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
+    return sample_fns[texture->sampler & 0x1] ( texture, mip, uv );
 }
 
 TERRA_TEXTURE_SAMPLER ( mip0 ) {

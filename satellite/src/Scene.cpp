@@ -23,8 +23,8 @@ using namespace std;
 
 namespace {
     constexpr float       CAMERA_FOV = 60.f;
-    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.7f, 2.f };
-    constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, -1.f };
+    constexpr TerraFloat3 CAMERA_POS = { 2.f, 2.f, 2.f };
+    constexpr TerraFloat3 CAMERA_DIR = { -1.f, -1.f, -1.f };
     constexpr TerraFloat3 CAMERA_UP  = { 0.f, 1.f, 0.f };
 
     constexpr TerraFloat3 ENVMAP_COLOR = { 0.4f, 0.52f, 1.f };
@@ -231,6 +231,8 @@ bool Scene::load ( const char* filename ) {
         }
 
         switch ( material.bsdf ) {
+#if 0
+
             case APOLLO_SPECULAR: {
                 TerraAttribute albedo, specular_color, specular_intensity;
                 READ_ATTR ( albedo, material.diffuse, textures );
@@ -242,6 +244,8 @@ bool Scene::load ( const char* filename ) {
                 terra_bsdf_phong_init ( &object->material.bsdf );
                 break;
             }
+
+#endif
 
             default:
             case APOLLO_MIRROR:
