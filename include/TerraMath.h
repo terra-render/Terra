@@ -1,43 +1,47 @@
 #ifndef _TERRA_MATH_H_
 #define _TERRA_MATH_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
 //--------------------------------------------------------------------------------------------------
-#define terra_PI 3.1416926535f
-#define terra_PI2 6.283185307f
-#define terra_Epsilon 0.0001f
+#define TERRA_PI 3.1416926535f
+#define TERRA_2PI 6.283185307f
+#define TERRA_EPS (float)1e-5
 
 // 2D vector
-typedef struct TerraFloat2 {
+typedef struct {
     float x, y;
 } TerraFloat2;
 
 // 3D vector
-typedef struct TerraFloat3 {
+typedef struct {
     float x, y, z;
 } TerraFloat3;
 
 // 4D vector
-typedef struct TerraFloat4 {
+typedef struct {
     float x, y, z, w;
 } TerraFloat4;
 
 // Matrix
-typedef struct TerraFloat4x4 {
+typedef struct {
     TerraFloat4 rows[4];
 } TerraFloat4x4;
 
 // Ray
-typedef struct TerraRay {
+typedef struct {
     TerraFloat3 origin;
     TerraFloat3 direction;
     TerraFloat3 inv_direction;
 } TerraRay;
 
-typedef struct TerraAABB {
+typedef struct {
     TerraFloat3 min;
     TerraFloat3 max;
 } TerraAABB;
@@ -80,7 +84,13 @@ static inline bool        terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float       terra_lerp ( float a, float b, float t );
 static inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, float t );
 static inline float       terra_absf ( float a );
-static inline uint64_t    terra_next_pow2 ( uint64_t val );
+static inline float       terra_radians ( float degrees );
+static inline uint64_t    terra_next_pow2sq ( uint64_t v );
+static inline float       terra_radical_inverse ( uint64_t base, uint64_t a );
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #include "TerraMath.inl"

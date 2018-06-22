@@ -132,9 +132,6 @@
     <ClInclude Include="..\..\src\TerraKDTree.h">
       <Filter>Terra\Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\TerraPrivate.h">
-      <Filter>Terra\Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\dependencies\gl3w\include\GL\gl3w.h">
       <Filter>Internal Dependencies\gl3w</Filter>
     </ClInclude>
@@ -143,6 +140,9 @@
     </ClInclude>
     <ClInclude Include="..\include\stb_image.h">
       <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\TerraPrivate.h">
+      <Filter>Terra\Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -249,6 +249,9 @@
       <Filter>Internal Dependencies\gl3w</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\TerraTextures.cpp">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraSamplers.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
   </ItemGroup>

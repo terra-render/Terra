@@ -194,9 +194,6 @@ void App::_init_ui() {
 }
 
 void App::_register_commands() {
-    //
-    // help
-    //
     _c_help = [this] ( const CommandArgs & args ) -> int {
         Log::console ( "Available commands. Enter command name for more information." );
 
@@ -206,9 +203,12 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
-    // load
-    //
+
+    _c_clear = [this] ( const CommandArgs & args ) -> int {
+        _console.clear();
+        return 0;
+    };
+
     _c_load = [ this ] ( const CommandArgs & args ) -> int {
         char name[256];
 
@@ -245,21 +245,13 @@ void App::_register_commands() {
         }
 
         _render_camera = _scene.default_camera();
-        _visualizer.info().scene = _scene.name();
 
         return 0;
     };
 
-    //
-    // step
-    //
     _c_step = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.step ( &_render_camera, _scene.construct_terra_scene(),
         [ = ]() {
-            _visualizer.info().sampling = Scene::from_terra_sampling ( _renderer.options().sampling_method );
-            _visualizer.info().accelerator = Scene::from_terra_accelerator ( _renderer.options().accelerator );
-            _visualizer.info().spp = ( int ) _renderer.options().samples_per_pixel;
-
             if ( !_renderer.is_progressive() ) {
                 _visualizer.set_texture_data ( _renderer.framebuffer() );
             }
@@ -278,9 +270,7 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
-    // loop
-    //
+
     _c_loop = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.loop ( &_render_camera, _scene.construct_terra_scene(),
         [ = ]() {
@@ -302,17 +292,16 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
-    // pause
-    //
+
+    _c_tonemap = [this] ( const CommandArgs & args ) -> int {
+        return 1;
+    };
+
     _c_pause = [ this ] ( const CommandArgs & args ) -> int {
         _renderer.pause_at_next_step();
         return 0;
     };
-    //
-    // save
-    // TODO: Eventually add support for multiple outputs
-    //
+
     _c_save = [ this ] ( const CommandArgs & args ) -> int {
         if ( args.size() < 1 ) {
             Log::console ( "<path>" );
@@ -324,32 +313,7 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
-    // toggle
-    //
-    _c_toggle = [this] ( const CommandArgs & args ) -> int {
-        string usage = MULTILINE ( R"(
-            [console|info|stats])" );
 
-        if ( args.size() < 1 ) {
-            Log::console ( usage.c_str() );
-            return 0;
-        }
-
-        if ( args[0].compare ( "console" ) == 0 ) {
-            _console.toggle();
-        } else if ( args[0].compare ( "info" ) == 0 ) {
-            _visualizer.toggle_info();
-        } else {
-            Log::console ( "Unrecognized toggle" );
-            return 1;
-        }
-
-        return 0;
-    };
-    //
-    // option
-    //
     _c_option = [ this ] ( const CommandArgs & args ) -> int {
         string usage = MULTILINE ( R"(
             list               - List all available options
@@ -401,9 +365,7 @@ void App::_register_commands() {
 success:
         return 0;
     };
-    //
-    // resize
-    //
+
     _c_resize = [ this ] ( const CommandArgs & args ) -> int {
         if ( args.size() < 2 ) {
             Log::console ( "<width> <height>" );
@@ -425,10 +387,17 @@ success:
 
         return 0;
     };
-    _c_clear = [this] ( const CommandArgs & args ) -> int {
-        _console.clear();
+
+    _c_debug = [this] ( const CommandArgs & args ) -> int {
+        if ( args.size() < 1 ) {
+            Log::console ( "<view_name>" );
+            return 1;
+        }
+
+        _visualizer.toggle_debug_view ( args[0].c_str() );
         return 0;
     };
+
     _c_map["clear"]  = _c_clear;
     _c_map["help"]   = _c_help;
     _c_map["load"]   = _c_load;
@@ -436,7 +405,6 @@ success:
     _c_map["loop"]   = _c_loop;
     _c_map["pause"]  = _c_pause;
     _c_map["save"]   = _c_save;
-    _c_map["toggle"] = _c_toggle;
     _c_map["option"] = _c_option;
     _c_map["opt"]    = _c_option;
     _c_map["resize"] = _c_resize;
@@ -444,6 +412,7 @@ success:
         _console.toggle();
         return 0;
     };
+    _c_map["debug"] = _c_debug;
 }
 
 

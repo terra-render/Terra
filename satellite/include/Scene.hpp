@@ -24,12 +24,12 @@
 //
 class Scene {
   public:
-    static TerraTonemappingOperator to_terra_tonemap ( std::string& str );
-    static TerraAccelerator         to_terra_accelerator ( std::string& str );
-    static TerraSamplingMethod      to_terra_sampling ( std::string& str );
-    static const char*              from_terra_tonemap ( TerraTonemappingOperator v );
-    static const char*              from_terra_accelerator ( TerraAccelerator v );
-    static const char*              from_terra_sampling ( TerraSamplingMethod v );
+    static TerraTonemapOp      to_terra_tonemap       ( std::string& str );
+    static TerraAccelerator    to_terra_accelerator   ( std::string& str );
+    static TerraSamplingMethod to_terra_sampling      ( std::string& str );
+    static const char*         from_terra_tonemap     ( TerraTonemapOp v );
+    static const char*         from_terra_accelerator ( TerraAccelerator v );
+    static const char*         from_terra_sampling    ( TerraSamplingMethod v );
 
   public:
     Scene();
@@ -85,6 +85,7 @@ class Scene {
     HTerraScene       _scene;
     TerraSceneOptions _opts;
     bool              _first_load = true;
+    TerraTonemapOp    _tonemap_op;
 
     ApolloMaterial* _materials;
     ApolloTexture*  _textures;

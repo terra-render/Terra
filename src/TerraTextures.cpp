@@ -7,22 +7,33 @@
 // libc
 #include <string.h> // memset
 
-#include "../satellite/src/stb_image_write.h"
-
-// TODO: Might want to cache these ?
-int terra_mimaps_count ( const TerraTexture* texture ) {
+/*
+    Returns the number of mipmap levels for a wxh texture.
+    Not required to be a power of two.
+*/
+int terra_mimaps_count ( uint16_t w, uint16_t h ) {
     return 0;
 }
 
-int terra_ripmaps_count ( const TerraTexture* texture ) {
+/*
+    Returns the number of anisotropically scaled mipmaps for a
+    wxh texture. Not required to be a power of two.
+*/
+int terra_ripmaps_count ( uint16_t w, uint16_t h ) {
     return 0;
 }
 
+/*
+    Generates the consecutive mip level from the previous one.
+*/
 TerraMap terra_map_create_mip ( uint16_t w, uint16_t h, const TerraMap* src ) {
     return *src;
 }
 
-// Padding to 4 components, subsequent mips just downscale
+/*
+    Creates the first miplevel from the input texture. It linearizes the pixel
+    values and pads to 4 components, regardless of input format.
+*/
 TerraMap terra_map_create_mip0 ( size_t width, size_t height, size_t components, size_t depth, const void* data ) {
     TERRA_ASSERT ( depth == 1 || depth == 4 );
 
@@ -31,10 +42,10 @@ TerraMap terra_map_create_mip0 ( size_t width, size_t height, size_t components,
     TerraMap map;
     map.width  = ( uint16_t ) width;
     map.height = ( uint16_t ) height;
-    map.data.p = ( uint8_t* ) terra_malloc ( size );
+    map.data   = terra_malloc ( size );
 
     if ( depth == 1 ) {
-        uint8_t*       w = map.data.p;
+        uint8_t*       w = ( uint8_t* ) map.data;
         const uint8_t* r = ( const uint8_t* ) data;
 
         for ( size_t i = 0; i < width * height; ++i ) {
@@ -60,25 +71,29 @@ TerraMap terra_map_create_mip0 ( size_t width, size_t height, size_t components,
         }
     }
 
-    stbi_write_png ( "example.png", map.width, map.height, 4, map.data.p, map.width );
-
     return map;
 }
 
+/*
+    Releases memory.
+*/
 void terra_map_destroy ( TerraMap* map ) {
-    if ( map->data.p != nullptr ) {
-        terra_free ( map->data.p );
+    if ( map->data != nullptr ) {
+        terra_free ( map->data );
     }
 
     TERRA_ZEROMEM ( map );
 }
 
+/*
+    Actual texture creation routine. The public API should be used to generate
+    textures.
+    <depth> should either be 1 for RGBA8_UNORM or 4 for RGBA32_FLOAT formats.
+*/
 bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t width, size_t height, size_t depth, size_t components, size_t sampler, TerraTextureAddress address ) {
     TERRA_ASSERT ( texture && data );
     TERRA_ASSERT ( width > 0 && height > 0 && components > 0 );
     TERRA_ASSERT ( width < ( uint16_t ) - 1 && height < ( uint16_t ) - 1 );
-
-    // TODO: Convert texture coordinates at finalize()
 
     // Initializing
     if ( sampler & kTerraSamplerAnisotropic ) {
@@ -132,42 +147,11 @@ bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t 
     return true; // ?
 }
 
-bool terra_texture_create ( TerraTexture* texture, const uint8_t* data, size_t width, size_t height, size_t components, size_t sampler, TerraTextureAddress address ) {
-    return terra_texture_create_any ( texture, data, width, height, 1, components, sampler, address );
-}
-
-bool terra_texture_create_fp ( TerraTexture* texture, const float* data, size_t width, size_t height, size_t components, size_t sampler, TerraTextureAddress address ) {
-    return terra_texture_create_any ( texture, data, width, height, 4, components, sampler, address );
-}
-
-void terra_texture_destroy ( TerraTexture* texture ) {
-    if ( !texture ) {
-        return;
-    }
-
-    if ( texture->sampler & kTerraSamplerTrilinear ) {
-        size_t n_mipmaps = 1 + terra_mimaps_count ( texture );
-
-        for ( size_t i = 1; i < n_mipmaps; ++i ) {
-            terra_map_destroy ( texture->mipmaps + i );
-        }
-    }
-
-    TERRA_ASSERT ( texture->mipmaps );
-    terra_map_destroy ( texture->mipmaps );
-    free ( texture->mipmaps ); // mip0 should be preset
-
-    if ( texture->ripmaps ) {
-        size_t n_ripmaps = terra_ripmaps_count ( texture );
-
-        for ( size_t i = 0; i < n_ripmaps; ++i ) {
-            terra_map_destroy ( texture->ripmaps + i );
-        }
-
-        free ( texture->ripmaps );
-    }
-}
-
+/*
+    Returns the attribute evaluation routine associated with the sampler. This avoids some
+    of the branching in the textures code, but some dynamic dispatches are still performed for
+    other attributes.
+*/
 TerraAttributeEval terra_texture_sampler ( const TerraTexture* texture ) {
     if ( texture->sampler & kTerraSamplerSpherical ) {
         return terra_texture_sampler_spherical;
@@ -184,10 +168,13 @@ TerraAttributeEval terra_texture_sampler ( const TerraTexture* texture ) {
     return terra_texture_sampler_mip0;
 }
 
-// TODO: sse2 this
+/*
+    Reads a texel from a RGBA8_UNORM texture
+    TODO: SSE2
+*/
 TerraFloat3 terra_map_read_texel ( const TerraMap* map, size_t idx ) {
     const float scale = 1.f / 255;
-    uint8_t* addr = map->data.p + idx * 4;
+    uint8_t* addr = ( uint8_t* ) map->data + idx * 4;
     TerraFloat3 ret;
     ret.x = ( ( float ) * addr ) * scale;
     ret.y = ( ( float ) * addr ) * scale;
@@ -195,16 +182,24 @@ TerraFloat3 terra_map_read_texel ( const TerraMap* map, size_t idx ) {
     return ret;
 }
 
+/*
+    Reads a texel form a RGBA32_FLOAT texture
+    TODO: SSE2
+*/
 TerraFloat3 terra_map_read_texel_fp ( const TerraMap* map, size_t idx ) {
-    return terra_f3_ptr ( map->data.fp + idx * 4 );
+    return terra_f3_ptr ( ( float* ) map->data + idx * 4 );
 }
 
+// Dispatching
 typedef TerraFloat3 ( *texel_read_fn ) ( const TerraMap*, size_t );
 static texel_read_fn texel_read_fns[] = {
     &terra_map_read_texel,
     &terra_map_read_texel_fp
 };
 
+/*
+    Pixel coordinates to pixel value.
+*/
 TerraFloat3 terra_texture_read_texel ( const TerraTexture* texture, int mip, uint16_t x, uint16_t y ) {
     TERRA_ASSERT ( texture->depth == 1 || texture->depth == 4 ); // Rethink the addressing otherwise
 
@@ -234,6 +229,10 @@ static terra_texture_address_fn address_fns[] = {
     terra_texture_address_clamp,
 };
 
+/*
+    Converts the real \in [0 1] uv coordinate to the pixel equivalent.
+    It centers the pixel and processes out of range addresses.
+*/
 void terra_texture_texel_int ( const TerraTexture* texture, const TerraFloat2* uv, uint16_t* x, uint16_t* y ) {
     const float w = ( float ) texture->width;
     const float h = ( float ) texture->height;
@@ -247,6 +246,9 @@ void terra_texture_texel_int ( const TerraTexture* texture, const TerraFloat2* u
     *y = ( uint16_t ) ( address_fns[texture->address] ( ry ) * h );
 }
 
+/*
+    Nearest filter
+*/
 TerraFloat3 terra_texture_sample_mip_nearest ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
     const float iw = 1.f / texture->width;
     const float ih = 1.f / texture->height; // Maybe cache ?
@@ -255,6 +257,9 @@ TerraFloat3 terra_texture_sample_mip_nearest ( const TerraTexture* texture, int 
     return terra_texture_read_texel ( texture, mip, x, y );
 }
 
+/*
+    Bilinear filter
+*/
 TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int mip, const TerraFloat2* _uv ) {
     TerraFloat2 uv = terra_f2_set ( _uv->x * texture->width, _uv->y * texture->height );
 
@@ -289,28 +294,44 @@ TerraFloat3 terra_texture_sample_mip_bilinear ( const TerraTexture* texture, int
     return sample;
 }
 
+// Dispatch
 typedef TerraFloat3 ( *texture_sample_fn ) ( const TerraTexture* texture, int mip, const TerraFloat2* uv );
 static texture_sample_fn sample_fns[] = {
     terra_texture_sample_mip_nearest,
     terra_texture_sample_mip_bilinear
 };
 
+/*
+    Samples a specific miplevel at <u v>
+*/
 TerraFloat3 terra_texture_sample_mip ( const TerraTexture* texture, int mip, const TerraFloat2* uv ) {
     return sample_fns[texture->sampler & 0x1] ( texture, mip, uv );
 }
 
+/*
+
+*/
 TERRA_TEXTURE_SAMPLER ( mip0 ) {
     return terra_texture_sample_mip ( ( TerraTexture* ) state, 0, ( const TerraFloat2* ) addr );
 }
 
+/*
+
+*/
 TERRA_TEXTURE_SAMPLER ( mipmaps ) {
     return terra_f3_set ( 1.f, 1.f, 1.f );
 }
 
+/*
+
+*/
 TERRA_TEXTURE_SAMPLER ( anisotropic ) {
     return terra_f3_set ( 1.f, 1.f, 1.f );
 }
 
+/*
+
+*/
 TERRA_TEXTURE_SAMPLER ( spherical ) {
     return terra_f3_set ( 1.f, 1.f, 1.f );
 }

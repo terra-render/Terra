@@ -227,6 +227,7 @@ namespace Config {
         add_opt ( RENDER_TONEMAP,       "linear",       "tonemap",      "Tonemapping operator [none|linear|reinhard|filmic|uncharted2]" );
         add_opt ( RENDER_ACCELERATOR,   "bvh",          "accelerator",  "Intersection acceleration structure [bvh|kdtree]" );
         add_opt ( RENDER_SAMPLING,      "random",       "sampling",     "Sampling mode [random|stratified|halton]" );
+
         //
         // Configuration file
         // each line is split at the first = into <name>=<value>
@@ -236,7 +237,7 @@ namespace Config {
         ifstream config_fs;
 
         if ( !find_config_file ( config_fs ) ) {
-            Log::info ( STR ( "No configuration file loaded." ) );
+            Log::warning ( STR ( "No configuration file loaded." ) );
             return true;
         }
 
@@ -294,6 +295,8 @@ namespace Config {
                     assert ( false );
             }
         }
+
+        Log::verbose ( STR ( "Loaded configuration file" ) );
 
         dump();
         return true;

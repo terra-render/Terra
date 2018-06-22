@@ -1,6 +1,9 @@
 // Header
 #include "TerraKDTree.h"
 
+// Terra
+#include "TerraPrivate.h"
+
 // libc
 #include <string.h>
 

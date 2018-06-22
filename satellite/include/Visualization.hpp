@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <map>
+#include <functional>
 
 // Satellite
 #include <Graphics.hpp>
@@ -15,36 +16,28 @@
 //
 class Visualizer {
   public:
-    // Information panel
-    // just the useful bits
-    struct Info {
-        std::string scene;
-        int         spp;
-        std::string accelerator;
-        std::string sampling;
-    };
-
-  public:
     void init ( GFXLayer gfx );
 
     void set_texture_data ( const TextureData& data );
     void update_tile ( const TextureData& data, size_t x, size_t y, size_t w, size_t h );
-
     void save_to_file ( const char* path );
 
-    void toggle_info();
+    // The different views are not hardcoded as they are used for debugging Terra
+    // internals and often edited.
+    void toggle_debug_view ( const char* name );
 
+    // Draws the framebuffer and debug views
     void draw();
-
-    Info&  info();
 
   private:
     GFXLayer _gfx;
 
-    Info         _info;
     TextureData  _texture;
     int          _gl_format;
     unsigned int _gl_texture;
 
     bool         _hide_info;
+
+    using DebugView = void ( * ) ( bool );
+    std::vector<DebugView> _dbg_views;
 };

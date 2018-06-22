@@ -59,15 +59,15 @@ namespace {
 // -1 for invalid
 //
 #define TRY_COMPARE_S(s, v, ret) if (strcmp((s), (v)) == 0) { return ret; }
-TerraTonemappingOperator Scene::to_terra_tonemap ( string& str ) {
+TerraTonemapOp Scene::to_terra_tonemap ( string& str ) {
     transform ( str.begin(), str.end(), str.begin(), ::tolower );
     const char* s = str.data();
-    TRY_COMPARE_S ( s, "none", kTerraTonemappingOperatorNone );
-    TRY_COMPARE_S ( s, "linear", kTerraTonemappingOperatorLinear );
-    TRY_COMPARE_S ( s, "reinhard", kTerraTonemappingOperatorReinhard );
-    TRY_COMPARE_S ( s, "filmic", kTerraTonemappingOperatorFilmic );
-    TRY_COMPARE_S ( s, "uncharted2", kTerraTonemappingOperatorUncharted2 );
-    return ( TerraTonemappingOperator ) - 1;
+    TRY_COMPARE_S ( s, "linear", kTerraTonemapOpLinear );
+    TRY_COMPARE_S ( s, "srgb", kTerraTonemapOpSRGB );
+    TRY_COMPARE_S ( s, "reinhard", kTerraTonemapOpReinhard );
+    TRY_COMPARE_S ( s, "filmic2", kTerraTonemapOpFilmic2 );
+    TRY_COMPARE_S ( s, "insomniac", kTerraTonemapOpInsomniac );
+    return ( TerraTonemapOp ) - 1;
 }
 
 TerraAccelerator Scene::to_terra_accelerator ( string& str ) {
@@ -81,13 +81,14 @@ TerraAccelerator Scene::to_terra_accelerator ( string& str ) {
 TerraSamplingMethod Scene::to_terra_sampling ( string& str ) {
     transform ( str.begin(), str.end(), str.begin(), ::tolower );
     const char* s = str.data();
-    TRY_COMPARE_S ( s, "random", kTerraSamplingMethodRandom );
-    TRY_COMPARE_S ( s, "stratified", kTerraSamplingMethodStratified );
-    TRY_COMPARE_S ( s, "halton", kTerraSamplingMethodHalton );
+    TRY_COMPARE_S ( s, "random", kTerraSamplerRandom );
+    TRY_COMPARE_S ( s, "stratified", kTerraSamplerStratified );
+    TRY_COMPARE_S ( s, "halton", kTerraSamplerHalton );
+    TRY_COMPARE_S ( s, "hammersley", kTerraSamplerHammersley );
     return ( TerraSamplingMethod ) - 1;
 }
 
-const char* Scene::from_terra_tonemap ( TerraTonemappingOperator v ) {
+const char* Scene::from_terra_tonemap ( TerraTonemapOp v ) {
     const char* names[] = {
         "none",
         "linear",
@@ -95,13 +96,7 @@ const char* Scene::from_terra_tonemap ( TerraTonemappingOperator v ) {
         "filmic",
         "uncharted2"
     };
-    int idx = ( int ) v - ( int ) kTerraTonemappingOperatorNone;
-
-    if ( idx >= 0 && idx < 5 ) {
-        return names[idx];
-    }
-
-    return nullptr;
+    return names[ ( size_t ) v];
 }
 
 const char* Scene::from_terra_accelerator ( TerraAccelerator v ) {
@@ -124,7 +119,7 @@ const char* Scene::from_terra_sampling ( TerraSamplingMethod v ) {
         "stratified",
         "halton"
     };
-    int idx = ( int ) v - ( int ) kTerraSamplingMethodRandom;
+    int idx = ( int ) v - ( int ) kTerraSamplerRandom;
 
     if ( idx >= 0 && idx < 3 ) {
         return names[idx];
@@ -295,13 +290,13 @@ void Scene::reset_options() {
     string tonemap_str     = Config::read_s ( Config::RENDER_TONEMAP );
     string accelerator_str = Config::read_s ( Config::RENDER_ACCELERATOR );
     string sampling_str    = Config::read_s ( Config::RENDER_SAMPLING );
-    TerraTonemappingOperator tonemap = Scene::to_terra_tonemap ( tonemap_str );
+    TerraTonemapOp tonemap = Scene::to_terra_tonemap ( tonemap_str );
     TerraAccelerator accelerator     = Scene::to_terra_accelerator ( accelerator_str );
     TerraSamplingMethod sampling     = Scene::to_terra_sampling ( sampling_str );
 
     if ( tonemap == -1 ) {
-        Log::error ( FMT ( "Invalid configuration RENDER_TONEMAP value %s. Defaulting to none.", tonemap_str.c_str() ) );
-        tonemap = kTerraTonemappingOperatorNone;
+        Log::error ( FMT ( "Invalid configuration RENDER_TONEMAP value %s. Defaulting to linear.", tonemap_str.c_str() ) );
+        tonemap = kTerraTonemapOpLinear;
     }
 
     if ( accelerator == -1 ) {
@@ -311,7 +306,7 @@ void Scene::reset_options() {
 
     if ( sampling == -1 ) {
         Log::error ( FMT ( "Invalid configuration RENDER_SAMPLING value %s. Defaulting to random.", sampling_str.c_str() ) );
-        sampling = kTerraSamplingMethodRandom;
+        sampling = kTerraSamplerRandom;
     }
 
     int bounces = Config::read_i ( Config::RENDER_MAX_BOUNCES );
@@ -341,25 +336,23 @@ void Scene::reset_options() {
 
     _opts.bounces              = bounces;
     _opts.samples_per_pixel    = samples;
-    _opts.subpixel_jitter      = 0.f; // Please remove this option and implement proper antialiasing
-    _opts.tonemapping_operator = tonemap;
     _opts.manual_exposure      = exposure;
     _opts.gamma                = gamma;
     _opts.accelerator          = accelerator;
     _opts.direct_sampling      = false;
-    _opts.strata               = 4;
     _opts.sampling_method      = sampling;
     terra_attribute_init_constant ( &_opts.environment_map, &ENVMAP_COLOR );
     _default_camera.fov       = CAMERA_FOV;
     _default_camera.position  = CAMERA_POS;
     _default_camera.direction = CAMERA_DIR;
     _default_camera.up        = CAMERA_UP;
+    _tonemap_op               = tonemap;
 }
 
 void Scene::apply_options_to_config() {
     Config::write_i ( Config::RENDER_MAX_BOUNCES, _opts.bounces );
     Config::write_i ( Config::RENDER_SAMPLES, _opts.samples_per_pixel );
-    Config::write_s ( Config::RENDER_TONEMAP, from_terra_tonemap ( _opts.tonemapping_operator ) );
+    Config::write_s ( Config::RENDER_TONEMAP, from_terra_tonemap ( _tonemap_op ) );
     Config::write_f ( Config::RENDER_EXPOSURE, _opts.manual_exposure );
     Config::write_f ( Config::RENDER_GAMMA, _opts.gamma );
     Config::write_s ( Config::RENDER_ACCELERATOR, from_terra_accelerator ( _opts.accelerator ) );
@@ -459,10 +452,10 @@ bool Scene::_set_opt_safe ( int opt, const void* data ) {
 
         case Config::RENDER_TONEMAP: {
             string s = ( const char* ) data;
-            TerraTonemappingOperator v = to_terra_tonemap ( s );
+            TerraTonemapOp v = to_terra_tonemap ( s );
 
             if ( v != -1 ) {
-                _opts.tonemapping_operator = v;
+                _tonemap_op = v;
             } else {
                 Log::error ( FMT ( "Invalid value %s for RENDER_TONEMAP", data ) );
                 return false;

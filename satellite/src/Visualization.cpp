@@ -19,6 +19,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+// Terra
+#include <TerraPrivate.h>
+
 using namespace std;
 
 namespace {
@@ -89,6 +92,10 @@ namespace {
         SetCursorPos ( text_pos );
         TextColored ( ImVec4 ( 1.f, 1.f, 1.f, 1.f ), msg );
     }
+
+    // Implemented at the bottom of the file
+    void debug_view_samplers ( bool );
+    void debug_view_aa       ( bool );
 }
 
 void Visualizer::init ( GFXLayer gfx ) {
@@ -96,9 +103,6 @@ void Visualizer::init ( GFXLayer gfx ) {
     _gl_format        = -1;
     _gl_texture       = -1;
     _hide_info        = false;
-    _info.spp         = -1;
-    _info.accelerator = "n/a";
-    _info.sampling    = "n/a";
     _texture.width    = 0;
     _texture.height   = 0;
 }
@@ -323,8 +327,32 @@ void Visualizer::save_to_file ( const char* path ) {
     }
 }
 
-void Visualizer::toggle_info() {
-    _hide_info = !_hide_info;
+void Visualizer::toggle_debug_view ( const char* name ) {
+    if ( strcmp ( name, "samplers" ) == 0 ) {
+        auto res = find ( _dbg_views.begin(), _dbg_views.end(), debug_view_samplers );
+
+        if ( res == _dbg_views.end() ) {
+            debug_view_samplers ( true );
+            _dbg_views.push_back ( debug_view_samplers );
+        } else {
+            _dbg_views.erase ( _dbg_views.begin() + distance ( _dbg_views.begin(), res ) );
+        }
+    }
+
+    else if ( strcmp ( name, "aa" ) == 0 ) {
+        auto res = find ( _dbg_views.begin(), _dbg_views.end(), debug_view_aa );
+
+        if ( res == _dbg_views.end() ) {
+            debug_view_aa ( true );
+            _dbg_views.push_back ( debug_view_aa );
+        } else {
+            _dbg_views.erase ( _dbg_views.begin() + distance ( _dbg_views.begin(), res ) );
+        }
+    }
+
+    else {
+        assert ( false );
+    }
 }
 
 void Visualizer::draw() {
@@ -346,25 +374,91 @@ void Visualizer::draw() {
     if ( _texture.data != nullptr ) {
         Image ( ( ImTextureID& ) _gl_texture, screen_size );
     } else {
-        const char* msg = "        render something!\nPress ` ( backtick ) to open console";
+        const char* msg = "        render something!\nPress ` ( backtick ) to toggle console";
         im_text_aligned ( ImAlign::Middle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, -20.f ) );
-    }
-
-    if ( ! _info.scene.empty() ) {
-        if ( !_hide_info ) {
-            constexpr int INFO_BUF_LEN = 1024;
-            char info_buf[INFO_BUF_LEN]; // I would keep it static to give text limit
-            string spp = _info.spp != -1 ? to_string ( _info.spp ) : "n/a";
-            snprintf ( info_buf, INFO_BUF_LEN, "%s\nspp: %s\naccelerator: %s\nsampling: %s\nresolution: %dx%d", _info.scene.c_str(), spp.c_str(), _info.accelerator.c_str(), _info.sampling.c_str(), _texture.width, _texture.height );
-            im_text_aligned ( ImAlign::TopLeft, info_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ) );
-        }
     }
 
     End();
     PopStyleVar ( 2 );
     PopStyleColor ( 1 );
+
+    for ( const auto& view : _dbg_views ) {
+        view ( false );
+    }
 }
 
-Visualizer::Info& Visualizer::info() {
-    return _info;
+//
+// Debug views
+//
+namespace {
+    void debug_view_samplers ( bool init ) {
+        using namespace ImGui;
+        static bool open = true;
+
+        constexpr size_t n_samples = 256;
+        static TerraFloat2 patterns[kTerraAAPatternCount][n_samples];
+        static const char* names[] = {
+            "random", "stratified", "halton", "hammersley", "grid", "poisson"
+        };
+
+        if ( init ) {
+            TerraSamplerRandom rng;
+            terra_sampler_random_init ( &rng );
+
+            terra_pattern_random ( patterns[0], n_samples, &rng );
+            terra_pattern_stratified ( patterns[1], n_samples, &rng );
+            terra_pattern_halton ( patterns[2], n_samples, &rng );
+            terra_pattern_hammersley ( patterns[3], n_samples, &rng );
+            terra_pattern_grid ( patterns[4], n_samples, &rng );
+            terra_pattern_poisson ( patterns[5], n_samples, &rng );
+
+            for ( size_t i = 0; i < kTerraAAPatternCount; ++i ) {
+                Log::info ( FMT ( "Pattern %s" ), names[i] );
+
+                for ( size_t s = 0; s < n_samples; ++s ) {
+                    Log::info ( FMT ( "Sample %.4f %.4f", patterns[i][s].x, patterns[i][s].y ) );
+                }
+            }
+        }
+
+        auto draw_pattern = [n_samples ] ( int i ) {
+            const float size = 200.f;
+            const float w = GetWindowWidth();
+            const int n_col = ( int ) w / size;
+            int row = i / n_col;
+            int col = i % n_col;
+            auto ori = GetWindowPos();
+            ImVec2 loc ( ori.x +  size * col, ori.y + ( size + 50.f ) * row );
+            GetWindowDrawList()->AddRectFilled ( loc,  ImVec2 ( loc.x + size, loc.y + size ), ImColor ( 255, 255, 255 ) );
+
+            for ( size_t s = 0; s < n_samples; ++s ) {
+                const float point_size = .5f * ( ( float ) n_samples  / size );
+                TerraFloat2 sample = patterns[i][s];
+                GetWindowDrawList()->AddCircleFilled ( ImVec2 ( loc.x + sample.x * size, loc.y + sample.y * size ), point_size, ImColor ( 0, 0, 0 ) );
+            }
+
+            GetWindowDrawList()->AddText ( ImVec2 ( loc.x + size * .5f, loc.y + size ), ImColor ( 255, 255, 255 ), names[i] );
+        };
+
+        SetNextWindowPos ( ImVec2 ( 0, 0 ) );
+        SetNextWindowSize ( ImVec2 ( 1000, 280 ) );
+        Begin ( "Samplers" );
+
+        draw_pattern ( 0 );
+        draw_pattern ( 1 );
+        draw_pattern ( 2 );
+        draw_pattern ( 3 );
+        draw_pattern ( 4 );
+
+        End();
+    }
+
+    void debug_view_aa ( bool init ) {
+        using namespace ImGui;
+
+        Begin ( "Antialiasing" );
+
+
+        End();
+    }
 }

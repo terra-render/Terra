@@ -182,3 +182,37 @@ inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, fl
 inline float terra_absf ( float a ) {
     return a >= 0 ? a : -a;
 }
+
+inline float terra_radians ( float degrees ) {
+    return degrees * TERRA_PI / 180.f;
+}
+
+/*
+    Returns the square root of the next power of two squared from v
+    of v if v is a power of 2 squared
+*/
+inline uint64_t terra_next_pow2sq ( uint64_t v ) {
+    uint64_t expected = 1;
+
+    while ( expected * expected < v ) {
+        ++expected;
+    }
+
+    return expected;
+}
+
+inline float terra_radical_inverse ( uint64_t base, uint64_t a ) {
+    float inv_base = 1.f / base;
+    uint64_t seq = 0;
+    float denom = 1;
+
+    while ( a ) {
+        uint64_t next = a / base;
+        uint64_t digit = a - next * base;
+        seq = seq * base + digit;
+        denom *= inv_base;
+        a = next;
+    }
+
+    return terra_minf ( seq * denom, 1.f - TERRA_EPS );
+}

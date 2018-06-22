@@ -46,14 +46,16 @@ class App {
     // Callbacks
     using CommandMap = std::map<std::string, CommandCallback>;
     CommandMap      _c_map;
-    CommandCallback _c_clear;
+
     CommandCallback _c_help;
+    CommandCallback _c_clear;
     CommandCallback _c_load;
     CommandCallback _c_step;
     CommandCallback _c_loop;
+    CommandCallback _c_tonemap;
     CommandCallback _c_pause;
-    CommandCallback _c_toggle;
     CommandCallback _c_save;
     CommandCallback _c_option;
     CommandCallback _c_resize;
+    CommandCallback _c_debug;
 };

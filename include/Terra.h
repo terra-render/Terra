@@ -1,10 +1,6 @@
 #ifndef _TERRA_H_
 #define _TERRA_H_
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // std
 #include <math.h>
 #include <stdlib.h>
@@ -17,9 +13,35 @@ extern "C" {
 // Terra
 #include "TerraMath.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 //
 // Public data structures
 //
+
+// Built-in terra attributes. Used for ior, emissive, normal map, bumpmap, ..
+// Indices are defined in TerraPrivate.h, but the routines are public
+#define TERRA_MATERIAL_ATTRIBUTES 4
+
+// Maximum number of material parameters usable by TerraBSDF.
+// Each BSDF defines its own indices, see TerraPresets.h for examples
+#ifndef TERRA_BSDF_MAX_ATTRIBUTES
+#define TERRA_BSDF_MAX_ATTRIBUTES 8
+#endif
+
+//
+// Shading context information used by the BSDF routines ( no need to include TerraPrivate.h)
+// It's compiled and attributes are evaluated after detecting the collision
+typedef struct { // Forward declarable
+    TerraFloat4x4 rot;
+    TerraFloat3   normal;
+    TerraFloat2   uv;
+    TerraFloat3   bsdf_attrs[TERRA_BSDF_MAX_ATTRIBUTES];
+    TerraFloat3   attrs[TERRA_MATERIAL_ATTRIBUTES];
+} TerraShadingSurface;
 
 //
 // Texture
@@ -62,16 +84,10 @@ typedef struct {
 //
 // BSDF
 //
-// Maximum number of material parameters usable by TerraBSDF.
-// Each BSDF defines its own indices, see TerraPresets.h for examples
-#ifndef TERRA_BSDF_MAX_ATTRIBUTES
-#define TERRA_BSDF_MAX_ATTRIBUTES 8
-#endif
-
 // BSDF routine entry points
-typedef TerraFloat3 ( TerraBSDFSampleRoutine ) ( const struct TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo );
-typedef float       ( TerraBSDFPdfRoutine )    ( const struct TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
-typedef TerraFloat3 ( TerraBSDFEvalRoutine )   ( const struct TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
+typedef TerraFloat3 ( TerraBSDFSampleRoutine ) ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo );
+typedef float       ( TerraBSDFPdfRoutine )    ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
+typedef TerraFloat3 ( TerraBSDFEvalRoutine )   ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo );
 
 // BSDF definition
 // See TerraPreset.h for bundled implementations
@@ -115,9 +131,6 @@ typedef union {
     };
 } TerraAttribute;
 
-// Built-in terra attributes. Used for ior, emissive, normal map, bumpmap, ..
-// Indices are defined in TerraPrivate.h, but the routines are public
-#define TERRA_MATERIAL_ATTRIBUTES 4
 
 // Material definition.
 // The definition is public for easier storage, but routines are present for
@@ -130,7 +143,7 @@ typedef union {
 //                         terra_material_attr_bump_map(TerraMaterial*, TerraAttribute*)
 //                         terra_material_attr_normal_map(TerraMaterial*, TerraAttribute*)
 //                         ..
-// See the public API below for the update list of terra_material_attr_*
+// See the public API below for the updated list of available `terra_material_attr_*`
 typedef struct {
     TerraBSDF      bsdf;
     TerraAttribute bsdf_attrs[TERRA_BSDF_MAX_ATTRIBUTES];
@@ -170,14 +183,15 @@ typedef struct {
 //
 // Rendering options
 //
-//
+// Dynamic range compression algorithm used by `terra_tonemap`.
+// For comparisons and more operators, see https://github.com/tizian/tonemapper
 typedef enum {
-    kTerraTonemappingOperatorNone,
-    kTerraTonemappingOperatorLinear,
-    kTerraTonemappingOperatorReinhard,
-    kTerraTonemappingOperatorFilmic,
-    kTerraTonemappingOperatorUncharted2
-} TerraTonemappingOperator;
+    kTerraTonemapOpLinear,    // Pixel values remain in linear space
+    kTerraTonemapOpSRGB,      // Conversion to SRGB. ICC Profile http://color.org/chardata/rgb/sRGB.pdf
+    kTerraTonemapOpReinhard,  // Global Reinhard operator without autoregion dodging/burning http://www.cmap.polytechnique.fr/%7Epeyre/cours/x2005signal/hdr_photographic.pdf
+    kTerraTonemapOpFilmic2,   // Graham Aldridge's extension to Naughty's dog filmic operator http://iwasbeingirony.blogspot.com/2010/04/approximating-film-with-tonemapping.html
+    kTerraTonemapOpInsomniac  // http://d3cw3dd2w32x2b.cloudfront.net/wp-content/uploads/2012/09/an-efficient-and-user-friendly-tone-mapping-operator.pdf
+} TerraTonemapOp;
 
 //
 // Collision detection
@@ -187,12 +201,13 @@ typedef enum {
 } TerraAccelerator;
 
 //
-// Sampling methods to be used at first bounce
+// Sampling method to be used for the hemisphere on first bounce
 //
 typedef enum {
-    kTerraSamplingMethodRandom,
-    kTerraSamplingMethodStratified,
-    kTerraSamplingMethodHalton
+    kTerraSamplerRandom,
+    kTerraSamplerStratified,
+    kTerraSamplerHalton,
+    kTerraSamplerHammersley,
 } TerraSamplingMethod;
 
 //
@@ -206,59 +221,44 @@ typedef enum {
 typedef enum {
     kTerraAAPatternNone,            // Every ray passes through the pixel's center
     kTerraAAPatternRandom,          // Randomly generated samples
-    kTerraAAPatternLowDiscrepancy,  // Sample points are generated from a low discrepancy (halton) sequence
+    kTerraAAPatternStratified,      // Random sample in grid cell region
+    kTerraAAPatternHalton,          // Sample points are generated from a low discrepancy seq
+    kTerraAAPatternHammerseley,     // Sample points are generated from a low discrepancy seq
     kTerraAAPatternGrid,            // (Ordered grid) Uniformly distributed samples
-    kTerraAAPatternPoissonDisc,     // Minimal low-frequency samples
+    kTerraAAPatternPoissonDisc,     // Random low-frequency samples
+    kTerraAAPatternCount
 } TerraAAPattern;
 
 //
 // `TerraAAFlags` enables extra control over the samples
 typedef enum {
     kTerraDefault    = 0,     // Samples are uniformely weighted (box filter)
-    kTerraAAWeighted = 1,     // Weights samples using gaussian filter
-    kTerraAAAdaptive = 1 << 1 // Adapts sample patterns to pixel subregions with higher variance. Does not change the total number of samples.
+    kTerraAAWeighted = 1,     // Weights samples with a normalized gaussian kernel
+    kTerraAAAdaptive = 1 << 1 // Adapts sample patterns to pixel subregions with higher variance. Does not adjust the number of samples.
 } TerraAAFlags;
 
 //
 // Rendering options for a single scene.
 // Options are finalized at `terra_scene_commit`. Subsequent edits won't affect
-// the rendering.
+// the rendering until another commit is done.
 // See the respective types and functions for documentation and usage.
 typedef struct {
-    TerraTonemappingOperator tonemapping_operator;
-
-    TerraAccelerator         accelerator;
-    TerraSamplingMethod      sampling_method;
-
-    TerraAAPattern          antialiasing_pattern;
-    TerraAAFlags            antialiasing_flags;
-
-    TerraAttribute          environment_map;
-
-
-    bool    direct_sampling;
-
-    float   subpixel_jitter;
-    size_t  samples_per_pixel;
-    size_t  bounces;
-    size_t  strata;
-
-    float   manual_exposure;
-    float   gamma;
+    TerraAccelerator    accelerator;
+    TerraSamplingMethod sampling_method;
+    TerraAAPattern      antialiasing_pattern;
+    TerraAAFlags        antialiasing_flags;
+    TerraAttribute      environment_map;
+    size_t              samples_per_pixel;
+    size_t              bounces;
+    float               manual_exposure;
+    float               gamma;
+    bool                direct_sampling;
 } TerraSceneOptions;
 
 typedef struct {
     uint32_t object_idx : 8;
     uint32_t triangle_idx : 24;
 } TerraPrimitiveRef;
-
-// scene
-typedef struct {
-    TerraFloat3 center;
-    float       radius;
-    TerraAABB   aabb;
-    float       emissive;
-} TerraLight;
 
 typedef struct {
     TerraFloat3 position;
@@ -281,50 +281,47 @@ typedef struct {
 
 //--------------------------------------------------------------------------------------------------
 // Terra public API
+// Documentation and implementation can be found in Terra.c
 //--------------------------------------------------------------------------------------------------
 typedef void*   HTerraScene;
 
+// Rendering
+void                terra_render                    ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
+void                terra_tonemap                   ( TerraFloat3* pixels, TerraTonemapOp op );
+bool                terra_pick                      ( TerraPrimitiveRef* prim, const TerraCamera* camera, HTerraScene scene, size_t x, size_t y, size_t width, size_t height );
+
+// Scene
 HTerraScene         terra_scene_create              ();
-TerraObject*         terra_scene_add_object          ( HTerraScene scene, size_t triangle_count );
+TerraObject*        terra_scene_add_object          ( HTerraScene scene, size_t triangle_count );
 size_t              terra_scene_count_objects       ( HTerraScene scene );
 void                terra_scene_commit              ( HTerraScene scene );
 void                terra_scene_clear               ( HTerraScene scene );
-TerraSceneOptions*   terra_scene_get_options         ( HTerraScene scene );
+TerraSceneOptions*  terra_scene_get_options         ( HTerraScene scene );
 void                terra_scene_destroy             ( HTerraScene scene );
-TerraObject*         terra_scene_object              ( HTerraScene scene, uint32_t object_idx ) ;
+TerraObject*        terra_scene_object              ( HTerraScene scene, uint32_t object_idx ) ;
 
+// Framebuffer
 bool                terra_framebuffer_create        ( TerraFramebuffer* framebuffer, size_t width, size_t height );
 void                terra_framebuffer_clear         ( TerraFramebuffer* framebuffer, const TerraFloat3* value );
 void                terra_framebuffer_destroy       ( TerraFramebuffer* framebuffer );
 
-bool                terra_pick                      ( TerraPrimitiveRef* prim, const TerraCamera* camera, HTerraScene scene, size_t x, size_t y, size_t width, size_t height );
-void                terra_render                    ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
-
+// Textures
 bool                terra_texture_create            ( TerraTexture* texture, const uint8_t* data, size_t width, size_t height, size_t components, size_t sampler, TerraTextureAddress address );
 bool                terra_texture_create_fp         ( TerraTexture* texture, const float* data, size_t width, size_t height, size_t components, size_t sampler, TerraTextureAddress address );
 void                terra_texture_destroy           ( TerraTexture* texture );
 
+// Attributes
 void                terra_attribute_init_constant   ( TerraAttribute* attr, const TerraFloat3* constant );
 void                terra_attribute_init_texture    ( TerraAttribute* attr, TerraTexture* texture );
 bool                terra_attribute_is_constant     ( const TerraAttribute* attr );
 
+// Materials
 void                terra_material_init             ( TerraMaterial* material );
 void                terra_material_bsdf_attr        ( TerraMaterial* material, TerraBSDFAttribute bsdf_attr, const TerraAttribute* attr );
 void                terra_material_ior              ( TerraMaterial* material, const TerraAttribute* attr );
 void                terra_material_emissive         ( TerraMaterial* material, const TerraAttribute* attr );
 void                terra_material_bump_map         ( TerraMaterial* material, const TerraAttribute* attr );
 void                terra_material_normal_map       ( TerraMaterial* material, const TerraAttribute* attr );
-
-//--------------------------------------------------------------------------------------------------
-// Terra Semi-public API (Usable from bsdf routine)
-//--------------------------------------------------------------------------------------------------
-void*               terra_malloc ( size_t size );
-void*               terra_realloc ( void* ptr, size_t size );
-void                terra_free ( void* ptr );
-void                terra_log ( const char* str, ... );
-bool                terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out );
-bool                terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out );
-void                terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle );
 
 #ifdef __cplusplus
 }
