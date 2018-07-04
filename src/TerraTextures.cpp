@@ -11,15 +11,157 @@ size_t terra_linear_index ( uint16_t x, uint16_t y, uint16_t w ) {
     return ( size_t ) ( y ) * w + x;
 }
 
+/*
+    Returns the number of mipmap levels for a wxh texture.
+*/
+size_t terra_mips_count ( uint16_t w, uint16_t h ) {
+    return 1 + floor ( log2 ( TERRA_MAX ( ( size_t ) w, ( size_t ) h ) ) );
+}
+
+/*
+    Returns the number of anisotropically scaled mipmaps for a
+    wxh texture. Does not include isotropic scaled maps.
+*/
+size_t terra_rips_count ( uint16_t w, uint16_t h ) {
+    size_t n_mips = terra_mips_count ( w, h ) - 1;
+    return n_mips * n_mips;
+}
+
+
+/*
+    Actual texture creation routine. The public API should be used to generate
+    textures.
+    <depth> should either be 1 for RGBA8_UNORM or 4 for RGBA32_FLOAT formats.
+*/
+bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t width, size_t height, size_t depth, size_t components, size_t sampler, TerraTextureAddress address ) {
+    TERRA_ASSERT ( texture && data );
+    TERRA_ASSERT ( width > 0 && height > 0 && components > 0 );
+    TERRA_ASSERT ( width < ( uint16_t ) - 1 && height < ( uint16_t ) - 1 );
+
+    // Initializing
+    if ( sampler & kTerraSamplerAnisotropic ) {
+        sampler |= kTerraSamplerTrilinear;
+    }
+
+    texture->width = ( uint16_t ) width;
+    texture->height = ( uint16_t ) height;
+    texture->sampler = ( uint8_t ) sampler;
+    texture->address = address;
+    texture->mipmaps = nullptr;
+    texture->ripmaps = nullptr;
+
+    // Calculating mip levels
+    size_t n_mipmaps = terra_texture_mips_count ( texture );
+    size_t n_ripmaps = terra_texture_rips_count ( texture );
+
+    texture->mipmaps = ( TerraMap* ) terra_malloc ( sizeof ( TerraMap ) * n_mipmaps );
+    TERRA_ZEROMEM_ARRAY ( texture->mipmaps, n_mipmaps );
+
+    texture->mipmaps[0] = terra_map_create_mip0 ( width, height, components, depth, data );
+    TERRA_ASSERT ( texture->mipmaps[0].data );
+
+    // Converting to srgb
+    if ( texture->sampler & kTerraSamplerSRGB ) {
+        terra_map_linearize_srgb ( texture->mipmaps );
+    }
+
+    // Isotropic downscaling
+    for ( size_t i = 1; i < n_mipmaps; ++i ) {
+        terra_map_init ( texture->mipmaps + i, texture->width >> i, texture->height >> i );
+        terra_map_dpid_downscale ( texture->mipmaps + i, texture->mipmaps );
+    }
+
+    // Anisotropic downscaling
+    if ( n_ripmaps > 0 ) {
+        size_t downscaled_mip_lvls = n_mipmaps - 1;
+        texture->ripmaps = ( TerraMap* ) terra_malloc ( sizeof ( TerraMap ) * n_ripmaps );
+
+        for ( size_t i = 0; i < n_ripmaps; ++i ) {
+            size_t mip_lvl_w = i % downscaled_mip_lvls;
+            size_t mip_lvl_h = i / downscaled_mip_lvls;
+
+            terra_map_init ( texture->ripmaps, texture->width >> mip_lvl_w, texture->height >> mip_lvl_h );
+            terra_map_dpid_downscale ( texture->ripmaps + i, texture->mipmaps );
+        }
+    }
+
+    return true;
+}
+
+/*
+    Returns the attribute evaluation routine associated with the sampler. This avoids some
+    of the branching in the textures code, but some dynamic dispatches are still performed for
+    other attributes.
+*/
+TerraAttributeEval terra_texture_sampler ( const TerraTexture* texture ) {
+    if ( texture->sampler & kTerraSamplerSpherical ) {
+        return terra_texture_sampler_spherical;
+    }
+
+    if ( texture->sampler & kTerraSamplerAnisotropic ) {
+        return terra_texture_sampler_anisotropic;
+    }
+
+    if ( texture->sampler & kTerraSamplerTrilinear ) {
+        return terra_texture_sampler_mipmaps;
+    }
+
+    return terra_texture_sampler_mip0;
+}
+
+size_t terra_texture_mips_count ( const TerraTexture* texture ) {
+    if ( texture->sampler & kTerraSamplerTrilinear ) {
+        return terra_mips_count ( texture->width, texture->height );
+    }
+
+    return 1;
+}
+
+size_t terra_texture_rips_count ( const TerraTexture* texture ) {
+    if ( texture->sampler & kTerraSamplerAnisotropic ) {
+        return terra_rips_count ( texture->width, texture->height );
+    }
+
+    return 0;
+}
+
+/*
+    Allocates enough memory for the specified dimensions.
+*/
+void terra_map_init ( TerraMap* map, uint16_t w, uint16_t h ) {
+    map->data = ( float* ) terra_malloc ( sizeof ( float ) * w * h * 4 );
+    map->width = w;
+    map->height = h;
+    TERRA_ASSERT ( map->data );
+
+    // Terra itself doesn't use alpha channels, but this is useful for
+    // visualization and exporting. Might consider wrapping in #ifdef
+    // (No point in setting the whole image).
+    for ( size_t i = 0; i < ( size_t ) map->width * map->height; ++i ) {
+        map->data[i * 4 + 3] = 1.f;
+    }
+}
+
+/*
+    Releases memory.
+*/
+void terra_map_destroy ( TerraMap* map ) {
+    if ( map->data != nullptr ) {
+        terra_free ( map->data );
+    }
+
+    TERRA_ZEROMEM ( map );
+}
+
 size_t terra_map_stride ( const TerraMap* map ) {
     return sizeof ( float ) * map->width * 4;
 }
 
 /*
-    Performs a discrete convolution between <src> and <kernel> and writes
-    the result in <dst>. It is performed only on the first 3 channels.
+    Performs a discrete (window size) convolution between <src> and <kernel> and
+    writes the result in <dst>. It is performed only on the first 3 channels.
     <src> and <dst> are required to have the same size, but cannot point
-    to the same object nor data.
+    to the same object.
 
     Currently a maximum kernel size of 8(x8) is supported. Lifting this is
     pretty straightforward as it's caused by the mask used to check the
@@ -85,40 +227,25 @@ void terra_map_convolution ( TerraMap* TERRA_RESTRICT dst, const TerraMap* TERRA
 }
 
 /*
-    Returns the number of mipmap levels for a wxh texture.
-    Not required to be a power of two.
+    Converts from SRGB to linear SRGB.
+    sRGB ICC Profile http://color.org/chardata/rgb/sRGB.pdf
 */
-size_t terra_mips_count ( uint16_t w, uint16_t h ) {
-    return 1 + floor ( log2 ( TERRA_MAX ( ( size_t ) w, ( size_t ) h ) ) );
-}
+void terra_map_linearize_srgb ( TerraMap* map ) {
+    TERRA_ASSERT ( map && map->data );
 
-void terra_mip_lvl_dims ( uint16_t w, uint16_t h, int lvl, uint16_t* mip_w, uint16_t* mip_h ) {
-    *mip_w = w >> lvl;
-    *mip_h = h >> lvl;
-}
+    const float line_scale = 1.f / 12.92f;
+    const float exp_scale = 1.f / 1.055f;
+    const float thr = 0.04045f;
 
-/*
-    Returns the number of anisotropically scaled mipmaps for a
-    wxh texture. Not required to be a power of two.
-*/
-size_t terra_rips_count ( uint16_t w, uint16_t h ) {
-    return 0;
-}
+    const size_t n_pixels = map->width * map->height * 4;
+    float* rw = map->data;
 
-/*
-    Allocates enough memory for the specified dimensions.
-*/
-void terra_map_init ( TerraMap* map, uint16_t w, uint16_t h ) {
-    map->data = ( float* ) terra_malloc ( sizeof ( float ) * w * h * 4 );
-    map->width = w;
-    map->height = h;
-    TERRA_ASSERT ( map->data );
+    for ( size_t i = 0; i < n_pixels; ++i ) {
+        if ( i & 3 == 0 ) {
+            continue;
+        }
 
-    // Terra itself doesn't use alpha channels, but this is useful for
-    // visualization and exporting. Might consider wrapping in #ifdef
-    // (No point in setting the whole image).
-    for ( size_t i = 0; i < ( size_t ) map->width * map->height; ++i ) {
-        map->data[i * 4 + 3] = 1.f;
+        rw[i] = rw[i] <= thr ? rw[i] * line_scale : powf ( rw[i] + 0.055f, 2.4f );
     }
 }
 
@@ -173,100 +300,6 @@ TerraMap terra_map_create_mip0 ( size_t width, size_t height, size_t components,
     }
 
     return map;
-}
-
-/*
-    Releases memory.
-*/
-void terra_map_destroy ( TerraMap* map ) {
-    if ( map->data != nullptr ) {
-        terra_free ( map->data );
-    }
-
-    TERRA_ZEROMEM ( map );
-}
-
-/*
-    Actual texture creation routine. The public API should be used to generate
-    textures.
-    <depth> should either be 1 for RGBA8_UNORM or 4 for RGBA32_FLOAT formats.
-*/
-bool terra_texture_create_any ( TerraTexture* texture, const void* data, size_t width, size_t height, size_t depth, size_t components, size_t sampler, TerraTextureAddress address ) {
-    TERRA_ASSERT ( texture && data );
-    TERRA_ASSERT ( width > 0 && height > 0 && components > 0 );
-    TERRA_ASSERT ( width < ( uint16_t ) - 1 && height < ( uint16_t ) - 1 );
-
-    // Initializing
-    if ( sampler & kTerraSamplerAnisotropic ) {
-        sampler |= kTerraSamplerTrilinear;
-    }
-
-    texture->width = ( uint16_t ) width;
-    texture->height = ( uint16_t ) height;
-    texture->sampler = ( uint8_t ) sampler;
-    texture->address = address;
-    texture->mipmaps = nullptr;
-    texture->ripmaps = nullptr;
-
-    // Calculating additional mip levels
-    size_t n_mipmaps = terra_texture_mips_count ( texture );
-    size_t n_ripmaps = terra_texture_rips_count ( texture );
-
-    texture->mipmaps = ( TerraMap* ) terra_malloc ( sizeof ( TerraMap ) * n_mipmaps );
-    TERRA_ZEROMEM_ARRAY ( texture->mipmaps, n_mipmaps );
-
-    // Generating mipmaps
-    texture->mipmaps[0] = terra_map_create_mip0 ( width, height, components, depth, data );
-
-    for ( size_t i = 1; i < n_mipmaps; ++i ) {
-        terra_map_init ( texture->mipmaps + i, texture->width >> i, texture->height >> i );
-        terra_dpid_downscale ( texture->mipmaps + i, texture->mipmaps );
-    }
-
-    // Generating ripmaps
-    /*if ( n_ripmaps > 0 ) {
-        texture->ripmaps = ( TerraMap* ) terra_malloc ( sizeof ( TerraMap ) * n_ripmaps );
-        TERRA_ZEROMEM_ARRAY ( texture->ripmaps, n_ripmaps );
-    }
-    */
-    return true; // ?
-}
-
-/*
-    Returns the attribute evaluation routine associated with the sampler. This avoids some
-    of the branching in the textures code, but some dynamic dispatches are still performed for
-    other attributes.
-*/
-TerraAttributeEval terra_texture_sampler ( const TerraTexture* texture ) {
-    if ( texture->sampler & kTerraSamplerSpherical ) {
-        return terra_texture_sampler_spherical;
-    }
-
-    if ( texture->sampler & kTerraSamplerAnisotropic ) {
-        return terra_texture_sampler_anisotropic;
-    }
-
-    if ( texture->sampler & kTerraSamplerTrilinear ) {
-        return terra_texture_sampler_mipmaps;
-    }
-
-    return terra_texture_sampler_mip0;
-}
-
-size_t terra_texture_mips_count ( const TerraTexture* texture ) {
-    if ( texture->sampler & kTerraSamplerTrilinear ) {
-        return terra_mips_count ( texture->width, texture->height );
-    }
-
-    return 1;
-}
-
-size_t terra_texture_rips_count ( const TerraTexture* texture ) {
-    if ( texture->sampler & kTerraSamplerAnisotropic ) {
-        return terra_rips_count ( texture->width, texture->height );
-    }
-
-    return 1;
 }
 
 /*
@@ -559,7 +592,7 @@ void terra_dpid_joint_bilateral_filter ( TerraMap* O, const TerraMap* I_g, const
     lambda = 0.5, 1.0, have fun
     NORM = sqrt(3) for FLOAT32_RGB
 */
-void terra_dpid_downscale ( TerraMap* O, const TerraMap* I ) {
+void terra_map_dpid_downscale ( TerraMap* O, const TerraMap* I ) {
     // Allocating guidance texture
     TerraMap I_g;
     terra_map_init ( &I_g, O->width, O->height );
