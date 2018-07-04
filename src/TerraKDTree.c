@@ -32,7 +32,7 @@ int terra_splitlist_ascending_cmpfun ( const void* a, const void* b ) {
 int terra_kdtree_add_node_pair ( TerraKDTree* tree ) {
     if ( tree->nodes_count + 2 > tree->nodes_capacity ) {
         TerraKDNode* old_buffer = tree->nodes;
-        int new_capacity = terra_maxi ( 64, tree->nodes_capacity * tree->nodes_capacity );
+        int new_capacity = TERRA_MAX ( 64, tree->nodes_capacity * tree->nodes_capacity );
         tree->nodes = terra_malloc ( sizeof ( TerraKDNode ) * new_capacity );
         memcpy ( tree->nodes, old_buffer, sizeof ( TerraKDNode ) * tree->nodes_count );
         tree->nodes_capacity = new_capacity;
@@ -63,7 +63,7 @@ void terra_kdtree_init_object_buffer ( TerraKDObjectBuffer* buffer, int num_obje
 int terra_kdtree_add_object_buffer ( TerraKDTree* tree ) {
     if ( tree->object_buffers_count + 1 > tree->object_buffers_capacity ) {
         TerraKDObjectBuffer* old_buffer = tree->object_buffers;
-        int new_capacity = terra_maxi ( 64, tree->object_buffers_capacity * tree->object_buffers_capacity );
+        int new_capacity = TERRA_MAX ( 64, tree->object_buffers_capacity * tree->object_buffers_capacity );
         tree->object_buffers = terra_malloc ( sizeof ( TerraKDObjectBuffer ) * new_capacity );
         memcpy ( tree->object_buffers, old_buffer, sizeof ( TerraKDObjectBuffer ) * tree->object_buffers_count );
         tree->object_buffers_capacity = new_capacity;

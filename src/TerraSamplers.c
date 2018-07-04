@@ -55,8 +55,8 @@ void terra_sampler2d_stratified_init ( TerraSampler2D* sampler, size_t n_samples
     for ( size_t y = 0; y < expected; ++y ) {
         for ( size_t x = 0; x < expected; ++x ) {
             size_t idx = 2 * ( y * expected + x );
-            sampler->samples[idx]     = terra_minf ( ( x + terra_sampler_random_next ( rng ) ) * inv_expected, 1.f - TERRA_EPS );
-            sampler->samples[idx + 1] = terra_minf ( ( y + terra_sampler_random_next ( rng ) ) * inv_expected, 1.f - TERRA_EPS );
+            sampler->samples[idx]     = TERRA_MIN ( ( x + terra_sampler_random_next ( rng ) ) * inv_expected, 1.f - TERRA_EPS );
+            sampler->samples[idx + 1] = TERRA_MIN ( ( y + terra_sampler_random_next ( rng ) ) * inv_expected, 1.f - TERRA_EPS );
         }
     }
 }
@@ -150,11 +150,6 @@ size_t terra_pattern_grid ( TerraFloat2* samples, size_t n_samples, TerraSampler
     return n_samples;
 }
 
-/*
-    In order to generate exactly n_samples in a fixed domain [0 1]
-    a NxN free mask is constructed
-
-*/
 size_t terra_pattern_poisson ( TerraFloat2* samples, size_t n_samples, TerraSamplerRandom* rng ) {
     if ( samples == NULL ) {
         return n_samples;

@@ -57,12 +57,12 @@ int terra_bvh_volume_compare_z ( const void* left, const void* right ) {
 }
 
 void terra_aabb_fit_aabb ( TerraAABB* aabb, const TerraAABB* other ) {
-    aabb->min.x = terra_minf ( aabb->min.x, other->min.x );
-    aabb->min.y = terra_minf ( aabb->min.y, other->min.y );
-    aabb->min.z = terra_minf ( aabb->min.z, other->min.z );
-    aabb->max.x = terra_maxf ( aabb->max.x, other->max.x ) + TERRA_EPS;
-    aabb->max.y = terra_maxf ( aabb->max.y, other->max.y ) + TERRA_EPS;
-    aabb->max.z = terra_maxf ( aabb->max.z, other->max.z ) + TERRA_EPS;
+    aabb->min.x = TERRA_MIN ( aabb->min.x, other->min.x );
+    aabb->min.y = TERRA_MIN ( aabb->min.y, other->min.y );
+    aabb->min.z = TERRA_MIN ( aabb->min.z, other->min.z );
+    aabb->max.x = TERRA_MAX ( aabb->max.x, other->max.x ) + TERRA_EPS;
+    aabb->max.y = TERRA_MAX ( aabb->max.y, other->max.y ) + TERRA_EPS;
+    aabb->max.z = TERRA_MAX ( aabb->max.z, other->max.z ) + TERRA_EPS;
 }
 
 int terra_bvh_sah_split_volumes ( TerraBVHVolume* volumes, int volumes_count, const TerraAABB* container ) {

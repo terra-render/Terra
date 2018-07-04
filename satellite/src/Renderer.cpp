@@ -285,8 +285,8 @@ void TerraRenderer::_create_jobs() {
             args->th = this;
             args->x = j * _tile_size;
             args->y = i * _tile_size;
-            args->width =  ( int ) terra_mini ( ( size_t ) ( j + 1 ) * _tile_size,  _framebuffer.width ) - j * _tile_size;
-            args->height = ( int ) terra_mini ( ( size_t ) ( i + 1 ) * _tile_size, _framebuffer.height ) - i * _tile_size;
+            args->width =  ( int ) TERRA_MIN ( ( size_t ) ( j + 1 ) * _tile_size,  _framebuffer.width ) - j * _tile_size;
+            args->height = ( int ) TERRA_MIN ( ( size_t ) ( i + 1 ) * _tile_size, _framebuffer.height ) - i * _tile_size;
         }
     }
 }

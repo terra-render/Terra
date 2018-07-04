@@ -72,13 +72,12 @@ typedef enum {
 // Destruction: terra_texture_destroy()
 // The internal data layout is not guaranteed to match the one used as initial data.
 typedef struct {
-    uint16_t          width;        // Original width in pixels
-    uint16_t          height;       // Original height in pixels
-    uint8_t           sampler;      // TerraSamplerFlags
-    uint8_t           depth    : 4; // size in bytes of each channel
-    uint8_t           address  : 4; // TerraTextureAddress
-    struct TerraMap*  mipmaps;      // Isotropic mipmaps internal data
-    struct TerraMap*  ripmaps;      // Anisotropic mipmaps internal data
+    uint16_t          width;   // Original width in pixels
+    uint16_t          height;  // Original height in pixels
+    uint8_t           sampler; // TerraSamplerFlags
+    uint8_t           address; // TerraTextureAddress
+    struct TerraMap*  mipmaps; // Isotropic mipmaps internal data
+    struct TerraMap*  ripmaps; // Anisotropic mipmaps internal data
 } TerraTexture;
 
 //

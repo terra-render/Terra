@@ -1,7 +1,19 @@
 #include "TerraMath.h"
+
+#define TERRA_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define TERRA_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define TERRA_CLAMP(v, l, h) TERRA_MAX((l), TERRA_MIN((v), (h)))
+
 //--------------------------------------------------------------------------------------------------
 // Math implementation
 //--------------------------------------------------------------------------------------------------
+inline TerraUInt2 terra_ui2_set ( uint32_t x, uint32_t y ) {
+    TerraUInt2 ret;
+    ret.x = x;
+    ret.y = y;
+    return ret;
+}
+
 inline TerraFloat2 terra_f2_set ( float x, float y ) {
     TerraFloat2 ret;
     ret.x = x;
@@ -92,6 +104,17 @@ inline TerraFloat3 terra_divf3 ( const TerraFloat3* vec, float val ) {
                vec->z / val );
 }
 
+inline TerraFloat3 terra_divf3c ( const TerraFloat3* a, const TerraFloat3* b ) {
+    return terra_f3_set (
+               a->x / b->x,
+               a->y / b->y,
+               a->z / b->z );
+}
+
+inline float terra_dotf2 ( const TerraFloat2* a, const TerraFloat2* b ) {
+    return a->x * a->x + a->y * a->y;
+}
+
 inline float terra_dotf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     return a->x * b->x + a->y * b->y + a->z * b->z;
 }
@@ -117,7 +140,7 @@ inline float terra_lenf3 ( const TerraFloat3* vec ) {
                vec->z * vec->z );
 }
 
-inline float terra_distance_squaredf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
+inline float terra_distsq ( const TerraFloat3* a, const TerraFloat3* b ) {
     TerraFloat3 delta = terra_subf3 ( b, a );
     return terra_dotf3 ( &delta, &delta );
 }
@@ -131,40 +154,10 @@ inline TerraFloat3 terra_normf3 ( const TerraFloat3* vec ) {
                vec->z / len );
 }
 
-inline float terra_maxf ( float a, float b ) {
-    return a > b ? a : b;
-}
-
-inline float terra_minf ( float a, float b ) {
-    return a < b ? a : b;
-}
-
-inline size_t terra_maxi ( size_t a, size_t b ) {
-    return a > b ? a : b;
-}
-
-inline size_t terra_mini ( size_t a, size_t b ) {
-    return a < b ? a : b;
-}
-
-inline uint16_t terra_minu16 ( uint16_t a, uint16_t b ) {
-    return a < b ? a : b;
-}
-
-inline void terra_swapf ( float* a, float* b ) {
-    float t = *a;
-    *a = *b;
-    *b = t;
-}
-
 inline TerraFloat3 terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec ) {
     return terra_f3_set ( terra_dotf3 ( ( TerraFloat3* ) &transform->rows[0], vec ),
                           terra_dotf3 ( ( TerraFloat3* ) &transform->rows[1], vec ),
                           terra_dotf3 ( ( TerraFloat3* ) &transform->rows[2], vec ) );
-}
-
-inline bool terra_f3_is_zero ( const TerraFloat3* f3 ) {
-    return f3->x == 0 && f3->y == 0 && f3->z == 0;
 }
 
 inline float terra_lerp ( float a, float b, float t ) {
@@ -214,5 +207,9 @@ inline float terra_radical_inverse ( uint64_t base, uint64_t a ) {
         a = next;
     }
 
-    return terra_minf ( seq * denom, 1.f - TERRA_EPS );
+    return TERRA_MIN ( seq * denom, 1.f - TERRA_EPS );
+}
+
+inline bool terra_is_integer ( float v ) {
+    return ( roundf ( v ) - v ) < TERRA_EPS;
 }

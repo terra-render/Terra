@@ -18,6 +18,7 @@
 // stb
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#include "stb_image.h"
 
 // Terra
 #include <TerraPrivate.h>
@@ -95,7 +96,7 @@ namespace {
 
     // Implemented at the bottom of the file
     void debug_view_samplers ( bool );
-    void debug_view_aa       ( bool );
+    void debug_view_mipmaps ( bool );
 }
 
 void Visualizer::init ( GFXLayer gfx ) {
@@ -339,12 +340,12 @@ void Visualizer::toggle_debug_view ( const char* name ) {
         }
     }
 
-    else if ( strcmp ( name, "aa" ) == 0 ) {
-        auto res = find ( _dbg_views.begin(), _dbg_views.end(), debug_view_aa );
+    else if ( strcmp ( name, "mipmaps" ) == 0 || strcmp ( name, "tex" ) == 0 ) {
+        auto res = find ( _dbg_views.begin(), _dbg_views.end(), debug_view_mipmaps );
 
         if ( res == _dbg_views.end() ) {
-            debug_view_aa ( true );
-            _dbg_views.push_back ( debug_view_aa );
+            debug_view_mipmaps ( true );
+            _dbg_views.push_back ( debug_view_mipmaps );
         } else {
             _dbg_views.erase ( _dbg_views.begin() + distance ( _dbg_views.begin(), res ) );
         }
@@ -453,11 +454,101 @@ namespace {
         End();
     }
 
-    void debug_view_aa ( bool init ) {
+    void debug_view_mipmaps ( bool init ) {
         using namespace ImGui;
 
-        Begin ( "Antialiasing" );
+        static TerraTexture         texture;
+        static vector<GLuint>       texture_mips_gl;
+        static vector<GLuint>       texture_terra_mips_gl;
 
+
+        if ( init ) {
+            int w, h, c;
+            float* data = stbi_loadf ( "../scenes/debug/textures/lena.hdr", &w, &h, &c, 4 );
+            TERRA_ASSERT ( data );
+
+            // Terra texture
+            terra_texture_create_fp ( &texture, data, w, h, 4, kTerraSamplerTrilinear, kTerraTextureAddressWrap );
+            size_t n_mipmaps = terra_texture_mips_count ( &texture );
+
+            // Generating hardware mip levels
+            GLuint texture_gl;
+            glGenTextures ( 1, &texture_gl );
+            glBindTexture ( GL_TEXTURE_2D, texture_gl );
+            glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+            glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+            glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_FLOAT, data );
+            glGenerateMipmap ( GL_TEXTURE_2D );
+            TERRA_ASSERT ( glIsTexture ( texture_gl ) );
+
+            // There has to be a nicer way to bind specific mip levels consecutively
+            // this is plain dumb (regardless of the extra copy)
+            vector<TerraFloat4> data_buf;
+            data_buf.reserve ( texture.width * texture.height );
+
+            for ( size_t i = 0; i < n_mipmaps; ++i ) {
+                size_t mip_w = texture.width >> i;
+                size_t mip_h = texture.height >> i;
+
+                data_buf.resize ( mip_w * mip_h );
+
+                glBindTexture ( GL_TEXTURE_2D, texture_gl );
+                glGetTexImage ( GL_TEXTURE_2D, i, GL_RGBA, GL_FLOAT, data_buf.data() );
+
+                GLuint mip_gl;
+                glGenTextures ( 1, &mip_gl );
+                glBindTexture ( GL_TEXTURE_2D, mip_gl );
+                glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+                glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+                glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGBA32F, mip_w, mip_h, 0, GL_RGBA, GL_FLOAT, data_buf.data() );
+                texture_mips_gl.push_back ( mip_gl );
+            }
+
+            glDeleteTextures ( 1, &texture_gl );
+
+            for ( int i = 0; i < n_mipmaps; ++i ) {
+                texture_terra_mips_gl.emplace_back();
+
+                glGenTextures ( 1, &texture_terra_mips_gl.back() );
+                glBindTexture ( GL_TEXTURE_2D, texture_terra_mips_gl.back() );
+                glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+                glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+                glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGBA32F, w >> i, h >> i, 0, GL_RGBA, GL_FLOAT, texture.mipmaps[i].data );
+                TERRA_ASSERT ( glIsTexture ( texture_terra_mips_gl.back() ) );
+            }
+
+            stbi_image_free ( data );
+        }
+
+        SetNextWindowPos ( ImVec2 ( 0, 0 ) );
+        SetNextWindowSize ( ImVec2 ( 1920, 1080 ) );
+
+        Begin ( "Mipmaps", nullptr, ImGuiWindowFlags_NoTitleBar );
+
+        Text ( "Hardware mip levels" );
+
+        for ( size_t i = 0; i < texture_mips_gl.size(); ++i ) {
+            if ( i != 0 ) {
+                SameLine();
+            }
+
+            //Text ( "Mip level %dx%d", texture.width >> i, texture.height >> i );
+            //SameLine();
+            Image ( ( ImTextureID ) texture_mips_gl[i], ImVec2 ( ( float ) ( texture.width >> i ) * 1.f, ( float ) ( texture.height >> i ) * 1.f ) );
+        }
+
+
+        Text ( "Terra mip levels" );
+
+        for ( size_t i = 0; i < texture_terra_mips_gl.size(); ++i ) {
+            //Text ( "Mip level %dx%d", texture.width >> i, texture.height >> i );
+            //SameLine();
+            if ( i != 0 ) {
+                SameLine();
+            }
+
+            Image ( ( ImTextureID ) texture_terra_mips_gl[i], ImVec2 ( ( float ) ( texture.width >> i ) * 1.f, ( float ) ( texture.height >> i ) * 1.f )  );
+        }
 
         End();
     }

@@ -108,7 +108,7 @@ App::~App() {
 }
 
 int App::run() {
-    _gfx = gfx_init ( 1600, 900, "Satellite",
+    _gfx = gfx_init ( 1920, 1080, "Satellite",
     [ = ] ( int w, int h ) { // on resize
         _on_resize ( w, h );
     },

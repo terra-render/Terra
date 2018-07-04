@@ -3,7 +3,7 @@
 
 
 TerraFloat3 terra_fresnel ( const TerraFloat3* F_0, const TerraFloat3* view, const TerraFloat3* half_vector ) {
-    float VoH = terra_maxf ( 0.f, terra_dotf3 ( view, half_vector ) );
+    float VoH = TERRA_MAX ( 0.f, terra_dotf3 ( view, half_vector ) );
     TerraFloat3 a = terra_f3_set ( 1 - F_0->x, 1 - F_0->y, 1 - F_0->z );
     a = terra_mulf3 ( &a, powf ( 1 - VoH, 5 ) );
     return terra_addf3 ( &a, F_0 );
@@ -28,7 +28,7 @@ TerraFloat3 terra_bsdf_diffuse_sample ( const TerraShadingSurface* surface, floa
     float theta = 2 * TERRA_PI * e2;
     float x = r * cosf ( theta );
     float z = r * sinf ( theta );
-    TerraFloat3 wi = terra_f3_set ( x, sqrtf ( terra_maxf ( 0.f, 1 - e1 ) ), z );
+    TerraFloat3 wi = terra_f3_set ( x, sqrtf ( TERRA_MAX ( 0.f, 1 - e1 ) ), z );
     return terra_transformf3 ( &surface->rot, &wi );
 }
 
@@ -39,7 +39,7 @@ float terra_bsdf_diffuse_pdf ( const TerraShadingSurface* surface, const TerraFl
 
 TerraFloat3 terra_bsdf_diffuse_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
     // diffuse reflectance
-    float NoL = terra_maxf ( 0.f, terra_dotf3 ( &surface->normal, wi ) );
+    float NoL = TERRA_MAX ( 0.f, terra_dotf3 ( &surface->normal, wi ) );
     return terra_mulf3 ( &surface->bsdf_attrs[TERRA_DIFFUSE_ALBEDO], NoL / TERRA_PI );
 }
 
@@ -55,10 +55,10 @@ void terra_bsdf_diffuse_init ( TerraBSDF* bsdf ) {
 // http://www.cs.princeton.edu/courses/archive/fall16/cos526/papers/importance.pdf
 //--------------------------------------------------------------------------------------------------
 void terra_bsdf_phong_calculate_ks_kd ( const TerraShadingSurface* surface, float* kd, float* ks ) {
-    float diffuse = terra_maxf ( surface->bsdf_attrs[TERRA_PHONG_ALBEDO].x +
-                                 surface->bsdf_attrs[TERRA_PHONG_ALBEDO].y +
-                                 surface->bsdf_attrs[TERRA_PHONG_ALBEDO].z,
-                                 TERRA_EPS );
+    float diffuse = TERRA_MAX ( surface->bsdf_attrs[TERRA_PHONG_ALBEDO].x +
+                                surface->bsdf_attrs[TERRA_PHONG_ALBEDO].y +
+                                surface->bsdf_attrs[TERRA_PHONG_ALBEDO].z,
+                                TERRA_EPS );
     float specular = surface->bsdf_attrs[TERRA_PHONG_SPECULAR_COLOR].x +
                      surface->bsdf_attrs[TERRA_PHONG_SPECULAR_COLOR].y +
                      surface->bsdf_attrs[TERRA_PHONG_SPECULAR_COLOR].z;

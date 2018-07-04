@@ -36,6 +36,7 @@ typedef struct TerraScene {
 #define TERRA_SCENE_PREALLOCATED_OBJECTS    64
 #define TERRA_SCENE_PREALLOCATED_LIGHTS     16
 
+const TerraFloat2 TERRA_F2_ZERO = { 0.f, 0.f };
 const TerraFloat3 TERRA_F3_ZERO = { 0.f, 0.f, 0.f };
 const TerraFloat3 TERRA_F3_ONE  = { 1.f, 1.f, 1.f };
 
@@ -49,15 +50,7 @@ const TerraFloat3 TERRA_F3_ONE  = { 1.f, 1.f, 1.f };
 void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height ) {
     TerraScene* scene = ( TerraScene* ) _scene;
     TerraClockTime t = TERRA_CLOCK();
-    TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
-    TerraFloat3 xaxis = terra_crossf3 ( &camera->up, &zaxis );
-    xaxis = terra_normf3 ( &xaxis );
-    TerraFloat3 yaxis = terra_crossf3 ( &zaxis, &xaxis );
-    TerraFloat4x4 rot;
-    rot.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
-    rot.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
-    rot.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
-    rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+    TerraRayDifferentials ray_differentials;
     size_t spp = scene->opts.samples_per_pixel;
 
     TerraSamplerRandom random_sampler;
@@ -68,9 +61,9 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
             TerraFloat3 acc = TERRA_F3_ZERO;
 
             for ( size_t s = 0; s < spp; ++s ) {
-                TerraRay ray = terra_camera_ray ( camera, j, i, framebuffer->width, framebuffer->height, &rot );
+                TerraRay ray = terra_camera_ray ( camera, j, i, framebuffer->width, framebuffer->height, &ray_differentials );
                 TerraClockTime t = TERRA_CLOCK();
-                TerraFloat3 cur = terra_trace ( scene, &ray );
+                TerraFloat3 cur = terra_trace ( scene, &ray, &ray_differentials );
                 TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, TERRA_CLOCK() - t );
                 acc = terra_addf3 ( &acc, &cur );
             }
@@ -79,8 +72,10 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
             TerraRawIntegrationResult* partial = &framebuffer->results[i * framebuffer->width + j];
             partial->acc = terra_addf3 ( &acc, &partial->acc );
             partial->samples += spp;
+
             // Calculating final radiance
             TerraFloat3 color = terra_divf3 ( &partial->acc, ( float ) partial->samples );
+
             // Manual exposure
             color = terra_mulf3 ( &color, scene->opts.manual_exposure );
 
@@ -104,9 +99,7 @@ void terra_tonemap ( TerraFloat3* pixels, TerraTonemapOp op ) {
 bool terra_pick ( TerraPrimitiveRef* ref, const TerraCamera* camera, HTerraScene _scene, size_t x, size_t y, size_t width, size_t height ) {
     TerraRay ray = terra_camera_ray ( camera, x, y, width, height, NULL );
     TerraScene* scene = ( TerraScene* ) _scene;
-
     TerraFloat3       unused;
-
     return terra_find_closest_prim ( scene, &ray, ref, &unused );
 }
 
@@ -276,7 +269,7 @@ void terra_texture_destroy ( TerraTexture* texture ) {
     }
 
     if ( texture->sampler & kTerraSamplerTrilinear ) {
-        size_t n_mipmaps = 1 + terra_mimaps_count ( texture->width, texture->height );
+        size_t n_mipmaps = 1 + terra_mips_count ( texture->width, texture->height );
 
         for ( size_t i = 1; i < n_mipmaps; ++i ) {
             terra_map_destroy ( texture->mipmaps + i );
@@ -288,7 +281,7 @@ void terra_texture_destroy ( TerraTexture* texture ) {
     free ( texture->mipmaps ); // mip0 should be preset
 
     if ( texture->ripmaps ) {
-        size_t n_ripmaps = terra_ripmaps_count ( texture->width, texture->height );
+        size_t n_ripmaps = terra_rips_count ( texture->width, texture->height );
 
         for ( size_t i = 0; i < n_ripmaps; ++i ) {
             terra_map_destroy ( texture->ripmaps + i );
@@ -407,6 +400,7 @@ void terra_ray_create ( TerraRay* ray, TerraFloat3* point, TerraFloat3* directio
 }
 
 /*
+
 */
 TerraFloat3 terra_pixel_dir ( const TerraCamera* camera, size_t x, size_t y, size_t width, size_t height ) {
     // [0:1], y points down
@@ -423,32 +417,73 @@ TerraFloat3 terra_pixel_dir ( const TerraCamera* camera, size_t x, size_t y, siz
 }
 
 /*
+    Initializes primary ray
 */
-TerraRay terra_camera_ray ( const TerraCamera* camera, size_t x, size_t y, size_t width, size_t height, const TerraFloat4x4* rot_opt ) {
+TerraRay terra_camera_ray ( const TerraCamera* camera, size_t x, size_t y, size_t width, size_t height, TerraRayDifferentials* differentials ) {
     TerraFloat3 dir = terra_pixel_dir ( camera, x, y, width, height );
 
-    if ( rot_opt == NULL ) {
-        TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
-        TerraFloat3 xaxis = terra_crossf3 ( &camera->up, &zaxis );
-        xaxis = terra_normf3 ( &xaxis );
-        TerraFloat3 yaxis = terra_crossf3 ( &zaxis, &xaxis );
-        TerraFloat4x4 rot;
-        rot.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
-        rot.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
-        rot.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
-        rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
-        dir = terra_transformf3 ( &rot, &dir );
-    } else {
-        dir = terra_transformf3 ( rot_opt, &dir );
-    }
+    // Constructing ray rotation matrix to view direction
+    TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
+    TerraFloat3 xaxis = terra_crossf3 ( &camera->up, &zaxis );
+    xaxis = terra_normf3 ( &xaxis );
+    TerraFloat3 yaxis = terra_crossf3 ( &zaxis, &xaxis );
+    TerraFloat4x4 rot;
+    rot.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
+    rot.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
+    rot.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
+    rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
 
+    // Rotating
+    dir = terra_transformf3 ( &rot, &dir );
+
+    // Initializing ray
     TerraRay ray;
     ray.origin = camera->position;
     ray.direction = terra_normf3 ( &dir );
     ray.inv_direction.x = 1.f / ray.direction.x;
     ray.inv_direction.y = 1.f / ray.direction.y;
     ray.inv_direction.z = 1.f / ray.direction.z;
+
+    // Initializing ray differentials
+    // https://graphics.stanford.edu/papers/trd/
+    //
+    // position = camera->origin
+    // direction = zaxis + x*xaxis + y*yaxis
+    // computing dposition/[dx,dy] ddirection/d[dx,dy]
+    if ( differentials ) {
+        differentials->pos_dx = TERRA_F3_ZERO;
+        differentials->pos_dy = TERRA_F3_ZERO;
+
+        const float dd = terra_dotf2 ( &ray.direction, &ray.direction );
+        const float sqrt_dd = sqrtf ( dd );
+        const float dright = terra_dotf3 ( &ray.direction, &xaxis );
+        const float dup = terra_dotf3 ( &ray.direction, &yaxis );
+        const float den = sqrt_dd * sqrt_dd * sqrt_dd;
+
+        TerraFloat3 num = terra_mulf3 ( &xaxis, dd );
+        TerraFloat3 numr = terra_mulf3 ( &ray.direction, dright );
+        num = terra_subf3 ( &num, &numr );
+        differentials->dir_dx = terra_divf3c ( &num, &den );
+
+        num = terra_mulf3 ( &yaxis, dd );
+        numr = terra_mulf3 ( &ray.direction, dup );
+        num = terra_subf3 ( &num, &numr );
+        differentials->dir_dy = terra_divf3c ( &num, &den );
+    }
+
     return ray;
+}
+
+void terra_ray_differentials_transfer ( TerraRayDifferentials* differentials ) {
+
+}
+
+void terra_ray_differentials_reflect ( TerraRayDifferentials* differentials ) {
+
+}
+
+void terra_ray_differentials_refract ( TerraRayDifferentials* differentials ) {
+
 }
 
 /*
@@ -502,18 +537,18 @@ bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle*
 bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out ) {
     float t1 = ( aabb->min.x - ray->origin.x ) * ray->inv_direction.x;
     float t2 = ( aabb->max.x - ray->origin.x ) * ray->inv_direction.x;
-    float tmin = terra_minf ( t1, t2 );
-    float tmax = terra_maxf ( t1, t2 );
+    float tmin = TERRA_MIN ( t1, t2 );
+    float tmax = TERRA_MAX ( t1, t2 );
     t1 = ( aabb->min.y - ray->origin.y ) * ray->inv_direction.y;
     t2 = ( aabb->max.y - ray->origin.y ) * ray->inv_direction.y;
-    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
-    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
+    tmin = TERRA_MAX ( tmin, TERRA_MIN ( t1, t2 ) );
+    tmax = TERRA_MIN ( tmax, TERRA_MAX ( t1, t2 ) );
     t1 = ( aabb->min.z - ray->origin.z ) * ray->inv_direction.z;
     t2 = ( aabb->max.z - ray->origin.z ) * ray->inv_direction.z;
-    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
-    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
+    tmin = TERRA_MAX ( tmin, TERRA_MIN ( t1, t2 ) );
+    tmax = TERRA_MIN ( tmax, TERRA_MAX ( t1, t2 ) );
 
-    if ( tmax > terra_maxf ( tmin, 0.f ) ) {
+    if ( tmax > TERRA_MAX ( tmin, 0.f ) ) {
         if ( tmin_out != NULL ) {
             *tmin_out = tmin;
         }
@@ -531,27 +566,27 @@ bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, f
 /*
 */
 void terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle ) {
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->a.x );
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->b.x );
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->c.x );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->a.y );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->b.y );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->c.y );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->a.z );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->b.z );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->c.z );
+    aabb->min.x = TERRA_MIN ( aabb->min.x, triangle->a.x );
+    aabb->min.x = TERRA_MIN ( aabb->min.x, triangle->b.x );
+    aabb->min.x = TERRA_MIN ( aabb->min.x, triangle->c.x );
+    aabb->min.y = TERRA_MIN ( aabb->min.y, triangle->a.y );
+    aabb->min.y = TERRA_MIN ( aabb->min.y, triangle->b.y );
+    aabb->min.y = TERRA_MIN ( aabb->min.y, triangle->c.y );
+    aabb->min.z = TERRA_MIN ( aabb->min.z, triangle->a.z );
+    aabb->min.z = TERRA_MIN ( aabb->min.z, triangle->b.z );
+    aabb->min.z = TERRA_MIN ( aabb->min.z, triangle->c.z );
     aabb->min.x -= TERRA_EPS;
     aabb->min.y -= TERRA_EPS;
     aabb->min.z -= TERRA_EPS;
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->a.x );
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->b.x );
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->c.x );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->a.y );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->b.y );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->c.y );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->a.z );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->b.z );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->c.z );
+    aabb->max.x = TERRA_MAX ( aabb->max.x, triangle->a.x );
+    aabb->max.x = TERRA_MAX ( aabb->max.x, triangle->b.x );
+    aabb->max.x = TERRA_MAX ( aabb->max.x, triangle->c.x );
+    aabb->max.y = TERRA_MAX ( aabb->max.y, triangle->a.y );
+    aabb->max.y = TERRA_MAX ( aabb->max.y, triangle->b.y );
+    aabb->max.y = TERRA_MAX ( aabb->max.y, triangle->c.y );
+    aabb->max.z = TERRA_MAX ( aabb->max.z, triangle->a.z );
+    aabb->max.z = TERRA_MAX ( aabb->max.z, triangle->b.z );
+    aabb->max.z = TERRA_MAX ( aabb->max.z, triangle->c.z );
     aabb->max.x += TERRA_EPS;
     aabb->max.y += TERRA_EPS;
     aabb->max.z += TERRA_EPS;
@@ -665,7 +700,7 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
 /*
 */
 #define _randf() (float)rand() / RAND_MAX
-TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
+TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray, TerraFloat2* differentials ) {
     TerraFloat3 Lo = TERRA_F3_ZERO;
     TerraFloat3 throughput = TERRA_F3_ONE;
     TerraRay ray = *primary_ray;
@@ -691,7 +726,7 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         float e1 = _randf();
         float e2 = _randf();
         TerraFloat3 wi = material->bsdf.sample ( &surface, e0, e1, e2, &wo );
-        float       bsdf_pdf = terra_maxf ( material->bsdf.pdf ( &surface, &wi, &wo ), TERRA_EPS );
+        float       bsdf_pdf = TERRA_MAX ( material->bsdf.pdf ( &surface, &wi, &wo ), TERRA_EPS );
         float       light_pdf = 0.f;
 
         // BSDF Contribution
@@ -700,12 +735,12 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         TerraFloat3 bsdf_contribution = terra_mulf3 ( &bsdf_radiance, bsdf_weight / bsdf_pdf );
         throughput = terra_pointf3 ( &throughput, &bsdf_contribution );
 
-        return bsdf_radiance;
-
         // Russian roulette
-        float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
+        float p = TERRA_MAX ( throughput.x, TERRA_MAX ( throughput.y, throughput.z ) );
         float e3 = 0.5f;
         e3 = ( float ) rand() / RAND_MAX;
+
+        return bsdf_radiance;
 
         if ( e3 > p ) {
             break;
