@@ -171,25 +171,26 @@ typedef struct TerraMap { // Forward declarable
     uint16_t height;
 } TerraMap;
 
+
 size_t             terra_linear_index        ( uint16_t x, uint16_t y, uint16_t w );
-size_t             terra_map_stride          ( const TerraMap* map );
-void               terra_map_convolution     ( TerraMap* dst, const TerraMap* src, const float* kernel, size_t kernel_size );
 size_t             terra_mips_count          ( uint16_t w, uint16_t h );
-void               terra_mip_lvl_dims        ( uint16_t w, uint16_t h, int lvl, uint16_t* mip_w, uint16_t* mip_h );
 size_t             terra_rips_count          ( uint16_t w, uint16_t h );
-void               terra_map_init            ( TerraMap* map, uint16_t w, uint16_t h );
-TerraMap           terra_map_create_mip0     ( size_t w, size_t h, size_t components, size_t depth, const void* data );
-void               terra_map_destroy         ( TerraMap* map );
 bool               terra_texture_create_any  ( TerraTexture* texture, const void* data, size_t width, size_t height, size_t depth, size_t components, size_t sampler, TerraTextureAddress address );
 TerraAttributeEval terra_texture_sampler     ( const TerraTexture* texture );
 size_t             terra_texture_mips_count  ( const TerraTexture* texture );
 size_t             terra_texture_rips_count  ( const TerraTexture* texture );
+void               terra_map_init            ( TerraMap* map, uint16_t w, uint16_t h );
+void               terra_map_destroy         ( TerraMap* map );
+size_t             terra_map_stride          ( const TerraMap* map );
+void               terra_map_convolution     ( TerraMap* TERRA_RESTRICT dst, const TerraMap* TERRA_RESTRICT src, const float* kernel, size_t kernel_size );
+void               terra_map_linearize_srgb  ( TerraMap* map );
+TerraMap           terra_map_create_mip0     ( size_t w, size_t h, size_t components, size_t depth, const void* data );
 TerraFloat3        terra_map_read_texel      ( const TerraMap* map, uint16_t x, uint16_t y );
 void               terra_map_write_texel     ( TerraMap* map, uint16_t x, uint16_t y, const TerraFloat3* rgb );
 void               terra_map_texel_int       ( const TerraMap* map, TerraTextureAddress address, const TerraFloat2* uv, uint16_t* x, uint16_t* y );
 TerraFloat3        terra_map_sample_nearest  ( const TerraMap* map, const TerraFloat2* uv, TerraTextureAddress address );
 TerraFloat3        terra_map_sample_bilinear ( const TerraMap* map, const TerraFloat2* _uv, TerraTextureAddress address );
-void               terra_dpid_downscale      ( TerraMap* O, const TerraMap* I );
+void               terra_map_dpid_downscale  ( TerraMap* O, const TerraMap* I );
 
 #define TERRA_TEXTURE_SAMPLER(name) TerraFloat3 terra_texture_sampler_##name ( intptr_t state, const void* addr )
 TERRA_TEXTURE_SAMPLER ( mip0 );

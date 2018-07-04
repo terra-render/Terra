@@ -70,7 +70,11 @@ typedef enum {
 // Creation:    terra_texture_create()      unsigned char  32bpp
 //              terra_texture_create_fp()   floating point 16Bpp
 // Destruction: terra_texture_destroy()
-// The internal data layout is not guaranteed to match the one used as initial data.
+// Textures are stored internally as RGBA_FLOAT32.
+// If sampler is not set as sRGB the texel values are assumed to be normalized.
+// Miplevels are stored linearly with 0 being the original image.
+// <ripmaps> stores the anisotropically scaled levels only, indexable as a 2D
+// array as (mip_level_width, mip_level_height)
 typedef struct {
     uint16_t          width;   // Original width in pixels
     uint16_t          height;  // Original height in pixels
