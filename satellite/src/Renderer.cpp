@@ -353,7 +353,7 @@ bool TerraRenderer::_apply_changes() {
         _next_height = ( int ) _framebuffer.height;
     }
 
-    if ( threading_changed ) {
+    if ( resolution_changed || threading_changed ) {
         Log::verbose ( STR ( "Creating Terra render jobs" ) );
 
         if ( _workers != nullptr ) {
