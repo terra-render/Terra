@@ -24,7 +24,7 @@ class GFXLayer {
     using InputHandler = std::function<void ( const ImGuiIO& ) >;
 
     bool init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler );
-    void resize ( int width, int height );
+    void force_resize ( int width, int height );
     int width ();
     int height ();
     void process_events ();

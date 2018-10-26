@@ -127,7 +127,7 @@ int App::run() {
     _init_ui();
     Log::flush();
     _renderer.init ( w, h, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
-    _visualizer.init ( _gfx );
+    _visualizer.init ( &_gfx );
     _init_cmd_map();
     _boot();
 
@@ -389,7 +389,7 @@ success:
             return 1;
         }
 
-        _gfx.resize ( width, height );
+        _gfx.force_resize ( width, height );
         _renderer.resize ( width, height );
 
         Log::console ( "New resolution %d %d", width, height );

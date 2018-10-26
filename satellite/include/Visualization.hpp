@@ -25,7 +25,7 @@ class Visualizer {
     };
 
   public:
-    void init ( GFXLayer gfx );
+    void init ( GFXLayer* gfx );
 
     void set_texture_data ( const TextureData& data );
     void update_tile ( const TextureData& data, size_t x, size_t y, size_t w, size_t h );
@@ -39,7 +39,7 @@ class Visualizer {
     Info&  info();
 
   private:
-    GFXLayer _gfx;
+    GFXLayer*    _gfx;
 
     Info         _info;
     TextureData  _texture;

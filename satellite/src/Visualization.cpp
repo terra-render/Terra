@@ -91,7 +91,7 @@ namespace {
     }
 }
 
-void Visualizer::init ( GFXLayer gfx ) {
+void Visualizer::init ( GFXLayer* gfx ) {
     _gfx              = gfx;
     _gl_format        = -1;
     _gl_texture       = -1;
@@ -328,8 +328,8 @@ void Visualizer::toggle_info() {
 }
 
 void Visualizer::draw() {
-    const float width  = ( float ) _gfx.width();
-    const float height = ( float ) _gfx.height();
+    const float width  = ( float ) _gfx->width();
+    const float height = ( float ) _gfx->height();
     using namespace ImGui;
     // No window decorations / padding / borders
     int style = ImGuiWindowFlags_NoResize |

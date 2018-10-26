@@ -74,6 +74,7 @@ bool GFXLayer::init ( int width, int height, const char* title, const OnResizeCa
 
     glDebugMessageCallback ( opengl_debug_callback, this );
     // Initializing GFXLayer
+    // TODO hook window resize listener
     _on_resize      = on_resize;
     _input_handler  = input_handler;
     _width          = width;
@@ -84,8 +85,10 @@ bool GFXLayer::init ( int width, int height, const char* title, const OnResizeCa
     return true;
 }
 
-void GFXLayer::resize ( int width, int height ) {
+void GFXLayer::force_resize ( int width, int height ) {
     glfwSetWindowSize ( _window, width, height );
+    _width = width;
+    _height = height;
 }
 
 int GFXLayer::width () {
