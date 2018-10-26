@@ -20,19 +20,12 @@ class App {
     App ( int argc, char** argv );
     ~App();
 
-    int  run();
+    int run();
 
   private:
-    void _update();
-    void _draw();
-
-    int  _on_command ( const CommandArgs& args );
-    void _on_resize ( int w, int h );
-
     void _init_ui();
-    void _register_commands();
+    void _init_cmd_map();
     void _boot();
-
 
     GFXLayer      _gfx;
     Scene         _scene;
@@ -46,14 +39,4 @@ class App {
     // Callbacks
     using CommandMap = std::map<std::string, CommandCallback>;
     CommandMap      _c_map;
-    CommandCallback _c_clear;
-    CommandCallback _c_help;
-    CommandCallback _c_load;
-    CommandCallback _c_step;
-    CommandCallback _c_loop;
-    CommandCallback _c_pause;
-    CommandCallback _c_toggle;
-    CommandCallback _c_save;
-    CommandCallback _c_option;
-    CommandCallback _c_resize;
 };

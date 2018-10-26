@@ -26,7 +26,7 @@ class Console {
     void printf ( const char* fmt, ... );
     void vprintf ( const char* fmt, va_list args );
     void clear();
-    void draw ( GFXLayer gfx );
+    void draw ( int window_width, int window_height );
 
     // show/hide
     void toggle();

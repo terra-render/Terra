@@ -11,11 +11,9 @@
 #include <Cloto.h>
 
 namespace {
-    // fnv1a - Generic unsafe hash, I would really be surprised if this resulted in collisions
+    // fnv1a
     constexpr uint64_t fnv_basis = 14695981039346656037ull;
     constexpr uint64_t fnv_prime = 1099511628211ull;
-
-    // FNV-1a 64 bit hash of null terminated buffer
     uint64_t fnv1a_hash ( const char* str, uint64_t hash = fnv_basis ) {
         return *str ? fnv1a_hash ( str + 1, ( hash ^ *str ) * fnv_prime ) : hash;
     }

@@ -328,8 +328,8 @@ void Visualizer::toggle_info() {
 }
 
 void Visualizer::draw() {
-    const float width  = ( float ) gfx_width ( _gfx );
-    const float height = ( float ) gfx_height ( _gfx );
+    const float width  = ( float ) _gfx.width();
+    const float height = ( float ) _gfx.height();
     using namespace ImGui;
     // No window decorations / padding / borders
     int style = ImGuiWindowFlags_NoResize |
@@ -346,14 +346,16 @@ void Visualizer::draw() {
     if ( _texture.data != nullptr ) {
         Image ( ( ImTextureID& ) _gl_texture, screen_size );
     } else {
-        const char* msg = "        render something!\nPress ` ( backtick ) to open console";
+        const char* msg = "            render something!\n"
+                          "press ` (backtick) to toggle the console\n"
+                          "    type help for a list of commands\n";
         im_text_aligned ( ImAlign::Middle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, -20.f ) );
     }
 
     if ( ! _info.scene.empty() ) {
         if ( !_hide_info ) {
             constexpr int INFO_BUF_LEN = 1024;
-            char info_buf[INFO_BUF_LEN]; // I would keep it static to give text limit
+            char info_buf[INFO_BUF_LEN];
             string spp = _info.spp != -1 ? to_string ( _info.spp ) : "n/a";
             snprintf ( info_buf, INFO_BUF_LEN, "%s\nspp: %s\naccelerator: %s\nsampling: %s\nresolution: %dx%d", _info.scene.c_str(), spp.c_str(), _info.accelerator.c_str(), _info.sampling.c_str(), _texture.width, _texture.height );
             im_text_aligned ( ImAlign::TopLeft, info_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ) );

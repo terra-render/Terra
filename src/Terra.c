@@ -35,6 +35,7 @@ typedef struct {
     size_t              lights_pop;
     size_t              lights_cap;
     TerraFloat3         total_light_power;
+    TerraFloat3         envmap_light_power;
     union {
         TerraKDTree     kdtree;
         TerraBVH        bvh;
@@ -620,6 +621,10 @@ void terra_light_sample_triangle ( const TerraLight* light, size_t triangle_idx,
     *pdf = 1.f / light->triangle_area[triangle_idx];
 }
 
+float terra_luminance ( const TerraFloat3* color ) {
+    return 0.212671 * color->x + 0.715160 * color->y + 0.072169 * color->z;
+}
+
 #define _randf() (float)rand() / RAND_MAX
 
 TerraFloat3 terra_compute_direct ( const TerraScene* scene, TerraShadingSurface* surface, TerraMaterial* material, TerraFloat3* p, TerraFloat3* wo ) {
@@ -1160,6 +1165,86 @@ void terra_sampler_halton_next_pair ( void* _sampler, float* e1, float* e2 ) {
     *e1 = terra_radical_inverse ( sampler->bases[0], sampler->next );
     *e2 = terra_radical_inverse ( sampler->bases[1], sampler->next );
     ++sampler->next;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void terra_distribution_1d_init ( TerraDistribution1D* dist, float* f, size_t n ) {
+    dist->n = n;
+    dist->cdf = ( float* ) terra_malloc ( sizeof ( float ) * n );
+    dist->f = ( float* ) terra_malloc ( sizeof ( float ) * n );
+    float integral = 0;
+
+    // compute the integral and the unnormalized cdf
+    for ( size_t i = 0; i < n; ++i ) {
+        dist->f[i] = f[i];
+        integral += f[i];
+        dist->cdf[i] = integral;
+    }
+
+    dist->integral = integral;
+
+    // normalize the cdf
+    for ( size_t i = 0; i < n; ++i ) {
+        dist->cdf[i] /= integral;
+    }
+}
+
+float terra_distribution_1d_sample ( TerraDistribution1D* dist, float e, float* pdf, size_t* idx ) {
+    size_t n = dist->n;
+    float prev = 0;
+
+    for ( size_t i = 0; i < n; ++i ) {
+        float curr = dist->cdf[i];
+
+        if ( e < curr ) {
+            pdf != NULL ? *pdf = dist->f[i] / dist->integral : 0;
+            idx != NULL ? *idx = i : 0;
+            // cdf[i - 1] <= e < cdf[i]
+            // Found the bucket, now interpolate.
+            float d = e - prev;
+            d /= curr - prev;
+            return ( i + d ) / n;
+        }
+
+        prev = curr;
+    }
+
+    assert ( false );
+    return SIZE_MAX;
+}
+
+void terra_distribution_2d_init ( TerraDistributon2D* dist, float* f, size_t nx, size_t ny ) {
+    for ( size_t i = 0; i < ny; ++i ) {
+        terra_distribution_1d_init ( &dist->conditionals[i], f + nx * i, nx );
+    }
+
+    // compute the marginal distribution using the integral of each row
+    dist->marginal.n = ny;
+    dist->marginal.f = ( float* ) terra_malloc ( sizeof ( float ) * ny );
+    dist->marginal.cdf = ( float* ) terra_malloc ( sizeof ( float ) * ny );
+    float integral = 0;
+
+    for ( size_t i = 0; i < ny; ++i ) {
+        dist->marginal.f[i] = dist->conditionals[i].integral;
+        integral += dist->conditionals[i].integral;
+        dist->marginal.cdf[i] = integral;
+    }
+
+    dist->marginal.integral = integral;
+
+    for ( size_t i = 0; i < ny; ++i ) {
+        dist->marginal.cdf[i] /= integral;
+    }
+}
+
+TerraFloat2 terra_distribution_2d_sample ( TerraDistributon2D* dist, float e1, float e2, float* pdf ) {
+    float pdfs[2];
+    size_t i;
+    float s1 = terra_distribution_1d_sample ( &dist->marginal, e1, &pdfs[0], &i );
+    float s2 = terra_distribution_1d_sample ( &dist->conditionals[i], e2, &pdfs[1], NULL );
+    pdf != NULL ? *pdf = pdfs[0] * pdfs[1] : 0;
+    return terra_f2_set ( s1, s2 );
 }
 
 //--------------------------------------------------------------------------------------------------

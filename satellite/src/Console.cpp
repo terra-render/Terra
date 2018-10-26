@@ -70,7 +70,7 @@ namespace ImGui {
     extern bool InputTextEx ( const char* label, char* buf, int buf_size, const ImVec2& size_arg, ImGuiInputTextFlags flags, ImGuiTextEditCallback callback, void* user_data );
 }
 
-void Console::draw ( GFXLayer gfx ) {
+void Console::draw ( int wnd_width, int wnd_height ) {
     if ( _hidden ) {
         return;
     }
@@ -81,8 +81,6 @@ void Console::draw ( GFXLayer gfx ) {
 
     PushStyleVar ( ImGuiStyleVar_WindowRounding, 0.f );
     // Anchoring bottom right corner
-    int wnd_width = gfx_width ( gfx );
-    int wnd_height = gfx_height ( gfx );
     _width = _width == 0.f ? 0.5f * wnd_width : _width;
     _height = _height == 0.f ? 0.5f * wnd_height : _height;
     SetNextWindowSize ( ImVec2 ( _width, _height ), ImGuiCond_Once );

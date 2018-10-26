@@ -21,12 +21,12 @@
 using namespace std;
 
 namespace {
-    // Humanely formatted multiline string literal
+    // Human friendly formatted multiline string literal
     // I have not included R("") in the macro because of the intellisense
 #define MULTILINE(str) ::usable_multiline(str)
 
     // Idea from https://stackoverflow.com/questions/1135841/c-multiline-string-literal?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-    // As long as you don't mix spaces and tabs it should work also for them heretics
+    // As long as you don't mix spaces and tabs it should work for both
 #define NOT_NULL(p)   (*(p) != '\0')
 #define IS_NEWLINE(p) (*(p) == '\n' || *(p) == '\r')
     string usable_multiline ( const char* str ) {
@@ -110,9 +110,9 @@ App::~App() {
 int App::run() {
     size_t w = 800;
     size_t h = 600;
-    _gfx = gfx_init ( w, h, "Satellite",
+    bool gfx_init = _gfx.init ( w, h, "Satellite",
     [ = ] ( int w, int h ) { // on resize
-        _on_resize ( w, h );
+        _renderer.resize ( w, h );
     },
     [ = ] ( const ImGuiIO & io ) { // on key
         if ( io.KeysDown[GLFW_KEY_GRAVE_ACCENT] && io.KeysDownDuration[GLFW_KEY_GRAVE_ACCENT] == 0 ) {
@@ -120,7 +120,7 @@ int App::run() {
         }
     } );
 
-    if ( !_gfx ) {
+    if ( !gfx_init ) {
         return EXIT_FAILURE;
     }
 
@@ -128,58 +128,35 @@ int App::run() {
     Log::flush();
     _renderer.init ( w, h, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
     _visualizer.init ( _gfx );
-    _register_commands();
+    _init_cmd_map();
     _boot();
 
-    while ( !gfx_should_quit ( _gfx ) ) {
-        gfx_process_events ( _gfx );
-        _update();
-        _draw();
-        gfx_swap_buffers ( _gfx );
+    while ( !_gfx.should_quit () ) {
+        // i/o
+        _gfx.process_events ();
+        // update
+        _renderer.refresh_jobs();
+        // draw
+        ImGui_ImplGlfwGL3_NewFrame();
+        glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+        glClearColor ( 0.15f, 0.15f, 0.15f, 1.0f );
+        _visualizer.draw();
+        _console.draw ( _gfx.width(), _gfx.height() );
+        ImGui::Render();
+        ImGui_ImplGlfwGL3_RenderDrawData ( ImGui::GetDrawData() );
+        // present
+        _gfx.swap_buffers ();
     }
 
     return EXIT_SUCCESS;
-}
-
-void App::_update() {
-    _renderer.refresh_jobs();
-}
-
-// Imgui being/end are here as both the Visualizer and UI use it.
-void App::_draw() {
-    ImGui_ImplGlfwGL3_NewFrame();
-    glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-    glClearColor ( 0.15f, 0.15f, 0.15f, 1.0f );
-    _visualizer.draw();
-    _console.draw ( _gfx );
-    ImGui::Render();
-    ImGui_ImplGlfwGL3_RenderDrawData ( ImGui::GetDrawData() );
-}
-
-int App::_on_command ( const CommandArgs& args ) {
-    if ( args.empty() ) {
-        return 1;
-    }
-
-    if ( _c_map.find ( args[0] ) == _c_map.end() ) {
-        Log::error ( FMT ( "No command registered for: %s", args[0].c_str() ) );
-        return 1;
-    }
-
-    CommandArgs args_only ( args.begin() + 1, args.end() );
-    return _c_map[args[0]] ( args_only );
-}
-
-void App::_on_resize ( int width, int height ) {
-    _renderer.resize ( width, height );
 }
 
 void App::_init_ui() {
     // Initializing ImGui (TODO: move to app?)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    ( void ) io;
-    ImGui_ImplGlfwGL3_Init ( ( GLFWwindow* ) gfx_get_window ( _gfx ), true );
+    //( void ) io; //TODO do we need this?
+    ImGui_ImplGlfwGL3_Init ( ( GLFWwindow* ) _gfx.get_window(), true );
     ImGui::StyleColorsDark();
     io.IniFilename = nullptr;
     string font_file = find_default_ui_font();
@@ -191,15 +168,24 @@ void App::_init_ui() {
     }
 
     Log::redirect_console ( &_console );
-    // Registerig command callback
-    _console.set_callback ( std::bind ( &App::_on_command, this, std::placeholders::_1 ) );
+    _console.set_callback ( [this] ( const CommandArgs & args ) -> int {
+        if ( args.empty() ) {
+            return 1;
+        }
+
+        if ( _c_map.find ( args[0] ) == _c_map.end() ) {
+            Log::error ( FMT ( "No command registered for: %s", args[0].c_str() ) );
+            return 1;
+        }
+
+        CommandArgs args_only ( args.begin() + 1, args.end() );
+        return _c_map[args[0]] ( args_only );
+    } );
 }
 
-void App::_register_commands() {
-    //
+void App::_init_cmd_map() {
     // help
-    //
-    _c_help = [this] ( const CommandArgs & args ) -> int {
+    auto cmd_help = [this] ( const CommandArgs & args ) -> int {
         Log::console ( "Available commands. Enter command name for more information." );
 
         for ( const auto& cmd : _c_map ) {
@@ -208,10 +194,8 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // load
-    //
-    _c_load = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_load = [ this ] ( const CommandArgs & args ) -> int {
         char name[256];
 
         if ( args.size() < 1 ) {
@@ -251,10 +235,8 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // step
-    //
-    _c_step = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_step = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.step ( &_render_camera, _scene.construct_terra_scene(),
         [ = ]() {
             _visualizer.info().sampling = Scene::from_terra_sampling ( _renderer.options().sampling_method );
@@ -279,10 +261,8 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // loop
-    //
-    _c_loop = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_loop = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.loop ( &_render_camera, _scene.construct_terra_scene(),
         [ = ]() {
             if ( !_renderer.is_progressive() ) {
@@ -303,18 +283,14 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // pause
-    //
-    _c_pause = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_pause = [ this ] ( const CommandArgs & args ) -> int {
         _renderer.pause_at_next_step();
         return 0;
     };
-    //
     // save
-    // TODO: Eventually add support for multiple outputs
-    //
-    _c_save = [ this ] ( const CommandArgs & args ) -> int {
+    // TODO: support multiple outputs
+    auto cmd_save = [ this ] ( const CommandArgs & args ) -> int {
         if ( args.size() < 1 ) {
             Log::console ( "<path>" );
             return 0;
@@ -325,10 +301,8 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // toggle
-    //
-    _c_toggle = [this] ( const CommandArgs & args ) -> int {
+    auto cmd_toggle = [this] ( const CommandArgs & args ) -> int {
         string usage = MULTILINE ( R"(
             [console|info|stats])" );
 
@@ -348,10 +322,8 @@ void App::_register_commands() {
 
         return 0;
     };
-    //
     // option
-    //
-    _c_option = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_option = [ this ] ( const CommandArgs & args ) -> int {
         string usage = MULTILINE ( R"(
             list               - List all available options
             reset              - Reset options to defaults
@@ -402,10 +374,8 @@ void App::_register_commands() {
 success:
         return 0;
     };
-    //
     // resize
-    //
-    _c_resize = [ this ] ( const CommandArgs & args ) -> int {
+    auto cmd_resize = [ this ] ( const CommandArgs & args ) -> int {
         if ( args.size() < 2 ) {
             Log::console ( "<width> <height>" );
             return 1;
@@ -419,36 +389,40 @@ success:
             return 1;
         }
 
-        gfx_resize ( _gfx, width, height );
-        _on_resize ( width, height );
+        _gfx.resize ( width, height );
+        _renderer.resize ( width, height );
 
         Log::console ( "New resolution %d %d", width, height );
 
         return 0;
     };
-    _c_clear = [this] ( const CommandArgs & args ) -> int {
+    // clear
+    auto cmd_clear = [this] ( const CommandArgs & args ) -> int {
         _renderer.clear();
         _visualizer.set_texture_data ( _renderer.framebuffer() );
         return 0;
     };
-    _c_map["clear"]  = _c_clear;
-    _c_map["help"]   = _c_help;
-    _c_map["load"]   = _c_load;
-    _c_map["step"]   = _c_step;
-    _c_map["loop"]   = _c_loop;
-    _c_map["pause"]  = _c_pause;
-    _c_map["save"]   = _c_save;
-    _c_map["toggle"] = _c_toggle;
-    _c_map["option"] = _c_option;
-    _c_map["opt"]    = _c_option;
-    _c_map["resize"] = _c_resize;
-    _c_map["hide"] = [this] ( const CommandArgs & args ) -> int {
+    // hide
+    auto cmd_hide = [this] ( const CommandArgs & args ) {
         _console.toggle();
         return 0;
     };
+    // fill cmd map
+    _c_map["clear"]  = cmd_clear;
+    _c_map["help"]   = cmd_help;
+    _c_map["load"]   = cmd_load;
+    _c_map["step"]   = cmd_step;
+    _c_map["loop"]   = cmd_loop;
+    _c_map["pause"]  = cmd_pause;
+    _c_map["save"]   = cmd_save;
+    _c_map["toggle"] = cmd_toggle;
+    _c_map["option"] = cmd_option;
+    _c_map["opt"]    = cmd_option;
+    _c_map["resize"] = cmd_resize;
+    _c_map["hide"]   = cmd_hide;
 }
 
-
 void App::_boot() {
-    _c_load ( { "../scenes/cornell-box/cornell-box-glossy.obj" } );
+    // TODO do we want this?
+    _c_map["load"] ( { "../scenes/cornell-box/cornell-box-glossy.obj" } );
 }

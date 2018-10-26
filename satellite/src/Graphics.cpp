@@ -13,20 +13,10 @@
 
 #ifdef _WIN32
 
-struct _GFXLayer {
-    GLFWwindow*      window;
-    OnResizeCallback on_resize;
-    InputHandler     input_handler;
-
-    // Cached
-    int width;
-    int height;
-};
-
 // Skipping notification, reporting everything else
 void GLAPIENTRY opengl_debug_callback ( GLenum source, GLenum type, GLuint id, GLenum severity,
-                                        GLsizei length, const char* message, const void* user_ptr ) {
-    _GFXLayer* gfx = ( _GFXLayer* ) user_ptr;
+                                        GLsizei length, const char* message, const void* gfx_ptr ) {
+    GFXLayer* gfx = ( GFXLayer* ) gfx_ptr;
 
     if ( severity == GL_DEBUG_SEVERITY_NOTIFICATION ) {
         return;
@@ -47,8 +37,7 @@ static void glfw_error_callback ( int error, const char* description ) {
     fprintf ( stderr, "Error %d: %s\n", error, description );
 }
 
-GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler ) {
-    _GFXLayer* gfx = new _GFXLayer();
+bool GFXLayer::init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler ) {
     glfwSetErrorCallback ( glfw_error_callback );
     bool enable_opengl_debug = false;
 #ifdef _DEBUG
@@ -57,8 +46,7 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
 
     if ( !glfwInit() ) {
         Log::error ( STR ( "Failed to initialize GLFW" ) );
-        delete gfx;
-        return nullptr;
+        return false;
     }
 
     glfwWindowHint ( GLFW_CONTEXT_VERSION_MAJOR, 3 );
@@ -73,9 +61,9 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
 #if __APPLE__
     glfwWindowHint ( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 #endif
-    gfx->window = glfwCreateWindow ( width, height, title, nullptr, nullptr );
-    glfwSetWindowPos ( gfx->window, 100, 100 );
-    glfwMakeContextCurrent ( gfx->window );
+    _window = glfwCreateWindow ( width, height, title, nullptr, nullptr );
+    glfwSetWindowPos ( _window, 100, 100 );
+    glfwMakeContextCurrent ( _window );
     glfwSwapInterval ( 1 ); // vsync
     gl3wInit(); // opengl function pointers
 
@@ -84,53 +72,45 @@ GFXLayer gfx_init ( int width, int height, const char* title, const OnResizeCall
         glEnable ( GL_DEBUG_OUTPUT );
     }
 
-    glDebugMessageCallback ( opengl_debug_callback, gfx );
+    glDebugMessageCallback ( opengl_debug_callback, this );
     // Initializing GFXLayer
-    gfx->on_resize      = on_resize;
-    gfx->input_handler  = input_handler;
-    gfx->width          = width;
-    gfx->height         = height;
-    glfwSetWindowUserPointer ( gfx->window, gfx );
+    _on_resize      = on_resize;
+    _input_handler  = input_handler;
+    _width          = width;
+    _height         = height;
+    glfwSetWindowUserPointer ( _window, this );
     // Setting initial
     glViewport ( 0, 0, width, height );
-    return gfx;
+    return true;
 }
 
-void gfx_resize ( GFXLayer gfx, int width, int height ) {
-    glfwSetWindowSize ( ( ( _GFXLayer* ) gfx )->window, width, height );
+void GFXLayer::resize ( int width, int height ) {
+    glfwSetWindowSize ( _window, width, height );
 }
 
-int gfx_width ( GFXLayer gfx ) {
-    if ( gfx == nullptr ) {
-        return -1;
-    }
-
-    return ( ( _GFXLayer* ) gfx )->width;
+int GFXLayer::width () {
+    return _width;
 }
 
-int gfx_height ( GFXLayer gfx ) {
-    if ( gfx == nullptr ) {
-        return -1;
-    }
-
-    return ( ( _GFXLayer* ) gfx )->height;
+int GFXLayer::height () {
+    return _height;
 }
 
-void gfx_process_events ( GFXLayer gfx ) {
+void GFXLayer::process_events () {
     glfwPollEvents();
-    ( ( _GFXLayer* ) gfx )->input_handler ( ImGui::GetIO() );
+    _input_handler ( ImGui::GetIO() );
 }
 
-bool gfx_should_quit ( GFXLayer gfx ) {
-    return glfwWindowShouldClose ( ( ( _GFXLayer* ) gfx )->window );
+bool GFXLayer::should_quit () {
+    return glfwWindowShouldClose ( _window );
 }
 
-void gfx_swap_buffers ( GFXLayer gfx ) {
-    glfwSwapBuffers ( ( ( _GFXLayer* ) gfx )->window );
+void GFXLayer::swap_buffers () {
+    glfwSwapBuffers ( _window );
 }
 
-void* gfx_get_window ( GFXLayer gfx ) {
-    return ( ( _GFXLayer* ) gfx )->window;
+void* GFXLayer::get_window () {
+    return _window;
 }
 
 #else
