@@ -46,7 +46,6 @@ namespace {
             new_fmt += " @ ";
             new_fmt += fun;
             new_fmt += '\n';
-
             vfprintf ( fp, new_fmt.c_str(), args );
         }
 
@@ -55,7 +54,6 @@ namespace {
             new_fmt += "> ";
             new_fmt += fmt;
             new_fmt += "\n";
-
             console_p->vprintf ( new_fmt.c_str(), args );
         } else {
             vbuf ( fmt, args );
@@ -95,7 +93,7 @@ namespace Log {
 
         va_list args;
         va_start ( args, fmt );
-        console_p->printf ( fmt, args );
+        console_p->vprintf ( fmt, args );
         va_end ( args );
     }
 
