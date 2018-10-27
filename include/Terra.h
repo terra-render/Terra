@@ -211,14 +211,14 @@ void                terra_render ( const TerraCamera* camera, HTerraScene scene,
 //--------------------------------------------------------------------------------------------------
 // Terra system API
 //--------------------------------------------------------------------------------------------------
-// You can override these by defining TERRA_MALLOC
+// Client can override by defining TERRA_MALLOC
 //--------------------------------------------------------------------------------------------------
 void*               terra_malloc ( size_t size );
 void*               terra_realloc ( void* ptr, size_t size );
 void                terra_free ( void* ptr );
 
 //--------------------------------------------------------------------------------------------------
-// You can override this by defining TERRA_LOG
+// Client can override by defining TERRA_LOG
 //--------------------------------------------------------------------------------------------------
 void                terra_log ( const char* str, ... );
 
