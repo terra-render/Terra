@@ -1,7 +1,11 @@
-#include <string.h>
-
+// TerraProfile
 #include "TerraProfile.h"
+
+// Terra
 #include "Terra.h"
+
+// libc
+#include <string.h>
 
 // .c env
 

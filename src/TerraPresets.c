@@ -1,4 +1,4 @@
-// Header
+// TerraPresets
 #include "TerraPresets.h"
 
 TerraFloat3 terra_fresnel ( const TerraFloat3* F_0, const TerraFloat3* view, const TerraFloat3* half_vector ) {
@@ -28,7 +28,7 @@ TerraFloat3 terra_bsdf_diffuse_sample ( const TerraShadingSurface* surface, floa
     float x = r * cosf ( theta );
     float z = r * sinf ( theta );
     TerraFloat3 wi = terra_f3_set ( x, sqrtf ( terra_maxf ( 0.f, 1 - e1 ) ), z );
-    return terra_transformf3 ( &surface->rot, &wi );
+    return terra_transformf3 ( &surface->transform, &wi );
 }
 
 float terra_bsdf_diffuse_pdf ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
@@ -83,7 +83,7 @@ TerraFloat3 terra_bsdf_phong_sample ( const TerraShadingSurface* surface, float 
         float theta = acosf ( powf ( 1.f - e2, 1.f / ( surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 1 ) ) );
         float sin_theta = sinf ( theta );
         TerraFloat3 wi = terra_f3_set ( sin_theta * cosf ( phi ), cosf ( theta ), sin_theta * sinf ( phi ) );
-        wi = terra_transformf3 ( &surface->rot, &wi );
+        wi = terra_transformf3 ( &surface->transform, &wi );
         return terra_normf3 ( &wi );
     }
 }

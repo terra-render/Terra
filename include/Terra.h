@@ -6,13 +6,7 @@ extern "C" {
 #endif
 
 // std
-#include <math.h>
 #include <stdlib.h>
-#include <time.h>
-#include <stdbool.h>
-#include <float.h>
-#include <assert.h>
-#include <stdint.h>
 
 // Terra
 #include "TerraMath.h"
@@ -29,7 +23,7 @@ extern "C" {
 #endif
 
 typedef struct {
-    TerraFloat4x4 rot;
+    TerraFloat4x4 transform;
     TerraFloat3   normal;
     TerraFloat3   emissive;
     float         ior;
@@ -44,8 +38,6 @@ typedef struct {
     TerraBSDFSampleRoutine* sample;
     TerraBSDFPdfRoutine*    pdf;
     TerraBSDFEvalRoutine*   eval;
-    float                   layer_weight;
-    float                   ior;
 } TerraBSDF;
 
 // Sampling filter to be applied. Trilinear & Anisotropic enable ray differentials and mipmap generation at scene_end()
@@ -96,6 +88,17 @@ typedef struct {
 //--------------------------------------------------------------------------------------------------
 // Geometric types ( Scene )
 //--------------------------------------------------------------------------------------------------
+typedef struct TerraRay {
+    TerraFloat3 origin;
+    TerraFloat3 direction;
+    TerraFloat3 inv_direction;
+} TerraRay;
+
+typedef struct TerraAABB {
+    TerraFloat3 min;
+    TerraFloat3 max;
+} TerraAABB;
+
 typedef struct {
     TerraFloat3 a;
     TerraFloat3 b;
@@ -154,11 +157,6 @@ typedef struct {
     float   gamma;
 } TerraSceneOptions;
 
-typedef struct {
-    uint32_t object_idx : 8;
-    uint32_t triangle_idx : 24;
-} TerraPrimitiveRef;
-
 // Scene
 typedef struct {
     TerraFloat3 position;
@@ -196,9 +194,6 @@ bool                terra_framebuffer_create ( TerraFramebuffer* framebuffer, si
 void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer );
 void                terra_framebuffer_destroy ( TerraFramebuffer* framebuffer );
 
-void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
-TerraRay            terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* rot_opt );
-
 bool                terra_texture_init ( TerraTexture* texture, size_t width, size_t height, size_t components, const void* data );
 bool                terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height, size_t components, const float* data );
 TerraFloat3         terra_texture_read ( TerraTexture* texture, size_t x, size_t y );
@@ -211,17 +206,21 @@ void                terra_attribute_init_constant ( TerraAttribute* attr, const 
 void                terra_attribute_init_texture ( TerraAttribute* attr, TerraTexture* texture );
 void                terra_attribute_init_cubemap ( TerraAttribute* attr, TerraTexture* texture );
 
+void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
+
 //--------------------------------------------------------------------------------------------------
-// Terra Semi-public API (Usable from bsdf routine)
+// Terra system API
 //--------------------------------------------------------------------------------------------------
-TerraFloat3         terra_eval_attribute ( const TerraAttribute* attribute, const void* dir, const TerraFloat3* point );
+// You can override these by defining TERRA_MALLOC
+//--------------------------------------------------------------------------------------------------
 void*               terra_malloc ( size_t size );
 void*               terra_realloc ( void* ptr, size_t size );
 void                terra_free ( void* ptr );
+
+//--------------------------------------------------------------------------------------------------
+// You can override this by defining TERRA_LOG
+//--------------------------------------------------------------------------------------------------
 void                terra_log ( const char* str, ... );
-bool                terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out );
-bool                terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out );
-void                terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle );
 
 #ifdef __cplusplus
 }

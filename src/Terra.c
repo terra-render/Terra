@@ -1,6 +1,7 @@
 #include <Terra.h>
 
 #include <string.h>
+#include <assert.h>
 
 #include "TerraPrivate.h"
 #include "TerraBVH.h"
@@ -51,9 +52,11 @@ typedef struct {
 //--------------------------------------------------------------------------------------------------
 // Terra internal routines
 //--------------------------------------------------------------------------------------------------
-TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* ray, TerraSamplerRandom* random_sampler, TerraSampler2D* hemisphere_sampler );
-TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuffer* frame, size_t x, size_t y, float jitter, float r1, float r2 );
+//TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* ray, TerraSamplerRandom* random_sampler, TerraSampler2D* hemisphere_sampler );
+TerraFloat3 terra_get_pixel_dir ( const TerraFramebuffer* frame, float fov, size_t x, size_t y, float jitter, float r1, float r2 );
 void        terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMaterial* material, const TerraTriangleProperties* properties, const TerraFloat3* point, TerraShadingSurface* surface );
+TerraRay    terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* rot_opt );
+TerraFloat3 terra_eval_attribute ( const TerraAttribute* attribute, const void* dir, const TerraFloat3* point );
 
 //--------------------------------------------------------------------------------------------------
 // Terra implementation
@@ -81,149 +84,7 @@ float terra_sse_dotf3 ( __m128 a, __m128 b ) {
 }
 #endif
 
-bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out ) {
-    const TerraTriangle* tri = triangle;
-#if 1
-    TerraFloat3 e1, e2, h, s, q;
-    float a, f, u, v, t;
-    e1 = terra_subf3 ( &tri->b, &tri->a );
-    e2 = terra_subf3 ( &tri->c, &tri->a );
-    h = terra_crossf3 ( &ray->direction, &e2 );
-    a = terra_dotf3 ( &e1, &h );
-
-    if ( a > -terra_Epsilon && a < terra_Epsilon ) {
-        return false;
-    }
-
-    f = 1 / a;
-    s = terra_subf3 ( &ray->origin, &tri->a );
-    u = f * ( terra_dotf3 ( &s, &h ) );
-
-    if ( u < 0.0 || u > 1.0 ) {
-        return false;
-    }
-
-    q = terra_crossf3 ( &s, &e1 );
-    v = f * terra_dotf3 ( &ray->direction, &q );
-
-    if ( v < 0.0 || u + v > 1.0 ) {
-        return false;
-    }
-
-    t = f * terra_dotf3 ( &e2, &q );
-
-    if ( t > 0.00001 ) {
-        TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
-        *point_out = terra_addf3 ( &offset, &ray->origin );
-
-        if ( t_out != NULL ) {
-            *t_out = t;
-        }
-
-        return true;
-    }
-
-    return false;
-#else
-    __m128 tri_a = terra_sse_loadf3 ( &tri->a );
-    __m128 tri_b = terra_sse_loadf3 ( &tri->b );
-    __m128 tri_c = terra_sse_loadf3 ( &tri->c );
-    __m128 ray_ori = terra_sse_loadf3 ( &ray->origin );
-    __m128 ray_dir = terra_sse_loadf3 ( &ray->direction );
-    __m128 e1, e2, h, s, q;
-    float a, f, u, v, t;
-    e1 = _mm_sub_ps ( tri_b, tri_a );
-    e2 = _mm_sub_ps ( tri_c, tri_a );
-    h = terra_sse_cross ( ray_dir, e2 );
-    a = terra_sse_dotf3 ( e1, h );
-
-    if ( a > -terra_Epsilon && a < terra_Epsilon ) {
-        return false;
-    }
-
-    f = 1.f / a;
-    s = _mm_sub_ps ( ray_ori, tri_a );
-    u = f * terra_sse_dotf3 ( s, h );
-
-    if ( u < 0.f || u > 1.f ) {
-        return false;
-    }
-
-    q = terra_sse_cross ( s, e1 );
-    v = f * terra_sse_dotf3 ( ray_dir, q );
-
-    if ( v < 0.f || u + v > 1.f ) {
-        return false;
-    }
-
-    t = f * terra_sse_dotf3 ( e2, q );
-
-    if ( t > 0.00001 ) {
-        TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
-        *point_out = terra_addf3 ( &offset, &ray->origin );
-
-        if ( t_out != NULL ) {
-            *t_out = t;
-        }
-
-        return true;
-    }
-
-    return false;
-#endif
-}
-
 //--------------------------------------------------------------------------------------------------
-bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out ) {
-    float t1 = ( aabb->min.x - ray->origin.x ) * ray->inv_direction.x;
-    float t2 = ( aabb->max.x - ray->origin.x ) * ray->inv_direction.x;
-    float tmin = terra_minf ( t1, t2 );
-    float tmax = terra_maxf ( t1, t2 );
-    t1 = ( aabb->min.y - ray->origin.y ) * ray->inv_direction.y;
-    t2 = ( aabb->max.y - ray->origin.y ) * ray->inv_direction.y;
-    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
-    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
-    t1 = ( aabb->min.z - ray->origin.z ) * ray->inv_direction.z;
-    t2 = ( aabb->max.z - ray->origin.z ) * ray->inv_direction.z;
-    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
-    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
-
-    if ( tmax > terra_maxf ( tmin, 0.f ) ) {
-        if ( tmin_out != NULL ) {
-            *tmin_out = tmin;
-        }
-
-        if ( tmax_out != NULL ) {
-            *tmax_out = tmax;
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-//--------------------------------------------------------------------------------------------------
-void terra_build_rotation_around_normal ( TerraShadingSurface* surface ) {
-    TerraFloat3 normalt;
-    TerraFloat3 normalbt;
-    TerraFloat3* normal = &surface->normal;
-
-    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
-        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
-    } else {
-        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
-    }
-
-    normalbt = terra_crossf3 ( normal, &normalt );
-    surface->rot.rows[0] = terra_f4 ( normalt.x, surface->normal.x, normalbt.x, 0.f );
-    surface->rot.rows[1] = terra_f4 ( normalt.y, surface->normal.y, normalbt.y, 0.f );
-    surface->rot.rows[2] = terra_f4 ( normalt.z, surface->normal.z, normalbt.z, 0.f );
-    surface->rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
-}
-
 void terra_lookatf4x4 ( TerraFloat4x4* mat_out, const TerraFloat3* normal ) {
     TerraFloat3 normalt;
     TerraFloat3 normalbt;
@@ -300,7 +161,7 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
     }
 
     surface->emissive = terra_eval_attribute ( &material->emissive, &texcoord, point );
-    terra_build_rotation_around_normal ( surface );
+    surface->transform = terra_f4x4_from_y ( &surface->normal );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -499,7 +360,7 @@ void terra_framebuffer_destroy ( TerraFramebuffer* framebuffer ) {
 
 //--------------------------------------------------------------------------------------------------
 // TODO move jitter, r1, r2 out, ad dx,dy as params
-TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuffer* frame, size_t x, size_t y, float jitter, float r1, float r2 ) {
+TerraFloat3 terra_get_pixel_dir ( const TerraFramebuffer* frame, float fov, size_t x, size_t y, float jitter, float r1, float r2 ) {
     float dx = -jitter + 2 * r1 * jitter;
     float dy = -jitter + 2 * r2 * jitter;
     // [0:1], y points down
@@ -510,9 +371,11 @@ TerraFloat3 terra_get_pixel_pos ( const TerraCamera* camera, const TerraFramebuf
     float screen_y = 1 - 2 * ndc_y;
     float aspect_ratio = ( float ) frame->width / ( float ) frame->height;
     // [-aspect_ratio * tan(fov/2):aspect_ratio * tan(fov/2)]
-    float camera_x = screen_x * aspect_ratio * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
-    float camera_y = screen_y * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
-    return terra_f3_set ( camera_x, camera_y, 1.f );
+    float frustum_x = screen_x * aspect_ratio * ( float ) tan ( ( fov * 0.0174533f ) / 2 );
+    float frustum_y = screen_y * ( float ) tan ( ( fov * 0.0174533f ) / 2 );
+    TerraFloat3 dir = terra_f3_set ( frustum_x, frustum_y, 1.f );
+    dir = terra_normf3 ( &dir );
+    return dir;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -761,19 +624,24 @@ TerraFloat3 terra_tonemapping_uncharted2 ( const TerraFloat3* x ) {
     return ret;
 }
 
-//--------------------------------------------------------------------------------------------------
-void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height ) {
-    TerraScene* scene = ( TerraScene* ) _scene;
-    TerraClockTime t = TERRA_CLOCK();
+TerraFloat4x4 terra_camera_transform ( const TerraCamera* camera ) {
     TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
     TerraFloat3 xaxis = terra_crossf3 ( &camera->up, &zaxis );
     xaxis = terra_normf3 ( &xaxis );
     TerraFloat3 yaxis = terra_crossf3 ( &zaxis, &xaxis );
-    TerraFloat4x4 rot;
-    rot.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
-    rot.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
-    rot.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
-    rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+    TerraFloat4x4 xform;
+    xform.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
+    xform.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
+    xform.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
+    xform.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+    return xform;
+}
+
+//--------------------------------------------------------------------------------------------------
+void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height ) {
+    TerraScene* scene = ( TerraScene* ) _scene;
+    TerraClockTime t = TERRA_CLOCK();
+    TerraFloat4x4 camera_xform = terra_camera_transform ( camera );
     size_t spp = scene->opts.samples_per_pixel;
     size_t samples_per_strata = 0;
 
@@ -814,7 +682,7 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
             for ( size_t s = 0; s < spp; ++s ) {
                 float r1 = terra_sampler_random_next ( &random_sampler );
                 float r2 = terra_sampler_random_next ( &random_sampler );
-                TerraRay ray = terra_camera_ray ( camera, framebuffer, j, i, scene->opts.subpixel_jitter, r1, r2, &rot );
+                TerraRay ray = terra_camera_ray ( camera, framebuffer, j, i, scene->opts.subpixel_jitter, r1, r2, &camera_xform );
                 TerraClockTime t = TERRA_CLOCK();
                 TerraFloat3 cur = terra_trace ( scene, &ray );
                 TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, TERRA_CLOCK() - t );
@@ -889,27 +757,19 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
     TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, TERRA_CLOCK() - t );
 }
 
-TerraRay terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* rot_opt ) {
-    TerraFloat3 dir = terra_get_pixel_pos ( camera, framebuffer, x, y, jitter, r1, r2 );
+TerraRay terra_camera_ray ( const TerraCamera* camera, const TerraFramebuffer* framebuffer, size_t x, size_t y, float jitter, float r1, float r2, const TerraFloat4x4* camera_xform_opt ) {
+    TerraFloat3 dir = terra_get_pixel_dir ( framebuffer, camera->fov, x, y, jitter, r1, r2 );
 
-    if ( rot_opt == NULL ) {
-        TerraFloat3 zaxis = terra_normf3 ( &camera->direction );
-        TerraFloat3 xaxis = terra_crossf3 ( &camera->up, &zaxis );
-        xaxis = terra_normf3 ( &xaxis );
-        TerraFloat3 yaxis = terra_crossf3 ( &zaxis, &xaxis );
-        TerraFloat4x4 rot;
-        rot.rows[0] = terra_f4 ( xaxis.x, yaxis.x, zaxis.x, 0.f );
-        rot.rows[1] = terra_f4 ( xaxis.y, yaxis.y, zaxis.y, 0.f );
-        rot.rows[2] = terra_f4 ( xaxis.z, yaxis.z, zaxis.z, 0.f );
-        rot.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
-        dir = terra_transformf3 ( &rot, &dir );
+    if ( camera_xform_opt == NULL ) {
+        TerraFloat4x4 xform = terra_camera_transform ( camera );
+        dir = terra_transformf3 ( &xform, &dir );
     } else {
-        dir = terra_transformf3 ( rot_opt, &dir );
+        dir = terra_transformf3 ( camera_xform_opt, &dir );
     }
 
     TerraRay ray;
     ray.origin = camera->position;
-    ray.direction = terra_normf3 ( &dir );
+    ray.direction = dir;
     ray.inv_direction.x = 1.f / ray.direction.x;
     ray.inv_direction.y = 1.f / ray.direction.y;
     ray.inv_direction.z = 1.f / ray.direction.z;
@@ -1273,3 +1133,160 @@ void terra_log ( const char* str, ... ) {
     va_end ( args );
 }
 #endif
+
+//--------------------------------------------------------------------------------------------------
+
+float terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c ) {
+    TerraFloat3 ab = terra_subf3 ( b, a );
+    TerraFloat3 ac = terra_subf3 ( c, a );
+    TerraFloat3 cross = terra_crossf3 ( &ab, &ac );
+    return terra_lenf3 ( &cross ) / 2;
+}
+
+bool terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out ) {
+    float t1 = ( aabb->min.x - ray->origin.x ) * ray->inv_direction.x;
+    float t2 = ( aabb->max.x - ray->origin.x ) * ray->inv_direction.x;
+    float tmin = terra_minf ( t1, t2 );
+    float tmax = terra_maxf ( t1, t2 );
+    t1 = ( aabb->min.y - ray->origin.y ) * ray->inv_direction.y;
+    t2 = ( aabb->max.y - ray->origin.y ) * ray->inv_direction.y;
+    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
+    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
+    t1 = ( aabb->min.z - ray->origin.z ) * ray->inv_direction.z;
+    t2 = ( aabb->max.z - ray->origin.z ) * ray->inv_direction.z;
+    tmin = terra_maxf ( tmin, terra_minf ( t1, t2 ) );
+    tmax = terra_minf ( tmax, terra_maxf ( t1, t2 ) );
+
+    if ( tmax > terra_maxf ( tmin, 0.f ) ) {
+        if ( tmin_out != NULL ) {
+            *tmin_out = tmin;
+        }
+
+        if ( tmax_out != NULL ) {
+            *tmax_out = tmax;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out ) {
+    const TerraTriangle* tri = triangle;
+#if 1
+    TerraFloat3 e1, e2, h, s, q;
+    float a, f, u, v, t;
+    e1 = terra_subf3 ( &tri->b, &tri->a );
+    e2 = terra_subf3 ( &tri->c, &tri->a );
+    h = terra_crossf3 ( &ray->direction, &e2 );
+    a = terra_dotf3 ( &e1, &h );
+
+    if ( a > -terra_Epsilon && a < terra_Epsilon ) {
+        return false;
+    }
+
+    f = 1 / a;
+    s = terra_subf3 ( &ray->origin, &tri->a );
+    u = f * ( terra_dotf3 ( &s, &h ) );
+
+    if ( u < 0.0 || u > 1.0 ) {
+        return false;
+    }
+
+    q = terra_crossf3 ( &s, &e1 );
+    v = f * terra_dotf3 ( &ray->direction, &q );
+
+    if ( v < 0.0 || u + v > 1.0 ) {
+        return false;
+    }
+
+    t = f * terra_dotf3 ( &e2, &q );
+
+    if ( t > 0.00001 ) {
+        TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
+        *point_out = terra_addf3 ( &offset, &ray->origin );
+
+        if ( t_out != NULL ) {
+            *t_out = t;
+        }
+
+        return true;
+    }
+
+    return false;
+#else
+    __m128 tri_a = terra_sse_loadf3 ( &tri->a );
+    __m128 tri_b = terra_sse_loadf3 ( &tri->b );
+    __m128 tri_c = terra_sse_loadf3 ( &tri->c );
+    __m128 ray_ori = terra_sse_loadf3 ( &ray->origin );
+    __m128 ray_dir = terra_sse_loadf3 ( &ray->direction );
+    __m128 e1, e2, h, s, q;
+    float a, f, u, v, t;
+    e1 = _mm_sub_ps ( tri_b, tri_a );
+    e2 = _mm_sub_ps ( tri_c, tri_a );
+    h = terra_sse_cross ( ray_dir, e2 );
+    a = terra_sse_dotf3 ( e1, h );
+
+    if ( a > -terra_Epsilon && a < terra_Epsilon ) {
+        return false;
+    }
+
+    f = 1.f / a;
+    s = _mm_sub_ps ( ray_ori, tri_a );
+    u = f * terra_sse_dotf3 ( s, h );
+
+    if ( u < 0.f || u > 1.f ) {
+        return false;
+    }
+
+    q = terra_sse_cross ( s, e1 );
+    v = f * terra_sse_dotf3 ( ray_dir, q );
+
+    if ( v < 0.f || u + v > 1.f ) {
+        return false;
+    }
+
+    t = f * terra_sse_dotf3 ( e2, q );
+
+    if ( t > 0.00001 ) {
+        TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
+        *point_out = terra_addf3 ( &offset, &ray->origin );
+
+        if ( t_out != NULL ) {
+            *t_out = t;
+        }
+
+        return true;
+    }
+
+    return false;
+#endif
+}
+
+void terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle ) {
+    aabb->min.x = terra_minf ( aabb->min.x, triangle->a.x );
+    aabb->min.x = terra_minf ( aabb->min.x, triangle->b.x );
+    aabb->min.x = terra_minf ( aabb->min.x, triangle->c.x );
+    aabb->min.y = terra_minf ( aabb->min.y, triangle->a.y );
+    aabb->min.y = terra_minf ( aabb->min.y, triangle->b.y );
+    aabb->min.y = terra_minf ( aabb->min.y, triangle->c.y );
+    aabb->min.z = terra_minf ( aabb->min.z, triangle->a.z );
+    aabb->min.z = terra_minf ( aabb->min.z, triangle->b.z );
+    aabb->min.z = terra_minf ( aabb->min.z, triangle->c.z );
+    aabb->min.x -= terra_Epsilon;
+    aabb->min.y -= terra_Epsilon;
+    aabb->min.z -= terra_Epsilon;
+    aabb->max.x = terra_maxf ( aabb->max.x, triangle->a.x );
+    aabb->max.x = terra_maxf ( aabb->max.x, triangle->b.x );
+    aabb->max.x = terra_maxf ( aabb->max.x, triangle->c.x );
+    aabb->max.y = terra_maxf ( aabb->max.y, triangle->a.y );
+    aabb->max.y = terra_maxf ( aabb->max.y, triangle->b.y );
+    aabb->max.y = terra_maxf ( aabb->max.y, triangle->c.y );
+    aabb->max.z = terra_maxf ( aabb->max.z, triangle->a.z );
+    aabb->max.z = terra_maxf ( aabb->max.z, triangle->b.z );
+    aabb->max.z = terra_maxf ( aabb->max.z, triangle->c.z );
+    aabb->max.x += terra_Epsilon;
+    aabb->max.y += terra_Epsilon;
+    aabb->max.z += terra_Epsilon;
+}

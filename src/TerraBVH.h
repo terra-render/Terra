@@ -1,31 +1,31 @@
 #ifndef _TERRA_BVH_H_
 #define _TERRA_BVH_H_
 
-#include <stdint.h>
-
+// Terra
 #include <Terra.h>
 #include <TerraMath.h>
+#include "TerraPrivate.h"
+
+// libc
+#include <stdint.h>
 
 // Node of the BVH tree. Fits in a 64 byte cache line.
 // TODO why the [2] layout ?
-typedef struct
-{
-  TerraAABB aabb[2];
-  int32_t index[2];
-  int32_t type[2];
+typedef struct {
+    TerraAABB aabb[2];
+    int32_t index[2];
+    int32_t type[2];
 } TerraBVHNode;
 
-typedef struct
-{
-  TerraAABB aabb;
-  unsigned int index;
-  int type;
+typedef struct {
+    TerraAABB aabb;
+    unsigned int index;
+    int type;
 } TerraBVHVolume;
 
-typedef struct
-{
-  TerraBVHNode* nodes;
-  int           nodes_count;
+typedef struct {
+    TerraBVHNode* nodes;
+    int           nodes_count;
 } TerraBVH;
 
 //--------------------------------------------------------------------------------------------------

@@ -1,5 +1,11 @@
-// Header
+// TerraBVH
 #include "TerraBVH.h"
+
+// Terra
+#include "TerraPrivate.h"
+
+// libc
+#include <assert.h>
 
 static float       terra_aabb_surface_area ( const TerraAABB* aabb );
 static TerraFloat3 terra_aabb_center ( const TerraAABB* aabb );
@@ -52,33 +58,6 @@ int terra_bvh_volume_compare_z ( const void* left, const void* right ) {
     }
 
     return false;
-}
-
-void terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle ) {
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->a.x );
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->b.x );
-    aabb->min.x = terra_minf ( aabb->min.x, triangle->c.x );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->a.y );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->b.y );
-    aabb->min.y = terra_minf ( aabb->min.y, triangle->c.y );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->a.z );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->b.z );
-    aabb->min.z = terra_minf ( aabb->min.z, triangle->c.z );
-    aabb->min.x -= terra_Epsilon;
-    aabb->min.y -= terra_Epsilon;
-    aabb->min.z -= terra_Epsilon;
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->a.x );
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->b.x );
-    aabb->max.x = terra_maxf ( aabb->max.x, triangle->c.x );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->a.y );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->b.y );
-    aabb->max.y = terra_maxf ( aabb->max.y, triangle->c.y );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->a.z );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->b.z );
-    aabb->max.z = terra_maxf ( aabb->max.z, triangle->c.z );
-    aabb->max.x += terra_Epsilon;
-    aabb->max.y += terra_Epsilon;
-    aabb->max.z += terra_Epsilon;
 }
 
 void terra_aabb_fit_aabb ( TerraAABB* aabb, const TerraAABB* other ) {

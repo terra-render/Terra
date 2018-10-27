@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------------------------------
-// Math implementation
+// Math inline implementation
 //--------------------------------------------------------------------------------------------------
 inline TerraFloat2 terra_f2_set ( float x, float y ) {
     TerraFloat2 ret;
@@ -31,7 +31,7 @@ inline TerraFloat4 terra_f4 ( float x, float y, float z, float w ) {
     return ret;
 }
 
-inline bool terra_equalf3 ( TerraFloat3* a, TerraFloat3* b ) {
+inline bool terra_equalf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     return ( a->x == b->x && a->y == b->y && a->z == b->z );
 }
 
@@ -178,9 +178,23 @@ inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, fl
     return terra_f3_set ( x, y, z );
 }
 
-inline float terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c ) {
-    TerraFloat3 ab = terra_subf3 ( b, a );
-    TerraFloat3 ac = terra_subf3 ( c, a );
-    TerraFloat3 cross = terra_crossf3 ( &ab, &ac );
-    return terra_lenf3 ( &cross ) / 2;
+inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* normal ) {
+    TerraFloat3 normalt;
+    TerraFloat3 normalbt;
+    TerraFloat4x4 xform;
+
+    if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
+        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
+    } else {
+        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
+        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
+    }
+
+    normalbt = terra_crossf3 ( normal, &normalt );
+    xform.rows[0] = terra_f4 ( normalt.x, normal->x, normalbt.x, 0.f );
+    xform.rows[1] = terra_f4 ( normalt.y, normal->y, normalbt.y, 0.f );
+    xform.rows[2] = terra_f4 ( normalt.z, normal->z, normalbt.z, 0.f );
+    xform.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+    return xform;
 }
