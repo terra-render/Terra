@@ -108,8 +108,8 @@ App::~App() {
 }
 
 int App::run() {
-    size_t w = 800;
-    size_t h = 600;
+    int w = 800;
+    int h = 600;
     bool gfx_init = _gfx.init ( w, h, "Satellite",
     [ = ] ( int w, int h ) { // on resize
         _renderer.resize ( w, h );

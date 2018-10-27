@@ -33,7 +33,7 @@ typedef struct {
     TerraFloat3   normal;
     TerraFloat3   emissive;
     float         ior;
-    TerraFloat3   attributes[TERRA_MATERIAL_MAX_ATTRIBUTES + 1];
+    TerraFloat3   attributes[TERRA_MATERIAL_MAX_ATTRIBUTES];
 } TerraShadingSurface;
 
 typedef TerraFloat3 ( TerraBSDFSampleRoutine ) ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo );
