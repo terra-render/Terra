@@ -380,7 +380,7 @@ void Visualizer::draw() {
         char stats_buf[STATS_BUF_LEN];
         TerraProfileStats data = stats.data;
 
-        if ( stats.type == TIME ) {
+        if ( stats.type == TIME && stats.data.n > 0 ) {
             data.avg = terra_clock_to_ms ( ( int64_t ) data.avg );
             data.var = terra_clock_to_ms ( ( int64_t ) data.var );
             data.min = terra_clock_to_ms ( ( int64_t ) data.min );
@@ -388,7 +388,7 @@ void Visualizer::draw() {
             data.sum = terra_clock_to_ms ( ( int64_t ) data.sum );
         }
 
-        snprintf ( stats_buf, STATS_BUF_LEN, "%s\n avg: %e\n var: %e\n min: %e\n max: %e\n sum: %f\n samples: %zu\n", stats.name.c_str(), data.avg, data.var, data.min, data.max, data.sum, ( size_t ) data.n );
+        snprintf ( stats_buf, STATS_BUF_LEN, "%s\n avg: %e\n var: %e\n min: %e\n max: %e\n sum: %e\n count: %.0f\n", stats.name.c_str(), data.avg, data.var, data.min, data.max, data.sum, data.n );
         im_text_aligned ( ImAlign::TopRight, stats_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ), ImVec2 ( 0, offset ) );
         offset += 120;
     }
@@ -406,14 +406,14 @@ std::vector<Visualizer::Stats>& Visualizer::stats() {
     return _stats;
 }
 
-void Visualizer::add_stats_tracker ( size_t session, size_t target, const char* name, TerraProfileSampleType type ) {
+void Visualizer::add_stats_tracker ( size_t session, size_t target, const char* name ) {
     TerraProfileStats data = TERRA_PROFILE_GET_STATS ( session, target );
     Stats stats;
     stats.data = data;
     stats.name = std::string ( name );
     stats.session = session;
     stats.target = target;
-    stats.type = type;
+    stats.type = TERRA_PROFILE_GET_TYPE ( session, target );
     _stats.push_back ( stats );
 }
 

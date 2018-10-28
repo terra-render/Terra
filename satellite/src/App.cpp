@@ -9,6 +9,10 @@
 #include <Config.hpp>
 #include <Logging.hpp>
 
+// Terra
+#include <TerraPresets.h>
+#include <TerraProfile.h>
+
 // GLFW
 #include <glfw/glfw3.h>
 
@@ -17,9 +21,6 @@
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
 #include <Commdlg.h>
-
-#include <TerraPresets.h>
-#include <TerraProfile.h>
 
 using namespace std;
 
@@ -406,6 +407,7 @@ success:
     auto cmd_clear = [this] ( const CommandArgs & args ) -> int {
         _renderer.clear();
         _visualizer.set_texture_data ( _renderer.framebuffer() );
+        _visualizer.update_stats();
         return 0;
     };
     // hide
@@ -416,9 +418,9 @@ success:
     // stats
     auto cmd_stats = [this] ( const CommandArgs & args ) {
         if ( _visualizer.stats().size() == 0 ) {
-            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, "render", TIME );
-            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, "trace", TIME );
-            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, "ray", TIME );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, "render" );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, "trace" );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, "ray" );
         } else {
             _visualizer.remove_all_stats_trackers();
         }

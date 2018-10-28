@@ -197,7 +197,7 @@ void                terra_framebuffer_destroy ( TerraFramebuffer* framebuffer );
 bool                terra_texture_init ( TerraTexture* texture, size_t width, size_t height, size_t components, const void* data );
 bool                terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height, size_t components, const float* data );
 TerraFloat3         terra_texture_read ( TerraTexture* texture, size_t x, size_t y );
-TerraFloat3         terra_texture_sample ( void* texture, const void* uv, const void* xyz );            // TODO Why void* params? to wrap it as attribute?
+TerraFloat3         terra_texture_sample ( void* texture, const void* uv, const void* xyz );            //      TODO Why void* params? to wrap it as attribute?
 TerraFloat3         terra_texture_sample_latlong ( void* texture, const void* dir, const void* xyz );
 void                terra_texture_destroy ( TerraTexture* texture );
 void                terra_texture_finalize ( void* texture );

@@ -210,6 +210,7 @@ void TerraRenderer::refresh_jobs() {
 
 void TerraRenderer::clear() {
     terra_framebuffer_clear ( &_framebuffer );
+    _clear_stats();
 }
 
 bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
@@ -318,6 +319,12 @@ void TerraRenderer::_update_profiler_results() {
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
+}
+
+void TerraRenderer::_clear_stats() {
+    TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
+    TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
+    TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
 }
 
 void TerraRenderer::_create_jobs() {

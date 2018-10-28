@@ -45,8 +45,7 @@ class Visualizer {
     void save_to_file ( const char* path );
 
     void toggle_info();
-
-    void add_stats_tracker ( size_t session, size_t target, const char* name, TerraProfileSampleType type );
+    void add_stats_tracker ( size_t session, size_t target, const char* name );
     void remove_stats_tracker ( const char* name );
     void remove_all_stats_trackers();
     void update_stats();

@@ -101,6 +101,7 @@ void                terra_profile_target_stats_update ( size_t session, size_t t
 void                terra_profile_target_local_stats_update ( size_t session, size_t target );
 TerraProfileStats   terra_profile_target_stats_get ( size_t session, size_t target );
 TerraProfileStats   terra_profile_target_local_stats_get ( size_t session, size_t target );
+TerraProfileSampleType  terra_profile_target_type_get ( size_t session, size_t target );
 
 void                terra_profile_add_sample_u32 ( size_t session, size_t target, uint32_t value );
 void                terra_profile_add_sample_u64 ( size_t session, size_t target, uint64_t value );
@@ -124,8 +125,9 @@ void                terra_profile_add_sample_time ( size_t session, size_t targe
 #define TERRA_PROFILE_UPDATE_LOCAL_STATS( session, target )                 terra_profile_target_local_stats_update ( session, target )
 #define TERRA_PROFILE_GET_STATS( session, target )                          terra_profile_target_stats_get ( session, target )
 #define TERRA_PROFILE_GET_LOCAL_STATS( session, target )                    terra_profile_target_local_stats_get ( session, target )
-#define TERRA_PROFILE_SIZE( session, target )                               terra_profile_target_size ( session, target )
-#define TERRA_PROFILE_LOCAL_SIZE( session, target )                         terra_profile_target_local_size ( session, target )
+#define TERRA_PROFILE_GET_TYPE(session, target)                             terra_profile_target_type_get ( session, target )
+#define TERRA_PROFILE_GET_SIZE( session, target )                           terra_profile_target_size ( session, target )
+#define TERRA_PROFILE_GET_LOCAL_SIZE( session, target )                     terra_profile_target_local_size ( session, target )
 #define TERRA_PROFILE_CLEAR_TARGET( session, target )                       terra_profile_target_clear ( session, target )
 #define TERRA_PROFILE_DELETE_SESSION( session )                             terra_profile_session_delete ( session )
 #define TERRA_CLOCK()                                                       terra_clock()

@@ -105,7 +105,7 @@ void terra_profile_target_clear ( size_t _session, size_t _target ) {
     TerraProfileSession* session = TERRA_PDB.sessions + _session;
     TerraProfileTarget* target = session->targets + _target;
 
-    for ( size_t i = 0; i < target->buffers; ++i ) {
+    for ( size_t i = 0; i < session->threads; ++i ) {
         terra_profile_stats_init ( &target->buffers[i].stats );
         target->buffers[i].size = 0;
     }
@@ -197,6 +197,10 @@ TerraProfileStats terra_profile_target_stats_get ( size_t session, size_t target
 
 TerraProfileStats terra_profile_target_local_stats_get ( size_t session, size_t target ) {
     return TERRA_PDB.sessions[session].targets[target].buffers[TERRA_PID].stats;
+}
+
+TerraProfileSampleType terra_profile_target_type_get ( size_t session, size_t target ) {
+    return TERRA_PDB.sessions[session].targets[target].type;
 }
 
 // .c defs
