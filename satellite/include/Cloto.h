@@ -22,6 +22,8 @@ extern "C" {
 #error "Define __declspec(align()) for this compiler!"
 #endif
 
+#define CLOTO_L1D$_SIZE 64
+
 //--------------------------------------------------------------------------------------------------
 // Atomics
 
@@ -29,7 +31,6 @@ void        cloto_memory_barrier();
 void        cloto_compiler_barrier();
 // Returns the atomic value pre-add
 uint32_t    cloto_atomic_fetch_add_u32 ( uint32_t* atomic, uint32_t value );
-uint32_t    cloto_atomic_fetch_add_i32 ( uint32_t* atomic, uint32_t value );
 // Returns whether the operation was successful. The actual read is written into the expected_read param.
 bool        cloto_atomic_compare_exchange_u32 ( uint32_t* atomic, uint32_t* expected_read, uint32_t conditional_write );
 
@@ -40,10 +41,9 @@ typedef void ClotoJobRoutine ( void* args );
 #define CLOTO_JOB(name) void name (void* args)
 
 // TODO allow local args
-typedef struct {
+typedef CLOTO_DECL_ALIGN ( CLOTO_L1D$_SIZE ) struct {
     ClotoJobRoutine* routine;
     void* args;
-    char _p0[64];
 } ClotoJob;
 
 void cloto_job_create ( ClotoJob* job, ClotoJobRoutine* routine, void* args );
@@ -102,30 +102,31 @@ void        cloto_workqueue_clear ( ClotoWorkQueue* queue );
 // command messages are automatically maked as completed immediately after being executed
 // user messages are marked as completed whenever moved from the shared queue to the thread-local user-accessible queue.
 // further bookkeeping of user messages is left to the user.
-// querying for completion is done by simply increasing a counter each time a message is processed and checking the message id against that when needed.
+// querying for completion is done by simply increasing a counter each time a message is processed and checking the message id against that.
 
 typedef enum {
-    CLOTO_MSG_JOB_NO_ARGS = 0,
+    CLOTO_MSG_JOB_LOCAL_ARGS = 0,
     CLOTO_MSG_JOB_REMOTE_ARGS,
-    CLOTO_MSG_JOB_LOCAL_ARGS,
     CLOTO_MSG_USER,
 } ClotoMessageType;
 
+#define CLOTO_MSG_PAYLOAD_SIZE 56
+
 typedef struct {
-    char data[56];
-    // 2^6 == 64
-    uint32_t size : 6;
+    ClotoJobRoutine* routine;
+    char buffer[CLOTO_MSG_PAYLOAD_SIZE - 8];
+} ClotoMessageJobPayload;
+
+typedef CLOTO_DECL_ALIGN ( CLOTO_L1D$_SIZE ) struct {
+    char payload[CLOTO_MSG_PAYLOAD_SIZE];
     // ClotoMessageType
     uint32_t type : 2;
-    // unused
-    uint32_t _pad0 : 24;
     // used internally by the MessageQueue
-    uint32_t queue_local_id;
+    uint32_t queue_local_id : 30;
 } ClotoMessage;
 
 typedef struct {
-    char data[56];
-    uint64_t data_size;
+    char payload[CLOTO_MSG_PAYLOAD_SIZE];
 } ClotoUserMessage;
 
 //--------------------------------------------------------------------------------------------------
@@ -173,12 +174,6 @@ bool        cloto_usermsgqueue_pop ( ClotoUserMessageQueue* queue, ClotoUserMess
 
 typedef void ClotoThreadRoutine ( void* args );
 
-typedef enum {
-    CTS_IDLE,
-    CTS_RUNNING,
-    CTS_INVALID
-} ClotoThreadState;
-
 typedef struct {
 #ifdef _WIN32
     HANDLE handle;
@@ -199,7 +194,7 @@ bool            cloto_thread_create ( ClotoThread* thread, ClotoThreadRoutine* r
 bool            cloto_thread_join ( ClotoThread* thread );
 bool            cloto_thread_destroy ( ClotoThread* thread );
 void            cloto_thread_yield();
-uint32_t        cloto_thread_send_message ( ClotoThread* destinatary, const void* data, size_t size, ClotoMessageType type );
+uint32_t        cloto_thread_send_message ( ClotoThread* destinatary, ClotoMessageType type, const void* payload, size_t size );
 bool            cloto_thread_query_message_status ( ClotoThread* destinatary, uint32_t msg_id );
 
 //--------------------------------------------------------------------------------------------------
@@ -346,7 +341,7 @@ void cloto_compiler_barrier() {
 #endif
 }
 
-#ifndef _WIN32  // TODO DELET THIS
+#ifndef _WIN32  // TODO do a linux port
 pthread_mutex_t g_mutex;
 void cloto_init() {
     pthread_mutex_init ( &g_mutex, NULL );
@@ -356,7 +351,7 @@ void cloto_init() {
 uint32_t cloto_atomic_fetch_add_u32 ( uint32_t* atomic, uint32_t value ) {
 #ifdef _WIN32
     return InterlockedAdd ( ( long* ) atomic, value );
-#else   // TODO DELET THIS
+#else   // TODO do a linux port
     pthread_mutex_lock ( &g_mutex );
     ClotoAtomic32 res = *atomic + value;
     *atomic = res;
@@ -372,7 +367,7 @@ bool cloto_atomic_compare_exchange_u32 ( uint32_t* atomic, uint32_t* expected_re
     bool success = read == *expected_read;
     *expected_read = read;
     return success;
-#else   // TODO DELET THIS
+#else   // TODO do a linux port
     pthread_mutex_lock ( &g_mutex );
     ClotoAtomic32 res = *atomic;
 
@@ -428,8 +423,7 @@ bool cloto_msgqueue_push ( ClotoMessageQueue* queue, const void* data, uint32_t 
 
     if ( id == top ) {
         if ( cloto_atomic_compare_exchange_u32 ( &queue->top, &top, top + 1 ) ) {
-            memcpy ( msg->data, data, data_size );
-            msg->size = data_size;
+            memcpy ( msg->payload, data, data_size );
             msg->type = type;
             cloto_compiler_barrier();
             msg->queue_local_id = top + 1;
@@ -448,14 +442,12 @@ bool cloto_msgqueue_push ( ClotoMessageQueue* queue, const void* data, uint32_t 
 bool cloto_msgqueue_pop ( ClotoMessageQueue* queue, ClotoMessage* dest ) {
     ClotoMessage* msg = &queue->messages[queue->bottom & queue->mask];
     uint32_t id = msg->queue_local_id;
-    size_t size = msg->size;
     uint32_t bottom = queue->bottom;
 
     if ( id == bottom + 1 ) {
         queue->bottom = bottom + 1;
-        memcpy ( dest->data, msg->data, size );
+        memcpy ( dest->payload, msg->payload, CLOTO_MSG_PAYLOAD_SIZE );
         dest->type = msg->type;
-        dest->size = msg->size;
         dest->queue_local_id = id;
         cloto_compiler_barrier();
         msg->queue_local_id = bottom + queue->mask + 1;
@@ -486,8 +478,7 @@ bool cloto_usermsgqueue_push ( ClotoUserMessageQueue* queue, const ClotoMessage*
         return false;
     }
 
-    memcpy ( queue->messages[queue->top].data, msg->data, msg->size );
-    queue->messages[queue->top].data_size = msg->size;
+    memcpy ( queue->messages[queue->top].payload, msg->payload, CLOTO_MSG_PAYLOAD_SIZE );
     ++queue->top;
     return true;
 }
@@ -765,17 +756,11 @@ bool cloto_thread_process_messages ( ClotoThread* thread ) {
         return true;
     }
 
-    CLOTO_DECL_ALIGN ( 64 ) ClotoMessage msg;
+    ClotoMessage msg;
 
     while ( thread->msg_queue.bottom != thread->msg_queue.top ) {
         if ( cloto_msgqueue_pop ( &thread->msg_queue, &msg ) ) {
             switch ( msg.type ) {
-                case CLOTO_MSG_JOB_NO_ARGS: {
-                    ClotoJob* j = ( ClotoJob* ) &msg;
-                    j->routine ( NULL );
-                }
-                break;
-
                 case CLOTO_MSG_JOB_REMOTE_ARGS: {
                     ClotoJob* j = ( ClotoJob* ) &msg;
                     j->routine ( j->args );
@@ -803,7 +788,8 @@ bool cloto_thread_process_messages ( ClotoThread* thread ) {
     return true;
 }
 
-uint32_t cloto_thread_send_message ( ClotoThread* to, const void* data, size_t size, ClotoMessageType type ) {
+uint32_t cloto_thread_send_message ( ClotoThread* to, ClotoMessageType type, const void* data, size_t size ) {
+    assert ( size <= CLOTO_MSG_PAYLOAD_SIZE );
     uint32_t id;
 
     while ( !cloto_msgqueue_push ( &to->msg_queue, data, ( uint32_t ) size, type, &id ) ) {

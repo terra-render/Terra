@@ -239,11 +239,11 @@
     <ClCompile Include="..\..\src\TerraPresets.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\TerraProfile.c">
-      <Filter>Terra\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\dependencies\gl3w\src\gl3w.c">
       <Filter>Internal Dependencies\gl3w</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraProfile.c">
+      <Filter>Terra\Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

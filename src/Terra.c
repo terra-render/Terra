@@ -6,8 +6,8 @@
 #include "TerraPrivate.h"
 #include "TerraBVH.h"
 #include "TerraKDTree.h"
-#include "TerraProfile.h"
 #include "TerraPresets.h"
+#include "TerraProfile.h"
 
 //--------------------------------------------------------------------------------------------------
 // Terra internal types
@@ -1029,7 +1029,7 @@ void terra_sampler_halton_next_pair ( void* _sampler, float* e1, float* e2 ) {
 
 //--------------------------------------------------------------------------------------------------
 
-void terra_distribution_1d_init ( TerraDistribution1D* dist, float* f, size_t n ) {
+void terra_distribution_1d_init ( TerraDistribution1D* dist, const float* f, size_t n ) {
     dist->n = n;
     dist->cdf = ( float* ) terra_malloc ( sizeof ( float ) * n );
     dist->f = ( float* ) terra_malloc ( sizeof ( float ) * n );
@@ -1058,8 +1058,14 @@ float terra_distribution_1d_sample ( TerraDistribution1D* dist, float e, float* 
         float curr = dist->cdf[i];
 
         if ( e < curr ) {
-            pdf != NULL ? *pdf = dist->f[i] / dist->integral : 0;
-            idx != NULL ? *idx = i : 0;
+            if ( pdf != NULL ) {
+                *pdf = dist->f[i] / dist->integral;
+            }
+
+            if ( idx != NULL ) {
+                *idx = i;
+            }
+
             // cdf[i - 1] <= e < cdf[i]
             // Found the bucket, now interpolate.
             float d = e - prev;
@@ -1074,7 +1080,7 @@ float terra_distribution_1d_sample ( TerraDistribution1D* dist, float e, float* 
     return SIZE_MAX;
 }
 
-void terra_distribution_2d_init ( TerraDistributon2D* dist, float* f, size_t nx, size_t ny ) {
+void terra_distribution_2d_init ( TerraDistributon2D* dist, const float* f, size_t nx, size_t ny ) {
     for ( size_t i = 0; i < ny; ++i ) {
         terra_distribution_1d_init ( &dist->conditionals[i], f + nx * i, nx );
     }
@@ -1103,7 +1109,11 @@ TerraFloat2 terra_distribution_2d_sample ( TerraDistributon2D* dist, float e1, f
     size_t i;
     float s1 = terra_distribution_1d_sample ( &dist->marginal, e1, &pdfs[0], &i );
     float s2 = terra_distribution_1d_sample ( &dist->conditionals[i], e2, &pdfs[1], NULL );
-    pdf != NULL ? *pdf = pdfs[0] * pdfs[1] : 0;
+
+    if ( pdf != NULL ) {
+        *pdf = pdfs[0] * pdfs[1];
+    }
+
     return terra_f2_set ( s1, s2 );
 }
 

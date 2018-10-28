@@ -6,20 +6,27 @@
 
 // libc
 #include <string.h>
+#include <assert.h>
 
 // .c env
 
-#ifdef TERRA_PROFILE
-#ifdef _WIN32
-    #define _CRT_SECURE_NO_WARNINGS
-    #define NOMINMAX
-    #include <Windows.h>
-    #define ATOMIC_ADD InterlockedIncrement
-    __declspec ( thread ) uint32_t t_terra_profile_thread_id;
-#else
-    // TODO
-    #error
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+#ifdef TERRA_PROFILE
+
+#ifdef _WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#define NOMINMAX
+#include <Windows.h>
+#define ATOMIC_ADD InterlockedIncrement
+__declspec ( thread ) uint32_t t_terra_profile_thread_id;
+#else
+// TODO
+#error
+#endif
+
 #define TERRA_PID t_terra_profile_thread_id
 
 TerraProfileDatabase g_terra_profile_database;
@@ -227,7 +234,7 @@ TerraProfileStats terra_profile_stats_combine ( TerraProfileStats* s1, TerraProf
 #define TERRA_TYPE_ENUM_f32     F32
 #define TERRA_TYPE_ENUM_f64     F64
 #define TERRA_TYPE_ENUM_time    TIME
-
+#include <stdio.h>
 #define TERRA_TYPE_TO_ENUM( type ) TERRA_TYPE_ENUM_ ## type
 
 #define TERRA_PROFILE_DEFINE_TARGET_CREATOR( postfix, _type )                                                       \
@@ -241,6 +248,7 @@ TerraProfileStats terra_profile_stats_combine ( TerraProfileStats* s1, TerraProf
             target->buffers[i].time = ( TerraClockTime* ) terra_malloc( sizeof( TerraClockTime ) * sample_cap );    \
             target->buffers[i].value = terra_malloc ( sizeof( _type ) * sample_cap );                               \
             target->buffers[i].size = 0;                                                                            \
+            target->buffers[i].cap = sample_cap;                                                                    \
             terra_profile_stats_init ( &target->buffers[i].stats );                                                 \
         }                                                                                                           \
     }
@@ -274,8 +282,8 @@ TERRA_PROFILE_DEFINE_COLLECTOR ( time, TerraClockTime )
         terra_profile_stats_init ( &s );                                                                    \
         double sum_sq = 0;                                                                                  \
         TerraProfileBuffer* buffer = &TERRA_PDB.sessions[session].targets[target].buffers[thread];          \
-        s.n = ( double ) buffer->size - buffer->stats.n;                                                    \
-        for ( size_t i = buffer->stats.n; i < buffer->size; ++i ) {                                         \
+        s.n = ( double ) buffer->size;                                                                      \
+        for ( size_t i = 0; i < buffer->size; ++i ) {                                                       \
             type v = ( ( type* ) buffer->value ) [i];                                                       \
             s.sum += v;                                                                                     \
             sum_sq += v * v;                                                                                \
@@ -286,6 +294,7 @@ TERRA_PROFILE_DEFINE_COLLECTOR ( time, TerraClockTime )
         double avg_sq = sum_sq / s.n;                                                                       \
         s.var = avg_sq - s.avg * s.avg;                                                                     \
         buffer->stats = terra_profile_stats_combine ( &s, &buffer->stats );                                 \
+        buffer->size = 0;                                                                                   \
     }
 TERRA_PROFILE_DEFINE_THREAD_UPDATE ( u32, uint32_t )
 TERRA_PROFILE_DEFINE_THREAD_UPDATE ( u64, uint64_t )
@@ -367,4 +376,8 @@ double terra_clock_elapsed_ms ( TerraClockTime delta_time ) {
     return ( double ) ( delta_time / CLOCKS_PER_SEC * 1000 );
 }
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif

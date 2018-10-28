@@ -54,26 +54,26 @@ void  terra_sampler_halton_init ( TerraSamplerHalton* sampler );
 void  terra_sampler_halton_destroy ( TerraSamplerHalton* sampler );
 void  terra_sampler_halton_next_pair ( void* sampler, float* e1, float* e2 );
 
-// Arbitrary piecewise distribution sampling
+// Arbitrary discrete probability distribution sampling
 
 // TODO use Vose's algorithm for O(1) time generation performance.
 // http://www.keithschwarz.com/darts-dice-coins/
 typedef struct {
-    float* f;
-    size_t n;
-    float* cdf;
-    float integral;
+    float* f;           // The function evaluated on its domain
+    size_t n;           // The domain size (0->n-1)
+    float* cdf;         // The function's cdf
+    float integral;     // The function's integral's value
 } TerraDistribution1D;
 
 typedef struct {
-    TerraDistribution1D* conditionals;
-    TerraDistribution1D  marginal;
+    TerraDistribution1D  marginal;      // Probability distribution of picking each row
+    TerraDistribution1D* conditionals;  // Probability distribution of picking a value, given each row
 } TerraDistributon2D;
 
-void        terra_distribution_1d_init ( TerraDistribution1D* dist, float* f, size_t n );
+void        terra_distribution_1d_init ( TerraDistribution1D* dist, const float* f, size_t size );
 float       terra_distribution_1d_sample ( TerraDistribution1D* dist, float e, float* pdf, size_t* idx );
 
-void        terra_distribution_2d_init ( TerraDistributon2D* dist, float* f, size_t nx, size_t ny );
+void        terra_distribution_2d_init ( TerraDistributon2D* dist, const float* f, size_t width, size_t height );
 TerraFloat2 terra_distribution_2d_sample ( TerraDistributon2D* dist, float e1, float e2, float* pdf );
 
 // Geometry

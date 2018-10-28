@@ -3,18 +3,20 @@
 // Terra
 #include <Terra.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef _WIN32
-    typedef int64_t TerraClockTime;
+typedef int64_t TerraClockTime;
 #else
-    typedef clock_t TerraClockTime;
+typedef clock_t TerraClockTime;
 #endif
 
 void                terra_clock_init();
 TerraClockTime      terra_clock();
 double              terra_clock_to_ms ( TerraClockTime delta_time );
 
-// Define TERRA_PROFILE as a global preprocessor compiler variable to enable profiling.
-// If this is not defined, all macro function calls default to zero.
 #ifdef TERRA_PROFILE
 
 // Dynamic resizing of sessions/targets is disabled.
@@ -38,16 +40,15 @@ typedef struct {
     double n;
 } TerraProfileStats;
 
-typedef struct {
-    const char _p0[64];
+typedef __declspec ( align ( 64 ) ) struct {
     // Thread local buffer stats.
     TerraProfileStats stats;
     // Buffer size.
     size_t size;
+    size_t cap;
     // Buffer data.
     TerraClockTime* time;
     void* value;
-    const char _p1[64];
 } TerraProfileBuffer;
 
 typedef enum {
@@ -63,7 +64,7 @@ typedef enum {
 typedef struct {
     // Sample type.
     TerraProfileSampleType type;
-    // Global stats. They are computed using samples from all buffers.
+    // Global stats. They are computed putting together the sample buffers.
     TerraProfileStats stats;
     // One buffer per thread.
     TerraProfileBuffer* buffers;
@@ -81,7 +82,7 @@ typedef struct {
 
 extern TerraProfileDatabase g_terra_profile_database;
 
-void                terra_profile_session_create ( size_t session, size_t threads );
+void terra_profile_session_create ( size_t id, size_t threads );
 void                terra_profile_register_thread ( size_t session );
 
 void                terra_profile_target_create_u32 ( size_t session, size_t target, size_t sample_cap );
@@ -90,7 +91,7 @@ void                terra_profile_target_create_i32 ( size_t session, size_t tar
 void                terra_profile_target_create_i64 ( size_t session, size_t target, size_t sample_cap );
 void                terra_profile_target_create_f32 ( size_t session, size_t target, size_t sample_cap );
 void                terra_profile_target_create_f64 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_tm ( size_t session, size_t target, size_t sample_cap );
+void                terra_profile_target_create_time ( size_t session, size_t target, size_t sample_cap );
 
 void                terra_profile_target_clear ( size_t session, size_t target );
 size_t              terra_profile_target_size ( size_t session, size_t target );
@@ -106,7 +107,7 @@ void                terra_profile_add_sample_i32 ( size_t session, size_t target
 void                terra_profile_add_sample_i64 ( size_t session, size_t target, int64_t value );
 void                terra_profile_add_sample_f32 ( size_t session, size_t target, float value );
 void                terra_profile_add_sample_f64 ( size_t session, size_t target, double value );
-void                terra_profile_add_sample_tm ( size_t session, size_t target, TerraClockTime value );
+void                terra_profile_add_sample_time ( size_t session, size_t target, TerraClockTime value );
 
 // TODO
 // operations on entire sessions (clear/update/size)
@@ -142,4 +143,8 @@ void                terra_profile_add_sample_tm ( size_t session, size_t target,
 #define TERRA_PROFILE_CLEAR( session, target )                              0
 #define TERRA_CLOCK()                                                       0
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif

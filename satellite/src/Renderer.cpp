@@ -10,6 +10,10 @@
 #define CLOTO_IMPLEMENTATION
 #include <Cloto.h>
 
+// Terra
+#include <TerraProfile.h>
+#include <TerraPresets.h>
+
 namespace {
     // fnv1a
     constexpr uint64_t fnv_basis = 14695981039346656037ull;
@@ -68,15 +72,26 @@ void terra_render_launcher ( void* _args ) {
     Args* args = ( Args* ) _args;
 
     if ( args->th->_on_tile_begin ) {
-        TileMsg msg1{ tile_msg_stub, args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
-        cloto_thread_send_message ( args->th->thread(), &msg1, sizeof ( msg1 ), CLOTO_MSG_JOB_LOCAL_ARGS );
+        //TileMsg msg1{ tile_msg_stub, args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
+        ClotoMessageJobPayload msg;
+        msg.routine = tile_msg_stub;
+        TileMsgArg msg_arg { args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
+        memcpy ( msg.buffer, &msg_arg, sizeof ( msg_arg ) );
+        cloto_thread_send_message ( args->th->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
     }
 
     terra_render ( args->th->_target_camera, args->th->_target_scene, &args->th->_framebuffer, args->x, args->y, args->width, args->height );
+    TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
+    TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
+    TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
 
     if ( args->th->_on_tile_end ) {
         TileMsg msg2{ tile_msg_stub, args->th->_on_tile_end, args->x, args->y, args->width, args->height };
-        cloto_thread_send_message ( args->th->thread(), &msg2, sizeof ( msg2 ), CLOTO_MSG_JOB_LOCAL_ARGS );
+        ClotoMessageJobPayload msg;
+        msg.routine = tile_msg_stub;
+        TileMsgArg msg_arg { args->th->_on_tile_end, args->x, args->y, args->width, args->height };
+        memcpy ( msg.buffer, &msg_arg, sizeof ( msg_arg ) );
+        cloto_thread_send_message ( args->th->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
     }
 
     cloto_atomic_fetch_add_u32 ( &args->th->_tile_counter, -1 );
@@ -382,6 +397,25 @@ bool TerraRenderer::_apply_changes() {
         _workers.reset (  new ClotoSlaveGroup );
         cloto_slavegroup_create ( _workers.get(), _concurrent_jobs, job_buffer_size );
         _create_jobs();
+        TERRA_PROFILE_CREATE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT, _concurrent_jobs );
+        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
+        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
+        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
+
+        for ( int i = 0; i < _concurrent_jobs; ++i ) {
+            ClotoMessageJobPayload payload;
+            struct {
+                size_t session;
+            } msg_args;
+            auto msg_routine = [] ( void* args ) -> void {
+                size_t* session = ( size_t* ) args;
+                TERRA_PROFILE_REGISTER_THREAD ( *session );
+            };
+            payload.routine = msg_routine;
+            size_t session = TERRA_PROFILE_SESSION_DEFAULT;
+            memcpy ( payload.buffer, &session, sizeof ( session ) );
+            cloto_thread_send_message ( &_workers->slaves[i].thread, CLOTO_MSG_JOB_LOCAL_ARGS, &payload, CLOTO_MSG_PAYLOAD_SIZE );
+        }
     }
 
     return true;
