@@ -84,7 +84,8 @@ void Console::draw ( int wnd_width, int wnd_height ) {
     _width = _width == 0.f ? 0.5f * wnd_width : _width;
     _height = _height == 0.f ? 0.5f * wnd_height : _height;
     SetNextWindowSize ( ImVec2 ( _width, _height ), ImGuiCond_Once );
-    SetNextWindowPos ( ImVec2 ( wnd_width - _width, wnd_height - _height ) );
+    //SetNextWindowPos(ImVec2(wnd_width - _width, wnd_height - _height));
+    SetNextWindowPos ( ImVec2 ( 0, wnd_height - _height ) );
 
     if ( !Begin ( "Command Console", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize ) ) {
         End();

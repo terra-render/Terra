@@ -64,6 +64,8 @@ class TerraRenderer {
     ClotoThread* thread() const;
 
   private:
+    void     _setup_profiler();
+    void     _update_profiler_results();
     void     _create_jobs();
     void     _push_jobs();
     void     _num_tiles ( int& tiles_x, int& tiles_y ); // Calculates the number of tiles from the current framebuffer / tile_size

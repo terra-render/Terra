@@ -4,10 +4,14 @@
 #include <cstdint>
 #include <memory>
 #include <map>
+#include <vector>
 
 // Satellite
 #include <Graphics.hpp>
 #include <Console.hpp>
+
+// Terra
+#include <TerraProfile.h>
 
 //
 // Does not hold any reference to the render targets data
@@ -24,6 +28,14 @@ class Visualizer {
         std::string sampling;
     };
 
+    struct Stats {
+        size_t session;
+        size_t target;
+        std::string name;
+        TerraProfileSampleType type;
+        TerraProfileStats data;
+    };
+
   public:
     void init ( GFXLayer* gfx );
 
@@ -34,9 +46,15 @@ class Visualizer {
 
     void toggle_info();
 
+    void add_stats_tracker ( size_t session, size_t target, const char* name, TerraProfileSampleType type );
+    void remove_stats_tracker ( const char* name );
+    void remove_all_stats_trackers();
+    void update_stats();
+
     void draw();
 
-    Info&  info();
+    Info&               info();
+    std::vector<Stats>& stats();
 
   private:
     GFXLayer*    _gfx;
@@ -47,4 +65,6 @@ class Visualizer {
     unsigned int _gl_texture;
 
     bool         _hide_info;
+
+    std::vector<Stats> _stats;
 };

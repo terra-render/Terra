@@ -21,8 +21,8 @@ double              terra_clock_to_ms ( TerraClockTime delta_time );
 
 // Dynamic resizing of sessions/targets is disabled.
 // These numbers are usually (always?) knwon at compile time.
-#define TERRA_TIME_SESSIONS             128
-#define TERRA_TIME_TARGETS_PER_SESSION  128
+#define TERRA_PROFILE_SESSIONS             128
+#define TERRA_PROFILE_TARGETS_PER_SESSION  128
 
 // Threads that want to collect samples have to register before starting to collect.
 // Collected data is grouped in sessions and targets.
@@ -82,8 +82,9 @@ typedef struct {
 
 extern TerraProfileDatabase g_terra_profile_database;
 
-void terra_profile_session_create ( size_t id, size_t threads );
+void                terra_profile_session_create ( size_t id, size_t threads );
 void                terra_profile_register_thread ( size_t session );
+void                terra_profile_session_delete ( size_t id );
 
 void                terra_profile_target_create_u32 ( size_t session, size_t target, size_t sample_cap );
 void                terra_profile_target_create_u64 ( size_t session, size_t target, size_t sample_cap );
@@ -125,7 +126,8 @@ void                terra_profile_add_sample_time ( size_t session, size_t targe
 #define TERRA_PROFILE_GET_LOCAL_STATS( session, target )                    terra_profile_target_local_stats_get ( session, target )
 #define TERRA_PROFILE_SIZE( session, target )                               terra_profile_target_size ( session, target )
 #define TERRA_PROFILE_LOCAL_SIZE( session, target )                         terra_profile_target_local_size ( session, target )
-#define TERRA_PROFILE_CLEAR( session, target )                              terra_profile_target_clear ( session, target )
+#define TERRA_PROFILE_CLEAR_TARGET( session, target )                       terra_profile_target_clear ( session, target )
+#define TERRA_PROFILE_DELETE_SESSION( session )                             terra_profile_session_delete ( session )
 #define TERRA_CLOCK()                                                       terra_clock()
 
 #else

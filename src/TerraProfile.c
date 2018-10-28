@@ -67,17 +67,38 @@ void terra_profile_update_thread_stats_time ( size_t session, size_t target );
 
 void terra_profile_session_create ( size_t id, size_t threads ) {
     if ( TERRA_PDB.sessions == NULL ) {
-        TERRA_PDB.sessions = terra_malloc ( sizeof ( TerraProfileSession ) * TERRA_TIME_SESSIONS );
+        TERRA_PDB.sessions = terra_malloc ( sizeof ( TerraProfileSession ) * TERRA_PROFILE_SESSIONS );
     }
 
     TerraProfileSession* session = TERRA_PDB.sessions + id;
     session->threads = threads;
     session->registered_threads = 0;
-    session->targets = terra_malloc ( sizeof ( TerraProfileTarget ) * TERRA_TIME_TARGETS_PER_SESSION );
+    session->targets = terra_malloc ( sizeof ( TerraProfileTarget ) * TERRA_PROFILE_TARGETS_PER_SESSION );
+
+    for ( size_t i = 0; i < TERRA_PROFILE_TARGETS_PER_SESSION; ++i ) {
+        session->targets[i].buffers = NULL;
+    }
 }
 
 void terra_profile_register_thread ( size_t session ) {
     TERRA_PID = ATOMIC_ADD ( &TERRA_PDB.sessions[session].registered_threads ) - 1;
+}
+
+void terra_profile_session_delete ( size_t id ) {
+    TerraProfileSession* session = TERRA_PDB.sessions + id;
+
+    for ( size_t i = 0; i < TERRA_PROFILE_TARGETS_PER_SESSION; ++i ) {
+        TerraProfileTarget* target = session->targets + i;
+
+        if ( target->buffers == NULL ) {
+            continue;
+        }
+
+        for ( size_t j = 0; j < session->threads; ++j ) {
+            terra_free ( target->buffers[j].time );
+            terra_free ( target->buffers[j].value );
+        }
+    }
 }
 
 void terra_profile_target_clear ( size_t _session, size_t _target ) {
@@ -234,7 +255,7 @@ TerraProfileStats terra_profile_stats_combine ( TerraProfileStats* s1, TerraProf
 #define TERRA_TYPE_ENUM_f32     F32
 #define TERRA_TYPE_ENUM_f64     F64
 #define TERRA_TYPE_ENUM_time    TIME
-#include <stdio.h>
+
 #define TERRA_TYPE_TO_ENUM( type ) TERRA_TYPE_ENUM_ ## type
 
 #define TERRA_PROFILE_DEFINE_TARGET_CREATOR( postfix, _type )                                                       \
@@ -282,6 +303,7 @@ TERRA_PROFILE_DEFINE_COLLECTOR ( time, TerraClockTime )
         terra_profile_stats_init ( &s );                                                                    \
         double sum_sq = 0;                                                                                  \
         TerraProfileBuffer* buffer = &TERRA_PDB.sessions[session].targets[target].buffers[thread];          \
+        if (buffer->size == 0) return;                                                                      \
         s.n = ( double ) buffer->size;                                                                      \
         for ( size_t i = 0; i < buffer->size; ++i ) {                                                       \
             type v = ( ( type* ) buffer->value ) [i];                                                       \

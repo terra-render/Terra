@@ -12,6 +12,9 @@
 #include <imgui.h>
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
+// Terra
+#include <TerraProfile.h>
+
 // OpenGL functions
 #include <GL/gl3w.h>
 
@@ -30,7 +33,8 @@ namespace {
         TopLeft,
         BottomLeft,
         TopRight,
-        Middle
+        Middle,
+        TopMiddle,
     };
 
     // with respect to current window
@@ -64,6 +68,12 @@ namespace {
                 text_pos = ImVec2 ( w / 2, h / 2 );
                 text_pos.x -= text_size.x * 0.5f;
                 text_pos.y -= text_size.y * 0.5f;
+                break;
+            }
+
+            case ImAlign::TopMiddle: {
+                text_pos = ImVec2 ( w / 2, padding );
+                text_pos.x -= text_size.x * 0.5f;
                 break;
             }
 
@@ -101,6 +111,7 @@ void Visualizer::init ( GFXLayer* gfx ) {
     _info.sampling    = "n/a";
     _texture.width    = 0;
     _texture.height   = 0;
+    terra_clock_init();
 }
 
 void Visualizer::set_texture_data ( const TextureData& texture ) {
@@ -348,8 +359,8 @@ void Visualizer::draw() {
     } else {
         const char* msg = "            render something!\n"
                           "press ` (backtick) to toggle the console\n"
-                          "    type help for a list of commands\n";
-        im_text_aligned ( ImAlign::Middle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, -20.f ) );
+                          "    enter help for a list of commands\n";
+        im_text_aligned ( ImAlign::TopMiddle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, 50.f ) );
     }
 
     if ( ! _info.scene.empty() ) {
@@ -362,6 +373,26 @@ void Visualizer::draw() {
         }
     }
 
+    size_t offset = 0;
+
+    for ( auto& stats : _stats ) {
+        constexpr int STATS_BUF_LEN = 1024;
+        char stats_buf[STATS_BUF_LEN];
+        TerraProfileStats data = stats.data;
+
+        if ( stats.type == TIME ) {
+            data.avg = terra_clock_to_ms ( ( int64_t ) data.avg );
+            data.var = terra_clock_to_ms ( ( int64_t ) data.var );
+            data.min = terra_clock_to_ms ( ( int64_t ) data.min );
+            data.max = terra_clock_to_ms ( ( int64_t ) data.max );
+            data.sum = terra_clock_to_ms ( ( int64_t ) data.sum );
+        }
+
+        snprintf ( stats_buf, STATS_BUF_LEN, "%s\n avg: %e\n var: %e\n min: %e\n max: %e\n sum: %f\n samples: %zu\n", stats.name.c_str(), data.avg, data.var, data.min, data.max, data.sum, ( size_t ) data.n );
+        im_text_aligned ( ImAlign::TopRight, stats_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ), ImVec2 ( 0, offset ) );
+        offset += 120;
+    }
+
     End();
     PopStyleVar ( 2 );
     PopStyleColor ( 1 );
@@ -369,4 +400,38 @@ void Visualizer::draw() {
 
 Visualizer::Info& Visualizer::info() {
     return _info;
+}
+
+std::vector<Visualizer::Stats>& Visualizer::stats() {
+    return _stats;
+}
+
+void Visualizer::add_stats_tracker ( size_t session, size_t target, const char* name, TerraProfileSampleType type ) {
+    TerraProfileStats data = TERRA_PROFILE_GET_STATS ( session, target );
+    Stats stats;
+    stats.data = data;
+    stats.name = std::string ( name );
+    stats.session = session;
+    stats.target = target;
+    stats.type = type;
+    _stats.push_back ( stats );
+}
+
+void Visualizer::remove_stats_tracker ( const char* name ) {
+    for ( auto it = _stats.begin(); it != _stats.end(); ++it ) {
+        if ( it->name.compare ( name ) == 0 ) {
+            _stats.erase ( it );
+            break;
+        }
+    }
+}
+
+void Visualizer::remove_all_stats_trackers() {
+    _stats.clear();
+}
+
+void Visualizer::update_stats() {
+    for ( auto& stats : _stats ) {
+        stats.data = TERRA_PROFILE_GET_STATS ( stats.session, stats.target );
+    }
 }

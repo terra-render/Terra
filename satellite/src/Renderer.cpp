@@ -179,6 +179,8 @@ void TerraRenderer::refresh_jobs() {
 
     // The current job queue has finished executing, we can now read from TerraFramebuffer
     if ( _tile_counter == 0 ) {
+        _update_profiler_results();
+
         // Notifying
         if ( _on_step_end ) {
             _on_step_end();
@@ -290,6 +292,34 @@ ClotoThread* TerraRenderer::thread() const {
     return _this_thread;
 }
 
+void TerraRenderer::_setup_profiler() {
+    TERRA_PROFILE_CREATE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT, _concurrent_jobs );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
+
+    for ( int i = 0; i < _concurrent_jobs; ++i ) {
+        ClotoMessageJobPayload payload;
+        struct {
+            size_t session;
+        } msg_args;
+        auto msg_routine = [] ( void* args ) -> void {
+            size_t* session = ( size_t* ) args;
+            TERRA_PROFILE_REGISTER_THREAD ( *session );
+        };
+        payload.routine = msg_routine;
+        size_t session = TERRA_PROFILE_SESSION_DEFAULT;
+        memcpy ( payload.buffer, &session, sizeof ( session ) );
+        cloto_thread_send_message ( &_workers->slaves[i].thread, CLOTO_MSG_JOB_LOCAL_ARGS, &payload, CLOTO_MSG_PAYLOAD_SIZE );
+    }
+}
+
+void TerraRenderer::_update_profiler_results() {
+    TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
+    TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
+    TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
+}
+
 void TerraRenderer::_create_jobs() {
     _job_args.clear();
     const int num_tiles_x = ( int ) ceilf ( ( float ) _framebuffer.width / _tile_size );
@@ -374,6 +404,7 @@ bool TerraRenderer::_apply_changes() {
         if ( _workers != nullptr ) {
             cloto_slavegroup_destroy ( _workers.get() );
             _workers = nullptr;
+            TERRA_PROFILE_DELETE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT );
         }
 
         // Initializing state
@@ -396,26 +427,8 @@ bool TerraRenderer::_apply_changes() {
         }
         _workers.reset (  new ClotoSlaveGroup );
         cloto_slavegroup_create ( _workers.get(), _concurrent_jobs, job_buffer_size );
+        _setup_profiler();
         _create_jobs();
-        TERRA_PROFILE_CREATE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT, _concurrent_jobs );
-        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
-        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
-        TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
-
-        for ( int i = 0; i < _concurrent_jobs; ++i ) {
-            ClotoMessageJobPayload payload;
-            struct {
-                size_t session;
-            } msg_args;
-            auto msg_routine = [] ( void* args ) -> void {
-                size_t* session = ( size_t* ) args;
-                TERRA_PROFILE_REGISTER_THREAD ( *session );
-            };
-            payload.routine = msg_routine;
-            size_t session = TERRA_PROFILE_SESSION_DEFAULT;
-            memcpy ( payload.buffer, &session, sizeof ( session ) );
-            cloto_thread_send_message ( &_workers->slaves[i].thread, CLOTO_MSG_JOB_LOCAL_ARGS, &payload, CLOTO_MSG_PAYLOAD_SIZE );
-        }
     }
 
     return true;

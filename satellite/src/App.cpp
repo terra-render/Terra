@@ -18,6 +18,9 @@
 
 #include <Commdlg.h>
 
+#include <TerraPresets.h>
+#include <TerraProfile.h>
+
 using namespace std;
 
 namespace {
@@ -242,6 +245,7 @@ void App::_init_cmd_map() {
             _visualizer.info().sampling = Scene::from_terra_sampling ( _renderer.options().sampling_method );
             _visualizer.info().accelerator = Scene::from_terra_accelerator ( _renderer.options().accelerator );
             _visualizer.info().spp = ( int ) _renderer.options().samples_per_pixel;
+            _visualizer.update_stats();
 
             if ( !_renderer.is_progressive() ) {
                 _visualizer.set_texture_data ( _renderer.framebuffer() );
@@ -265,6 +269,8 @@ void App::_init_cmd_map() {
     auto cmd_loop = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.loop ( &_render_camera, _scene.construct_terra_scene(),
         [ = ]() {
+            _visualizer.update_stats();
+
             if ( !_renderer.is_progressive() ) {
                 _visualizer.set_texture_data ( _renderer.framebuffer() );
             }
@@ -407,6 +413,18 @@ success:
         _console.toggle();
         return 0;
     };
+    // stats
+    auto cmd_stats = [this] ( const CommandArgs & args ) {
+        if ( _visualizer.stats().size() == 0 ) {
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, "render", TIME );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, "trace", TIME );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, "ray", TIME );
+        } else {
+            _visualizer.remove_all_stats_trackers();
+        }
+
+        return 0;
+    };
     // fill cmd map
     _c_map["clear"]  = cmd_clear;
     _c_map["help"]   = cmd_help;
@@ -420,6 +438,7 @@ success:
     _c_map["opt"]    = cmd_option;
     _c_map["resize"] = cmd_resize;
     _c_map["hide"]   = cmd_hide;
+    _c_map["stats"]  = cmd_stats;
 }
 
 void App::_boot() {
