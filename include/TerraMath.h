@@ -58,7 +58,7 @@ static inline TerraFloat3   terra_crossf3 ( const TerraFloat3* a, const TerraFlo
 static inline TerraFloat3   terra_negf3 ( const TerraFloat3* vec );
 static inline float         terra_lenf3 ( const TerraFloat3* vec );
 static inline float         terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b );
-static inline float         terra_distance_squaredf3 ( const TerraFloat3* a, const TerraFloat3* b );
+static inline float         terra_sqdistf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_normf3 ( const TerraFloat3* vec );
 static inline float         terra_maxf ( float a, float b );
 static inline float         terra_minf ( float a, float b );

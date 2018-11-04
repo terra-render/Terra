@@ -667,17 +667,19 @@ DWORD WINAPI cloto_thread_launcher ( LPVOID param ) {
 }
 
 bool cloto_thread_create ( ClotoThread* thread, ClotoThreadRoutine* routine, void* args, uint32_t msg_queue_cap, uint32_t user_msg_queue_cap ) {
-    HANDLE handle = CreateThread ( NULL, 0, cloto_thread_launcher, thread, 0, NULL );
-
-    if ( handle == NULL ) {
-        return false;
-    }
-
-    thread->handle = handle;
     thread->routine = routine;
     thread->args = args;
     CLOTO_SAFECALL ( cloto_msgqueue_create ( &thread->msg_queue, msg_queue_cap ) );
     CLOTO_SAFECALL ( cloto_usermsgqueue_create ( &thread->user_msg_queue, user_msg_queue_cap ) );
+    HANDLE handle = CreateThread ( NULL, 0, cloto_thread_launcher, thread, 0, NULL );
+    thread->handle = handle;
+
+    if ( handle == NULL ) {
+        cloto_msgqueue_destroy ( &thread->msg_queue );
+        cloto_usermsgqueue_destroy ( &thread->user_msg_queue );
+        return false;
+    }
+
     return true;
 }
 

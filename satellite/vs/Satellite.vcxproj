@@ -127,7 +127,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;TERRA_PROFILE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>

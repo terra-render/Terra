@@ -298,13 +298,37 @@ void App::_init_cmd_map() {
     // save
     // TODO: support multiple outputs
     auto cmd_save = [ this ] ( const CommandArgs & args ) -> int {
+        char name[256];
+
         if ( args.size() < 1 ) {
-            Log::console ( "<path>" );
-            return 0;
+            OPENFILENAMEA ofn;
+            ZeroMemory ( &ofn, sizeof ( ofn ) );
+            name[0] = '\0';
+            ofn.lStructSize = sizeof ( OPENFILENAME );
+            ofn.hwndOwner = GetFocus();
+            ofn.lpstrFilter = NULL;
+            ofn.lpstrCustomFilter = NULL;
+            ofn.nMaxCustFilter = 0;
+            ofn.nFilterIndex = 0;
+            ofn.lpstrFile = name;
+            ofn.nMaxFile = sizeof ( name );
+            ofn.lpstrInitialDir = ".";
+            ofn.lpstrFileTitle = NULL;
+            ofn.nMaxFileTitle = 0;
+            ofn.lpstrTitle = "Save image";
+            ofn.lpstrDefExt = NULL;
+            ofn.Flags = OFN_NOCHANGEDIR;
+            bool result = GetSaveFileName ( &ofn );
+
+            if ( result == 0 ) {
+                Log::console ( "<obj [path]> " );
+                return 0;
+            }
+        } else {
+            strcpy ( name, args[0].c_str() );
         }
 
-        const char* path = args[0].c_str();
-        _visualizer.save_to_file ( path );
+        _visualizer.save_to_file ( name );
 
         return 0;
     };

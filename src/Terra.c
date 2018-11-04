@@ -248,7 +248,7 @@ void terra_scene_commit ( HTerraScene _scene ) {
 
             for ( size_t j = 0; j < scene->objects[i].triangles_count; ++j ) {
                 TerraTriangle* tri = &scene->objects[i].triangles[j];
-                float a = terra_triangle_area ( &tri->a, &tri->b, &tri->c );
+                float a = terra_triangle_area ( tri );
                 scene->lights[idx].triangle_area[j] = a;
                 area += a;
             }
@@ -388,7 +388,7 @@ void terra_ray_create ( TerraRay* ray, TerraFloat3* point, TerraFloat3* directio
     ray->inv_direction.z = 1.f / ray->direction.z;
 }
 
-TerraObject* terra_find_closest ( TerraScene* scene, const TerraRay* ray, const TerraMaterial** material_out, TerraShadingSurface* surface_out, TerraFloat3* intersection_point ) {
+TerraObject* terra_find_closest ( TerraScene* scene, const TerraRay* ray, TerraShadingSurface* surface_out, TerraFloat3* intersection_point, size_t* triangle ) {
     TerraPrimitiveRef primitive;
     TerraClockTime t = TERRA_CLOCK();
     bool miss = false;
@@ -412,12 +412,16 @@ TerraObject* terra_find_closest ( TerraScene* scene, const TerraRay* ray, const 
     }
 
     TerraObject* object = &scene->objects[primitive.object_idx];
-    *material_out = &object->material;
+
+    if ( triangle ) {
+        *triangle = primitive.triangle_idx;
+    }
+
     terra_triangle_init_shading ( &object->triangles[primitive.triangle_idx], &object->material, &object->properties[primitive.triangle_idx], intersection_point, surface_out );
     return object;
 }
 
-TerraLight* terra_light_pick_power_proportional ( const TerraScene* scene, float e, float* pdf ) {
+TerraLight* terra_scene_pick_light ( const TerraScene* scene, float e, float* pdf ) {
     // e1 is a random float between 0 and 1
     /*float alpha_acc = *e1;
     size_t light_idx = SIZE_MAX;
@@ -490,13 +494,14 @@ float terra_luminance ( const TerraFloat3* color ) {
 
 #define _randf() (float)rand() / RAND_MAX
 
-TerraFloat3 terra_compute_direct ( const TerraScene* scene, TerraShadingSurface* surface, TerraMaterial* material, TerraFloat3* p, TerraFloat3* wo ) {
+// This
+TerraFloat3 terra_compute_direct ( const TerraScene* scene, const TerraShadingSurface* surface, const TerraMaterial* material, const TerraFloat3* p, const TerraFloat3* wo ) {
     // Pick light to sample
     TerraLight* light;
     float light_pdf;
     {
         float e = _randf() - terra_Epsilon;
-        light = terra_light_pick_power_proportional ( scene, e, &light_pdf );
+        light = terra_scene_pick_light ( scene, e, &light_pdf );
     }
     // Pick triangle to sample
     size_t tri_idx;
@@ -518,19 +523,18 @@ TerraFloat3 terra_compute_direct ( const TerraScene* scene, TerraShadingSurface*
     // Raycast
     TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
     TerraFloat3 wi = terra_normf3 ( &p_to_light );
-    TerraMaterial* light_material;
     TerraShadingSurface light_surface;
     {
         TerraFloat3 intersection_point;
         TerraRay ray;
         terra_ray_create ( &ray, p, &wi, &surface->normal, 1 );
-        TerraObject* hit = terra_find_closest ( scene, &ray, &light_material, &light_surface, &intersection_point );
+        TerraObject* hit = terra_find_closest ( scene, &ray, &light_surface, &intersection_point, NULL );
 
         if ( hit != light->object ) {
             return terra_f3_zero;
         }
     }
-    // Compute scattered radiance
+    // Compute reflected radiance
     float pdf;
     TerraFloat3 f;
     {
@@ -543,6 +547,146 @@ TerraFloat3 terra_compute_direct ( const TerraScene* scene, TerraShadingSurface*
     return L;
 }
 
+float terra_power_heuristic ( float f, float g ) {
+    return ( f * f ) / ( f * f + g * g );
+}
+
+TerraFloat3 terra_compute_direct_mis ( const TerraScene* scene, const TerraShadingSurface* surface, const TerraMaterial* material, const TerraFloat3* p, const TerraFloat3* wo ) {
+    TerraFloat3 Lo = terra_f3_zero;
+    TerraLight* light;
+    // Sample light
+    {
+        // Sample and compute pdf
+        float light_pdf;
+        TerraFloat3 sample_pos;
+        TerraFloat3 wi;
+        {
+            float pick_pdf;
+            {
+                float e = _randf() - terra_Epsilon;
+                light = terra_scene_pick_light ( scene, e, &pick_pdf );
+            }
+            // Pick triangle to sample
+            size_t tri_idx;
+            float tri_pdf;
+            {
+                float e = _randf();
+                tri_idx = terra_light_pick_triangle ( light, e, &tri_pdf );
+            }
+            // Sample triangle
+            TerraFloat2 sample_uv;
+            TerraFloat3 sample_norm;
+            float sample_pdf;
+            {
+                float e1 = _randf();
+                float e2 = _randf();
+                terra_light_sample_triangle ( light, tri_idx, e1, e2, &sample_pos, &sample_uv, &sample_norm, &sample_pdf );
+            }
+            light_pdf = pick_pdf * tri_pdf * sample_pdf;
+            TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
+            wi = terra_normf3 ( &p_to_light );
+        }
+        // Shadow ray
+        TerraObject* object;
+        TerraShadingSurface light_surface;
+        {
+            TerraFloat3 intersection_point;
+            TerraRay ray;
+            terra_ray_create ( &ray, p, &wi, &surface->normal, 1 );
+            object = terra_find_closest ( scene, &ray, &light_surface, &intersection_point, NULL );
+        }
+
+        // Go to bsdf sampling on miss
+        if ( object != light->object ) {
+            goto bsdf;
+        }
+
+        // If we hit the light, compute the pdf of such event
+        float bsdf_pdf = material->bsdf.pdf ( surface, &wi, wo );
+        // Compute weight
+        float weight = terra_power_heuristic ( light_pdf, bsdf_pdf );
+
+        // Compute reflected radiance
+        if ( light_pdf != 0 ) {
+            TerraFloat3 f = material->bsdf.eval ( surface, &wi, wo );
+            TerraFloat3 L = terra_pointf3 ( &light_surface.emissive, &f );
+            L = terra_mulf3 ( &L, terra_dotf3 ( &wi, &surface->normal ) * weight / light_pdf );
+            Lo = terra_addf3 ( &Lo, &L );
+        }
+    }
+bsdf:
+    // Sample bsdf
+    {
+        // Sample bsdf lobe, eval, compute sample pdf
+        TerraFloat3 wi;
+        TerraFloat3 f;
+        float bsdf_pdf;
+        {
+            float e1 = _randf();
+            float e2 = _randf();
+            float e3 = _randf();
+            wi = material->bsdf.sample ( surface, e1, e2, e3, wo );
+            f = material->bsdf.eval ( surface, &wi, wo );
+            bsdf_pdf = material->bsdf.pdf ( surface, &wi, wo );
+        }
+        TerraFloat3 light_wo = terra_negf3 ( &wi );
+        // Raycast the sample
+        TerraShadingSurface light_surface;
+        TerraObject* object;
+        TerraFloat3 intersection_point;
+        size_t light_triangle;
+        TerraRay ray;
+        {
+            terra_ray_create ( &ray, p, &wi, &surface->normal, 1 );
+            object = terra_find_closest ( scene, &ray, &light_surface, &intersection_point, &light_triangle );
+        }
+
+        // Go to bsdf sampling on miss
+        if ( object != light->object ) {
+            goto exit;
+        }
+
+        // If we hit a light, compute the pdf of such event
+        float light_pdf;
+        {
+            if ( object == NULL ) {
+                // TODO env light pdf
+                goto exit;
+            } else {
+                float ndotw = terra_dotf3 ( &light_surface.normal, &light_wo );
+
+                if ( ndotw <= 0 ) {
+                    goto exit;
+                }
+
+                float dist = terra_sqdistf3 ( &intersection_point, p );
+                light_pdf = dist / ( ndotw * terra_triangle_area ( &object->triangles[light_triangle] ) );
+            }
+        }
+        // Compute weight
+        float weight = terra_power_heuristic ( bsdf_pdf, light_pdf );
+        // Fetch light radiance
+        TerraFloat3 L = terra_f3_zero;
+        {
+            if ( object == light->object ) {
+                L = light_surface.emissive;
+            } else {
+                // TODO env light eval
+                //L = terra_eval_attribute ( &scene->opts.environment_map, &ray.direction, &intersection_point );
+            }
+        }
+
+        // Compute radiance reflected
+        if ( bsdf_pdf != 0 ) {
+            L = terra_pointf3 ( &L, &f );
+            L = terra_mulf3 ( &L, terra_dotf3 ( &wi, &surface->normal ) * weight / bsdf_pdf );
+            Lo = terra_addf3 ( &Lo, &L );
+        }
+    }
+exit:
+    return Lo;
+}
+
 TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray ) {
     TerraFloat3 Lo = terra_f3_zero;
     TerraFloat3 throughput = terra_f3_one;
@@ -551,11 +695,12 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
     for ( size_t bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
         TerraFloat3 wo = terra_negf3 ( &ray.direction );
         // Raycast
-        TerraMaterial* material;
         TerraShadingSurface surface;
         TerraFloat3 intersection_point;
+        TerraObject* object;
+        object = terra_find_closest ( scene, &ray, &surface, &intersection_point, NULL );
 
-        if ( terra_find_closest ( scene, &ray, &material, &surface, &intersection_point ) == NULL ) {
+        if ( object == NULL ) {
             TerraFloat3 env_color = terra_eval_attribute ( &scene->opts.environment_map, &ray.direction, &intersection_point );
             throughput = terra_pointf3 ( &throughput, &env_color );
             //Lo = terra_addf3 ( &Lo, &throughput );
@@ -565,13 +710,13 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
         // Emissive on first hit
         if ( bounce == 0 ) {
             TerraFloat3 emissive = surface.emissive;
-            emissive = terra_pointf3 ( &throughput, &emissive );
+            //emissive = terra_pointf3 ( &throughput, &emissive );
             Lo = terra_addf3 ( &Lo, &emissive );
         }
 
         // Direct lighting
         {
-            TerraFloat3 Ld = terra_compute_direct ( scene, &surface, material, &intersection_point, &wo );
+            TerraFloat3 Ld = terra_compute_direct_mis ( scene, &surface, &object->material, &intersection_point, &wo );
             Ld = terra_pointf3 ( &Ld, &throughput );
             Lo = terra_addf3 ( &Lo, &Ld );
         }
@@ -582,13 +727,13 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
             float e0 = _randf();
             float e1 = _randf();
             float e2 = _randf();
-            wi = material->bsdf.sample ( &surface, e0, e1, e2, &wo );
-            pdf = terra_maxf ( material->bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
+            wi = object->material.bsdf.sample ( &surface, e0, e1, e2, &wo );
+            pdf = terra_maxf ( object->material.bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
         }
         // Update throughput
-        TerraFloat3 f = material->bsdf.eval ( &surface, &wi, &wo );
-        TerraFloat3 L = terra_mulf3 ( &f, terra_dotf3 ( &surface.normal, &wi ) / pdf );
-        throughput = terra_pointf3 ( &throughput, &L );
+        TerraFloat3 f = object->material.bsdf.eval ( &surface, &wi, &wo );
+        TerraFloat3 reflectance = terra_mulf3 ( &f, terra_dotf3 ( &surface.normal, &wi ) / pdf );
+        throughput = terra_pointf3 ( &throughput, &reflectance );
         // Russian roulette
         {
             float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
@@ -793,7 +938,7 @@ bool terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height
     texture->width = ( uint16_t ) width;
     texture->height = ( uint16_t ) height;
     texture->components = ( uint8_t ) components;
-    texture->depth = 4; // ?
+    texture->depth = 4;
 }
 
 TerraFloat3 terra_texture_read ( TerraTexture* texture, size_t x, size_t y ) {
@@ -1146,9 +1291,9 @@ void terra_log ( const char* str, ... ) {
 
 //--------------------------------------------------------------------------------------------------
 
-float terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c ) {
-    TerraFloat3 ab = terra_subf3 ( b, a );
-    TerraFloat3 ac = terra_subf3 ( c, a );
+float terra_triangle_area ( const TerraTriangle* tri ) {
+    TerraFloat3 ab = terra_subf3 ( &tri->b, &tri->a );
+    TerraFloat3 ac = terra_subf3 ( &tri->c, &tri->a );
     TerraFloat3 cross = terra_crossf3 ( &ab, &ac );
     return terra_lenf3 ( &cross ) / 2;
 }

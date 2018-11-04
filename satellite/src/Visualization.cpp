@@ -263,15 +263,17 @@ void Visualizer::update_tile ( const TextureData& texture, size_t x, size_t y, s
 
     for ( size_t i = 0; i < h; ++i ) {
         for ( size_t j = 0; j < w * texture.components; ++j ) {
-            _texture.data[i * w * texture.components + j] = texture.data[ ( y + i ) * texture.width * texture.components + x * texture.components + j];
+            _texture.data[ ( i + y ) * texture.width * texture.components + x * texture.components + j ] = texture.data[ ( y + i ) * texture.width * texture.components + x * texture.components + j];
         }
     }
 
     _gl_format = gl_format;
 }
 
-void Visualizer::save_to_file ( const char* path ) {
+void Visualizer::save_to_file ( const char* _path ) {
     static_assert ( is_same<remove_pointer<decltype ( TextureData::data ) >::type, float>::value, "Code needs to be updated for non-floating point textures." );
+    char path[256];
+    strcpy ( path, _path );
 
     if ( _texture.data == nullptr ) {
         Log::error ( STR ( "Nothing to export" ) );
@@ -296,7 +298,14 @@ void Visualizer::save_to_file ( const char* path ) {
         --ext;
     }
 
-    ++ext; // Skipping `.`
+    if ( ext == path ) {
+        Log::warning ( FMT ( "No file extension specified, png assumed by default." ) );
+        strcpy ( path + path_len, ".png" );
+        ext = path + path_len + 1;
+    } else {
+        ++ext; // Skipping `.`
+    }
+
     bool is_png = strcmp ( ext, "png" ) == 0;
     bool is_jpg = strcmp ( ext, "jpg" ) == 0 || strcmp ( ext, "jpeg" ) == 0;
     int ret = -1;

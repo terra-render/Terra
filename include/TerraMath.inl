@@ -113,7 +113,7 @@ inline float terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     return terra_lenf3 ( &ba );
 }
 
-inline float terra_distance_squaredf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
+inline float terra_sqdistf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     TerraFloat3 delta = terra_subf3 ( b, a );
     return terra_dotf3 ( &delta, &delta );
 }

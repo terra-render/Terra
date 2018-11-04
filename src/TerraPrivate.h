@@ -81,7 +81,7 @@ TerraFloat2 terra_distribution_2d_sample ( TerraDistributon2D* dist, float e1, f
 bool        terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out );
 bool        terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out );
 void        terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle );
-float       terra_triangle_area ( const TerraFloat3* a, const TerraFloat3* b, const TerraFloat3* c );
+float       terra_triangle_area ( const TerraTriangle* triangle );
 
 typedef struct {
     uint32_t object_idx : 8;
