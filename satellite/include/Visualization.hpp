@@ -32,8 +32,10 @@ class Visualizer {
         size_t session;
         size_t target;
         std::string name;
+#ifdef TERRA_PROFILE
         TerraProfileSampleType type;
         TerraProfileStats data;
+#endif
     };
 
   public:

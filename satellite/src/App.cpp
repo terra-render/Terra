@@ -190,7 +190,7 @@ void App::_init_ui() {
 void App::_init_cmd_map() {
     // help
     auto cmd_help = [this] ( const CommandArgs & args ) -> int {
-        Log::console ( "Available commands. Enter command name for more information." );
+        Log::console ( "Enter command name for more information." );
 
         for ( const auto& cmd : _c_map ) {
             Log::console ( ( string ( "\t - " ) +  cmd.first ).c_str() );
@@ -223,7 +223,6 @@ void App::_init_cmd_map() {
             bool result = GetOpenFileName ( &ofn );
 
             if ( result == 0 ) {
-                Log::console ( "<obj [path]> " );
                 return 0;
             }
         } else {
@@ -260,7 +259,7 @@ void App::_init_cmd_map() {
         } );
 
         if ( !ret ) {
-            Log::console ( STR ( "Failed to start renderer" ) );
+            Log::error ( STR ( "Failed to start renderer" ) );
             return 1;
         }
 
@@ -284,7 +283,7 @@ void App::_init_cmd_map() {
         } );
 
         if ( !ret ) {
-            Log::console ( "Failed to start renderer" );
+            Log::error ( STR ( "Failed to start renderer" ) );
             return 1;
         }
 
@@ -321,7 +320,6 @@ void App::_init_cmd_map() {
             bool result = GetSaveFileName ( &ofn );
 
             if ( result == 0 ) {
-                Log::console ( "<obj [path]> " );
                 return 0;
             }
         } else {
@@ -347,7 +345,7 @@ void App::_init_cmd_map() {
         } else if ( args[0].compare ( "info" ) == 0 ) {
             _visualizer.toggle_info();
         } else {
-            Log::console ( "Unrecognized toggle" );
+            Log::console ( usage.c_str() );
             return 1;
         }
 
@@ -394,7 +392,7 @@ void App::_init_cmd_map() {
                     }
                 }
 
-                Log::error ( FMT ( "Failed to find any matching option to %s", args[1].c_str() ) );
+                Log::error ( FMT ( "Failed to find any matching option for %s", args[1].c_str() ) );
                 return 1;
             }
         } else {
@@ -416,7 +414,7 @@ success:
         int height = strtol ( args[1].c_str(), nullptr, 10 );
 
         if ( width == 0 || height == 0 ) {
-            Log::console ( "Unrecognized command" );
+            Log::error ( STR ( "Can't set width or height to zero" ) );
             return 1;
         }
 
@@ -441,6 +439,8 @@ success:
     };
     // stats
     auto cmd_stats = [this] ( const CommandArgs & args ) {
+#ifdef TERRA_PROFILE
+
         if ( _visualizer.stats().size() == 0 ) {
             _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, "render" );
             _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, "trace" );
@@ -449,6 +449,9 @@ success:
             _visualizer.remove_all_stats_trackers();
         }
 
+#else
+        Log::warning ( STR ( "Profiling disabled. Define TERRA_PROFILE and recompile to enable." ) );
+#endif
         return 0;
     };
     // fill cmd map

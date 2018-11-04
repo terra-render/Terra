@@ -123,11 +123,6 @@ void                terra_profile_add_sample_time ( size_t session, size_t targe
 #define TERRA_PROFILE_ADD_SAMPLE( format, session, target, value)           terra_profile_add_sample_ ## format ( session, target, value )
 #define TERRA_PROFILE_UPDATE_STATS( session, target )                       terra_profile_target_stats_update ( session, target )
 #define TERRA_PROFILE_UPDATE_LOCAL_STATS( session, target )                 terra_profile_target_local_stats_update ( session, target )
-#define TERRA_PROFILE_GET_STATS( session, target )                          terra_profile_target_stats_get ( session, target )
-#define TERRA_PROFILE_GET_LOCAL_STATS( session, target )                    terra_profile_target_local_stats_get ( session, target )
-#define TERRA_PROFILE_GET_TYPE(session, target)                             terra_profile_target_type_get ( session, target )
-#define TERRA_PROFILE_GET_SIZE( session, target )                           terra_profile_target_size ( session, target )
-#define TERRA_PROFILE_GET_LOCAL_SIZE( session, target )                     terra_profile_target_local_size ( session, target )
 #define TERRA_PROFILE_CLEAR_TARGET( session, target )                       terra_profile_target_clear ( session, target )
 #define TERRA_PROFILE_DELETE_SESSION( session )                             terra_profile_session_delete ( session )
 #define TERRA_CLOCK()                                                       terra_clock()
@@ -140,11 +135,8 @@ void                terra_profile_add_sample_time ( size_t session, size_t targe
 #define TERRA_PROFILE_ADD_SAMPLE( format, session, target, value)           0
 #define TERRA_PROFILE_UPDATE_STATS( session, target )                       0
 #define TERRA_PROFILE_UPDATE_LOCAL_STATS( session, target )                 0
-#define TERRA_PROFILE_GET_STATS( session, target )                          0
-#define TERRA_PROFILE_GET_LOCAL_STATS( session, target )                    0
-#define TERRA_PROFILE_SIZE( session, target )                               0
-#define TERRA_PROFILE_LOCAL_SIZE( session, target )                         0
-#define TERRA_PROFILE_CLEAR( session, target )                              0
+#define TERRA_PROFILE_CLEAR_TARGET( session, target )                       0
+#define TERRA_PROFILE_DELETE_SESSION( session, target )                     0
 #define TERRA_CLOCK()                                                       0
 
 #endif

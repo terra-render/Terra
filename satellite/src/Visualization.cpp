@@ -382,6 +382,7 @@ void Visualizer::draw() {
         }
     }
 
+#ifdef TERRA_PROFILE
     size_t offset = 0;
 
     for ( auto& stats : _stats ) {
@@ -402,6 +403,7 @@ void Visualizer::draw() {
         offset += 120;
     }
 
+#endif
     End();
     PopStyleVar ( 2 );
     PopStyleColor ( 1 );
@@ -416,14 +418,16 @@ std::vector<Visualizer::Stats>& Visualizer::stats() {
 }
 
 void Visualizer::add_stats_tracker ( size_t session, size_t target, const char* name ) {
-    TerraProfileStats data = TERRA_PROFILE_GET_STATS ( session, target );
+#ifdef TERRA_PROFILE
+    TerraProfileStats data = terra_profile_target_stats_get ( session, target );
     Stats stats;
     stats.data = data;
     stats.name = std::string ( name );
     stats.session = session;
     stats.target = target;
-    stats.type = TERRA_PROFILE_GET_TYPE ( session, target );
+    stats.type = terra_profile_target_type_get ( session, target );
     _stats.push_back ( stats );
+#endif
 }
 
 void Visualizer::remove_stats_tracker ( const char* name ) {
@@ -440,7 +444,11 @@ void Visualizer::remove_all_stats_trackers() {
 }
 
 void Visualizer::update_stats() {
+#ifdef TERRA_PROFILE
+
     for ( auto& stats : _stats ) {
-        stats.data = TERRA_PROFILE_GET_STATS ( stats.session, stats.target );
+        stats.data = terra_profile_target_stats_get ( stats.session, stats.target );
     }
+
+#endif
 }
