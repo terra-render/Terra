@@ -138,13 +138,15 @@ void terra_triangle_init_shading ( const TerraTriangle* triangle, const TerraMat
     TerraFloat2 uv;
     uv.x = ( d11 * dp0 - d01 * dp1 ) / div;
     uv.y = ( d00 * dp1 - d01 * dp0 ) / div;
+
     // Interpolating normal at vertices
-    TerraFloat3 na = terra_mulf3 ( &properties->normal_c, uv.y );
+    TerraFloat3 na = terra_mulf3 ( &properties->normal_a, uv.y );
     TerraFloat3 nb = terra_mulf3 ( &properties->normal_b, uv.x );
-    TerraFloat3 nc = terra_mulf3 ( &properties->normal_a, 1 - uv.x - uv.y );
+    TerraFloat3 nc = terra_mulf3 ( &properties->normal_c, 1 - uv.x - uv.y );
     surface->normal = terra_addf3 ( &na, &nb );
     surface->normal = terra_addf3 ( &surface->normal, &nc );
     surface->normal = terra_normf3 ( &surface->normal );
+
     // Interpolating texcoords at vertices
     TerraFloat2 ta = terra_mulf2 ( &properties->texcoord_c, uv.y );
     TerraFloat2 tb = terra_mulf2 ( &properties->texcoord_b, uv.x );
@@ -317,6 +319,25 @@ void terra_scene_destroy ( HTerraScene _scene ) {
 
     // Free scene
     terra_free ( scene );
+}
+
+void terra_ray_state_init ( TerraRayState* ray_state, const TerraRay* ray, const float footprint ) {
+    ray_state->dx_origin = terra_f3_zero;
+    ray_state->dy_origin = terra_f3_zero;
+    ray_state->dx_direction = terra_mulf3 ( &ray->direction, footprint );
+    ray_state->dy_direction = terra_mulf3 ( &ray->direction, footprint );
+}
+
+void terra_ray_state_interact_refract ( TerraRayState* state, const TerraInteraction* interaction ) {
+    state->dx_origin = terra_addf3 ( &interaction->p, &interaction->dx_p );
+    state->dy_origin = terra_addf3 ( &interaction->p, &interaction->dy_p );
+}
+
+void terra_ray_state_interact_reflect ( TerraRayState* state, const TerraInteraction* interaction ) {
+}
+
+void terra_ray_state_interact_surface ( TerraRayState* state, const TerraInteraction* interaction ) {
+
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -707,11 +728,10 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
             break;
         }
 
-        // Emissive on first hit
+#if terra_direct_lighting
+
         if ( bounce == 0 ) {
-            TerraFloat3 emissive = surface.emissive;
-            //emissive = terra_pointf3 ( &throughput, &emissive );
-            Lo = terra_addf3 ( &Lo, &emissive );
+            Lo = terra_addf3 ( &Lo, &surface.emissive );
         }
 
         // Direct lighting
@@ -720,21 +740,32 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
             Ld = terra_pointf3 ( &Ld, &throughput );
             Lo = terra_addf3 ( &Lo, &Ld );
         }
+#else // terra_direct_lighting
+        TerraFloat3 emissive = surface.emissive;
+        emissive = terra_pointf3 ( &throughput, &emissive );
+        Lo = terra_addf3 ( &Lo, &emissive );
+#endif
+
         // Sample BSDF for path continuation
         TerraFloat3 wi;
-        float pdf;
+        float bsdf_pdf;
         {
             float e0 = _randf();
             float e1 = _randf();
             float e2 = _randf();
             wi = object->material.bsdf.sample ( &surface, e0, e1, e2, &wo );
-            pdf = terra_maxf ( object->material.bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
+            bsdf_pdf = terra_maxf ( object->material.bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
         }
+
         // Update throughput
-        TerraFloat3 f = object->material.bsdf.eval ( &surface, &wi, &wo );
-        TerraFloat3 reflectance = terra_mulf3 ( &f, terra_dotf3 ( &surface.normal, &wi ) / pdf );
-        throughput = terra_pointf3 ( &throughput, &reflectance );
-        // Russian roulette
+        // Lo = Le + Li * f_brdf() * NdotL
+        // f_brdf() = eval() / pdf()
+        double NdotL = terra_maxf ( 0.f, terra_dotf3 ( &surface.normal, &wi ) );
+        TerraFloat3 bsdf_eval = object->material.bsdf.eval ( &surface, &wi, &wo ); // f_brdf()
+        TerraFloat3 reflectance = terra_mulf3 ( &bsdf_eval, NdotL / bsdf_pdf );    // f_brdf() * NdotL / pdf()
+        throughput = terra_pointf3 ( &throughput, &reflectance );                  // Lo
+
+        // Russian roulette for path termination
         {
             float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
             float e3 = 0.5f;

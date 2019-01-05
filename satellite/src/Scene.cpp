@@ -21,7 +21,7 @@ using namespace std;
 
 namespace {
     constexpr float       CAMERA_FOV = 60.f;
-    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.7f, 2.f };
+    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 2.f };
     constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, -1.f };
     constexpr TerraFloat3 CAMERA_UP  = { 0.f, 1.f, 0.f };
 
@@ -60,11 +60,11 @@ namespace {
 TerraTonemappingOperator Scene::to_terra_tonemap ( string& str ) {
     transform ( str.begin(), str.end(), str.begin(), ::tolower );
     const char* s = str.data();
-    TRY_COMPARE_S ( s, "none", kTerraTonemappingOperatorNone );
-    TRY_COMPARE_S ( s, "linear", kTerraTonemappingOperatorLinear );
-    TRY_COMPARE_S ( s, "reinhard", kTerraTonemappingOperatorReinhard );
-    TRY_COMPARE_S ( s, "filmic", kTerraTonemappingOperatorFilmic );
-    TRY_COMPARE_S ( s, "uncharted2", kTerraTonemappingOperatorUncharted2 );
+    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_NONE, kTerraTonemappingOperatorNone );
+    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_LINEAR, kTerraTonemappingOperatorLinear );
+    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_REINHARD, kTerraTonemappingOperatorReinhard );
+    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_FILMIC, kTerraTonemappingOperatorFilmic );
+    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_UNCHARTED2, kTerraTonemappingOperatorUncharted2 );
     return ( TerraTonemappingOperator ) - 1;
 }
 
@@ -72,16 +72,15 @@ TerraAccelerator Scene::to_terra_accelerator ( string& str ) {
     transform ( str.begin(), str.end(), str.begin(), ::tolower );
     const char* s = str.data();
     TRY_COMPARE_S ( s, "bvh", kTerraAcceleratorBVH );
-    TRY_COMPARE_S ( s, "kdtree", kTerraAcceleratorKDTree );
     return ( TerraAccelerator ) - 1;
 }
 
 TerraSamplingMethod Scene::to_terra_sampling ( string& str ) {
     transform ( str.begin(), str.end(), str.begin(), ::tolower );
     const char* s = str.data();
-    TRY_COMPARE_S ( s, "random", kTerraSamplingMethodRandom );
-    TRY_COMPARE_S ( s, "stratified", kTerraSamplingMethodStratified );
-    TRY_COMPARE_S ( s, "halton", kTerraSamplingMethodHalton );
+    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_RANDOM, kTerraSamplingMethodRandom );
+    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_STRATIFIED, kTerraSamplingMethodStratified );
+    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_HALTON, kTerraSamplingMethodHalton );
     return ( TerraSamplingMethod ) - 1;
 }
 
@@ -358,7 +357,7 @@ bool Scene::set_opt ( int opt, const char* value ) {
 }
 
 void Scene::dump_opts() {
-    Log::info ( FMT ( "Samples per pixel = %d", _opts.samples_per_pixel ) );
+    Log::info ( FMT ( "Samples per pixel = %d (", _opts.samples_per_pixel ) );
     Log::info ( FMT ( "Accelerator       = %s", Scene::from_terra_accelerator ( _opts.accelerator ) ) );
     Log::info ( FMT ( "Sampling          = %s", Scene::from_terra_sampling ( _opts.sampling_method ) ) );
     Log::info ( FMT ( "Bounces           = %d", _opts.bounces ) );

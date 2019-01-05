@@ -633,6 +633,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             // ...
         } else if ( strcmp ( key, "illum" ) == 0 ) {
             if ( sb_last ( materials ).bsdf == APOLLO_PBR ) {
+                while ( getc ( file ) != '\n' );
+
                 continue;
             }
 
@@ -657,6 +659,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                     sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
                     break;
             }
+        } else if ( strcmp ( key, "#" ) == 0 ) {
+            while ( getc ( file ) != '\n' );
         } else {
             APOLLO_LOG_ERR ( "Unexpected field name %s in materials file %s\n", key, filename );
             goto error;

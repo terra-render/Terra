@@ -3,6 +3,48 @@
 // C++ STL
 #include <string>
 
+
+// Render options that can be set from the terminal through `option set <name> <value>`
+#define RENDER_OPT_WORKERS_DESC    "Number of worker threads concurrently rendering"
+#define RENDER_OPT_WORKERS_NAME    "workers"
+#define RENDER_OPT_WORKERS_DEFAULT 16 // -1 to use all possible threads
+
+#define RENDER_OPT_TILE_SIZE_DESC "Side length of a rendering job. Dimension is in pixels"
+#define RENDER_OPT_TILE_SIZE_NAME "tile-size"
+#define RENDER_OPT_TILE_SIZE_DEFAULT 32
+
+#define RENDER_OPT_BOUNCES_DESC "Maximum ray bounces (if Russian Rulette is activated, this option is ignored)"
+#define RENDER_OPT_BOUNCES_NAME "bounces"
+#define RENDER_OPT_BOUNCES_DEFAULT 32
+
+#define RENDER_OPT_SAMPLES_DESC "Number of samples per pixel"
+#define RENDER_OPT_SAMPLES_NAME "samples"
+#define RENDER_OPT_SAMPLES_DEFAULT 32
+
+#define RENDER_OPT_GAMMA_DESC "Output display gamma for final color correction"
+#define RENDER_OPT_GAMMA_NAME "gamma"
+#define RENDER_OPT_GAMMA_DEFAULT 2.2
+
+#define RENDER_OPT_EXPOSURE_DESC "Manual camera exposure"
+#define RENDER_OPT_EXPOSURE_NAME "exposure"
+#define RENDER_OPT_EXPOSURE_DEFAULT 1.
+
+// See kTerraTonemappingOperator
+#define RENDER_OPT_TONEMAP_DESC "Tonemapping operator"
+#define RENDER_OPT_TONEMAP_NAME "tonemap"
+#define RENDER_OPT_TONEMAP_NONE "none"
+#define RENDER_OPT_TONEMAP_LINEAR "linear"
+#define RENDER_OPT_TONEMAP_REINHARD "reinhard"
+#define RENDER_OPT_TONEMAP_FILMIC "filmic"
+#define RENDER_OPT_TONEMAP_UNCHARTED2 "uncharted"
+#define RENDER_OPT_TONEMAP_DEFAULT RENDER_OPT_TONEMAPE_LINEAR
+
+#define RENDER_OPT_SAMPLER_DESC "Sampling strategy for the monte carlo integration"
+#define RENDER_OPT_SAMPLER_NAME "sampler"
+#define RENDER_OPT_SAMPLER_RANDOM "random"
+#define RENDER_OPT_SAMPLER_STRATIFIED "stratified"
+#define RENDER_OPT_SAMPLER_HALTON "halton"
+
 //
 // Config wraps any configurable bit of the app.
 // Can be safely read/written from anywhere, although writing should probably

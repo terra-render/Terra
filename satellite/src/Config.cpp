@@ -209,11 +209,17 @@ namespace Config {
         add_opt ( CMD_LOAD,             Type::Str,      "load",         "Load specified scene at startup." );
         add_opt ( CMD_RENDER,           Type::Exec,     "render",       "Renders the loaded scene." );
         add_opt ( CMD_SAVE,             Type::Str,      "save",         "Saves the rendererd scene to the specified file." );
-        int n_threads =  ( int ) thread::hardware_concurrency();
+
+        int n_threads = RENDER_OPT_WORKERS_DEFAULT;
+
+        if ( n_threads == -1 ) {
+            n_threads = ( int ) thread::hardware_concurrency();
+        }
+
         add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
-        add_opt ( JOB_TILE_SIZE,        16,             "tile_size",    "Side length of area to be processed by a single worker." );
-        add_opt ( RENDER_MAX_BOUNCES,   1,              "bounces",      "Maximum ray bounces" );
-        add_opt ( RENDER_SAMPLES,       1,              "samples",      "Samples per pixel" );
+        add_opt ( JOB_TILE_SIZE,        RENDER_OPT_TILE_SIZE_DEFAULT,   RENDER_OPT_TILE_SIZE_NAME,    "Side length of area to be processed by a single worker." );
+        add_opt ( RENDER_MAX_BOUNCES,   RENDER_OPT_BOUNCES_DEFAULT,     RENDER_OPT_BOUNCES_NAME,      "Maximum ray bounces" );
+        add_opt ( RENDER_SAMPLES,       RENDER_OPT_SAMPLES_DEFAULT,     RENDER_OPT_SAMPLES_NAME,      "Samples per pixel" );
         add_opt ( RENDER_GAMMA,         2.2f,           "gamma",        "Gamma" );
         add_opt ( RENDER_EXPOSURE,      1.f,            "exposure",     "Manual exposure" );
         add_opt ( RENDER_TONEMAP,       "linear",       "tonemap",      "Tonemapping operator [none|linear|reinhard|filmic|uncharted2]" );

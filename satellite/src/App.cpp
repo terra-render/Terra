@@ -24,6 +24,27 @@
 
 using namespace std;
 
+/*
+    List of command names (`option list` from the terminal)
+*/
+#define COMMAND_CLEAR_NAME "clear"
+#define COMMAND_HELP_NAME "help"
+#define COMMAND_LOAD_NAME "load"
+#define COMMAND_STEP_NAME "step"
+#define COMMAND_LOOP_NAME "loop"
+#define COMMAND_PAUSE_NAME "pause"
+#define COMMAND_SAVE_NAME "save"
+#define COMMAND_TOGGLE_NAME "toggle"
+#define COMMAND_OPTION_NAME "option"
+#define COMMAND_OPTION_LIST_NAME "list"
+#define COMMAND_OPTION_RESET_NAME "reset"
+#define COMMAND_OPTION_SET_NAME "set"
+#define COMMAND_RESIZE_NAME "resize"
+#define COMMAND_HIDE_NAME "hide"
+#define COMMAND_STATS_NAME "stats"
+
+#define DEFAULT_UI_FONT "Inconsolata.ttf"
+
 namespace {
     // Human friendly formatted multiline string literal
     // I have not included R("") in the macro because of the intellisense
@@ -74,10 +95,6 @@ namespace {
         return ret;
     }
 
-    // Macro so that we can do a couple of path combinations without
-    // having to manipulate strings
-#define DEFAULT_UI_FONT "Inconsolata.ttf"
-
     bool file_exists ( const char* filename ) {
         return std::ifstream ( filename ).good();
     }
@@ -111,10 +128,9 @@ App::App ( int argc, char** argv ) {
 App::~App() {
 }
 
-int App::run() {
-    int w = 800;
-    int h = 600;
-    bool gfx_init = _gfx.init ( w, h, "Satellite",
+int App::run ( int width, int height ) {
+
+    bool gfx_init = _gfx.init ( width, height, "Satellite",
     [ = ] ( int w, int h ) { // on resize
         _renderer.resize ( w, h );
     },
@@ -130,7 +146,7 @@ int App::run() {
 
     _init_ui();
     Log::flush();
-    _renderer.init ( w, h, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
+    _renderer.init ( width, height, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
     _visualizer.init ( &_gfx );
     _init_cmd_map();
     _boot();
@@ -363,19 +379,21 @@ void App::_init_cmd_map() {
             return 0;
         }
 
-        if ( args[0].compare ( "list" ) == 0 ) {
+        // Running option subcommand
+        if ( args[0].compare ( COMMAND_OPTION_LIST_NAME ) == 0 ) {
             _scene.dump_opts();
             Log::info ( FMT ( "workers           = %d", _renderer.concurrent_jobs() ) );
             Log::info ( FMT ( "tile_size         = %d", _renderer.tile_size() ) );
-        } else if ( args[0].compare ( "reset" ) == 0 ) {
+        } else if ( args[0].compare ( COMMAND_OPTION_RESET_NAME ) == 0 ) {
             _scene.reset_options();
             Log::info ( STR ( "Reset options to Config default" ) );
-        } else if ( args[0].compare ( "set" ) == 0 ) {
+        } else if ( args[0].compare ( COMMAND_OPTION_SET_NAME ) == 0 ) {
             if ( args.size() < 3 ) {
                 Log::error ( STR ( "Expected <name> <value> pair." ) );
                 return 1;
             }
 
+            // Finding command/name mapping
             int opt = Config::find ( args[1].c_str() );
 
             // We don't want to lookup the options here
@@ -454,20 +472,21 @@ success:
 #endif
         return 0;
     };
-    // fill cmd map
-    _c_map["clear"]  = cmd_clear;
-    _c_map["help"]   = cmd_help;
-    _c_map["load"]   = cmd_load;
-    _c_map["step"]   = cmd_step;
-    _c_map["loop"]   = cmd_loop;
-    _c_map["pause"]  = cmd_pause;
-    _c_map["save"]   = cmd_save;
-    _c_map["toggle"] = cmd_toggle;
-    _c_map["option"] = cmd_option;
-    _c_map["opt"]    = cmd_option;
-    _c_map["resize"] = cmd_resize;
-    _c_map["hide"]   = cmd_hide;
-    _c_map["stats"]  = cmd_stats;
+
+    //
+    // Fillcommands to
+    _c_map[COMMAND_CLEAR_NAME] = cmd_clear;
+    _c_map[COMMAND_HELP_NAME] = cmd_help;
+    _c_map[COMMAND_LOAD_NAME] = cmd_load;
+    _c_map[COMMAND_STEP_NAME] = cmd_step;
+    _c_map[COMMAND_LOOP_NAME] = cmd_loop;
+    _c_map[COMMAND_PAUSE_NAME] = cmd_pause;
+    _c_map[COMMAND_SAVE_NAME] = cmd_save;
+    _c_map[COMMAND_TOGGLE_NAME] = cmd_toggle;
+    _c_map[COMMAND_OPTION_NAME] = cmd_option;
+    _c_map[COMMAND_RESIZE_NAME] = cmd_resize;
+    _c_map[COMMAND_HIDE_NAME] = cmd_hide;
+    _c_map[COMMAND_STATS_NAME] = cmd_stats;
 }
 
 void App::_boot() {

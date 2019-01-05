@@ -20,7 +20,7 @@ class App {
     App ( int argc, char** argv );
     ~App();
 
-    int run();
+    int run ( int width, int height );
 
   private:
     void _init_ui();

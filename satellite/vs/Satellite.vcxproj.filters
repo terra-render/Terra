@@ -254,4 +254,7 @@
       <Filter>Terra\Header Files</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="Readme.txt" />
+  </ItemGroup>
 </Project>

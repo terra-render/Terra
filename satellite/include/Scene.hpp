@@ -67,7 +67,6 @@ class Scene {
     // Currently it stops at the first one (TODO)
     TerraCamera default_camera();
 
-
   private:
     bool          _set_opt_safe ( int opt, const void* data );
     TerraTexture* _allocate_texture ( const char* texture );

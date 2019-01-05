@@ -34,6 +34,7 @@ typedef struct TerraFloat4x4 {
 } TerraFloat4x4;
 
 #define terra_ior_air 1.f
+#define terra_f2_zero terra_f2_set(0.f, 0.f)
 #define terra_f3_zero terra_f3_set1(0.f)
 #define terra_f3_one terra_f3_set1(1.f)
 
