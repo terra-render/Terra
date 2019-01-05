@@ -6,12 +6,15 @@
 #include <float.h>
 #include <stdint.h>
 
+// Matrices are stored row-major (in 4 adjacent 4-float arrays)
+// Vectors are columns, matrix vector multiplication is Mv
+
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
 //--------------------------------------------------------------------------------------------------
 #define terra_PI 3.1416926535f
 #define terra_PI2 6.283185307f
-#define terra_Epsilon 0.0001f
+#define terra_Epsilon FLT_EPSILON
 
 // 2D vector
 typedef struct TerraFloat2 {
@@ -57,6 +60,7 @@ static inline float         terra_dotf3 ( const TerraFloat3* a, const TerraFloat
 static inline TerraFloat3   terra_crossf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_negf3 ( const TerraFloat3* vec );
 static inline float         terra_lenf3 ( const TerraFloat3* vec );
+static inline float         terra_sqlenf3 ( const TerraFloat3* vec );
 static inline float         terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline float         terra_sqdistf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_normf3 ( const TerraFloat3* vec );

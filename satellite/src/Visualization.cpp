@@ -114,6 +114,19 @@ void Visualizer::init ( GFXLayer* gfx ) {
     terra_clock_init();
 }
 
+void Visualizer::create_texture ( int width, int height, int gl_format, void* data ) {
+    glGenTextures ( 1, &_gl_texture );
+    glBindTexture ( GL_TEXTURE_2D, _gl_texture );
+    // When the window is resized and the old texture is still being shown, use nearest filter
+    glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+    glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+    glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, gl_format, GL_FLOAT, data );
+
+    if ( !glIsTexture ( _gl_texture ) ) {
+        Log::error ( STR ( "Failed to create OpenGL texture, check debug messages." ) );
+    }
+}
+
 void Visualizer::set_texture_data ( const TextureData& texture ) {
     static_assert ( is_same<remove_pointer<decltype ( TextureData::data ) >::type, float>::value, "Code needs to be updated for non-floating point textures." );
 
@@ -149,17 +162,7 @@ void Visualizer::set_texture_data ( const TextureData& texture ) {
 
     // Creating OpenGL texture, which will contain the render results
     if ( create_gl_texture ) {
-        glGenTextures ( 1, &_gl_texture );
-        glBindTexture ( GL_TEXTURE_2D, _gl_texture );
-        // When the window is resized and the old texture is still being shown, use nearest filter
-        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-        glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGB, texture.width, texture.height, 0, gl_format, GL_FLOAT, texture.data );
-
-        if ( !glIsTexture ( _gl_texture ) ) {
-            Log::error ( STR ( "Failed to create OpenGL texture, check debug messages." ) );
-            return;
-        }
+        create_texture ( texture.width, texture.height, gl_format, texture.data );
     }
     // If the current texture is valid, just uploading the new data
     else {
@@ -222,17 +225,7 @@ void Visualizer::update_tile ( const TextureData& texture, size_t x, size_t y, s
 
     // Creating OpenGL texture, which will contain the render results
     if ( create_gl_texture ) {
-        glGenTextures ( 1, &_gl_texture );
-        glBindTexture ( GL_TEXTURE_2D, _gl_texture );
-        // When the window is resized and the old texture is still being shown, use nearest filter
-        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-        glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-        glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGB, texture.width, texture.height, 0, gl_format, GL_FLOAT, texture.data );
-
-        if ( !glIsTexture ( _gl_texture ) ) {
-            Log::error ( STR ( "Failed to create OpenGL texture, check debug messages." ) );
-            return;
-        }
+        create_texture ( texture.width, texture.height, gl_format, texture.data );
     }
 
     vector<float> buffer ( w * h * texture.components, 0 );

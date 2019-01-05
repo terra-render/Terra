@@ -88,17 +88,6 @@ typedef struct {
 //--------------------------------------------------------------------------------------------------
 // Geometric types ( Scene )
 //--------------------------------------------------------------------------------------------------
-typedef struct TerraRay {
-    TerraFloat3 origin;
-    TerraFloat3 direction;
-    TerraFloat3 inv_direction;
-} TerraRay;
-
-typedef struct TerraAABB {
-    TerraFloat3 min;
-    TerraFloat3 max;
-} TerraAABB;
-
 typedef struct {
     TerraFloat3 a;
     TerraFloat3 b;

@@ -27,8 +27,7 @@ double              terra_clock_to_ms ( TerraClockTime delta_time );
 // Collected data is grouped in sessions and targets. Most situations should only require one session.
 // Targets are the entities to be profiled. For each target, a data collection buffer is created for each thread.
 // Currently the data buffer gets flushed on every stats update. This greatly helps in cases with very high sample collection frequency.
-// On the other hand, cool things like filtering off samples subsets based on e.g. time or outlier values becomes impossible.
-// TODO think if there is a middle-way alternative (store on disk?)
+// On the other hand, cool things like filtering off samples subsets based on e.g. time or outlier values become impossible.
 
 // Stats are always computed in double floating precision.
 typedef struct {

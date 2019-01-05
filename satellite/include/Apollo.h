@@ -602,14 +602,12 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             }
 
             sb_last ( materials ).emissive = Ke;
-            sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Ke" ) == 0 ) {
             size_t idx;
             ApolloResult result = apollo_read_texture ( file, textures, &idx );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).emissive_map_id = idx;
-                sb_last ( materials ).bsdf = APOLLO_PBR;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading emissive texture on file %s\n", idx, filename );
                 goto error;
@@ -633,6 +631,10 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             // ...
         } else if ( strcmp ( key, "illum" ) == 0 ) {
             if ( sb_last ( materials ).bsdf == APOLLO_PBR ) {
+                APOLLO_LOG_WARN ( "Skipping illum field; PBR BSDF has already been assumed." );
+
+                while ( getc ( file ) != '\n' );
+
                 continue;
             }
 
@@ -645,6 +647,10 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
 
             // Apollo pbr is handled at the end
             switch ( illum ) {
+                case 1:
+                    sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
+                    break;
+
                 case 2:
                     sb_last ( materials ).bsdf = APOLLO_SPECULAR;
                     break;
@@ -657,6 +663,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                     sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
                     break;
             }
+        } else if ( strcmp ( key, "#" ) == 0 ) {
+            while ( getc ( file ) != '\n' );
         } else {
             APOLLO_LOG_ERR ( "Unexpected field name %s in materials file %s\n", key, filename );
             goto error;

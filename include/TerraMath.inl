@@ -108,6 +108,13 @@ inline float terra_lenf3 ( const TerraFloat3* vec ) {
                vec->z * vec->z );
 }
 
+inline float terra_sqlenf3 ( const TerraFloat3* vec ) {
+    return
+        vec->x * vec->x +
+        vec->y * vec->y +
+        vec->z * vec->z;
+}
+
 inline float terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     TerraFloat3 ba = terra_subf3 ( a, b );
     return terra_lenf3 ( &ba );

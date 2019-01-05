@@ -7,6 +7,26 @@
 // stdlib
 #include <stdint.h>
 
+typedef struct {
+    uint32_t object_idx : 8;
+    uint32_t triangle_idx : 24;
+} TerraPrimitiveRef;
+
+//--------------------------------------------------------------------------------------------------
+// Terra internal types
+//--------------------------------------------------------------------------------------------------
+// Light radiance (L) is stored inside the object materials as a TerraAttribute named emissive.
+// This struct contains the power (or Radiant flux, Phi) of the light (radiance integrated over
+// surface area and hemisphere) and the surface area.
+// If emissive is a float3, power is computed as emissive * area * PI.
+// If emissive is a texture, TODO (as of now it samples the middle and uses that)
+typedef struct {
+    TerraFloat3  power;
+    float        area;
+    TerraObject* object;
+    float*       triangle_area;
+} TerraLight;
+
 // Uniform distribution sampling
 
 // Adapted using the author's implementation as in
@@ -40,7 +60,9 @@ typedef struct TerraSampler2D {
     TerraSamplingRoutine sample;
 } TerraSampler2D;
 
-// API
+//--------------------------------------------------------------------------------------------------
+// Continuous random probability distribution sampling
+//--------------------------------------------------------------------------------------------------
 
 void  terra_sampler_random_init ( TerraSamplerRandom* sampler );
 void  terra_sampler_random_destroy ( TerraSamplerRandom* sampler );
@@ -54,7 +76,9 @@ void  terra_sampler_halton_init ( TerraSamplerHalton* sampler );
 void  terra_sampler_halton_destroy ( TerraSamplerHalton* sampler );
 void  terra_sampler_halton_next_pair ( void* sampler, float* e1, float* e2 );
 
-// Arbitrary discrete probability distribution sampling
+//--------------------------------------------------------------------------------------------------
+// Discrete arbitrary probability distribution sampling
+//--------------------------------------------------------------------------------------------------
 
 // TODO use Vose's algorithm for O(1) time generation performance.
 // http://www.keithschwarz.com/darts-dice-coins/
@@ -76,16 +100,27 @@ float       terra_distribution_1d_sample ( TerraDistribution1D* dist, float e, f
 void        terra_distribution_2d_init ( TerraDistributon2D* dist, const float* f, size_t width, size_t height );
 TerraFloat2 terra_distribution_2d_sample ( TerraDistributon2D* dist, float e1, float e2, float* pdf );
 
+//--------------------------------------------------------------------------------------------------
 // Geometry
+//--------------------------------------------------------------------------------------------------
+typedef struct TerraRay {
+    TerraFloat3 origin;
+    TerraFloat3 direction;
+    TerraFloat3 inv_direction;
+} TerraRay;
+
+typedef struct TerraAABB {
+    TerraFloat3 min;
+    TerraFloat3 max;
+} TerraAABB;
 
 bool        terra_ray_aabb_intersection ( const TerraRay* ray, const TerraAABB* aabb, float* tmin_out, float* tmax_out );
 bool        terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle* triangle, TerraFloat3* point_out, float* t_out );
 void        terra_aabb_fit_triangle ( TerraAABB* aabb, const TerraTriangle* triangle );
-float       terra_triangle_area ( const TerraTriangle* triangle );
 
-typedef struct {
-    uint32_t object_idx : 8;
-    uint32_t triangle_idx : 24;
-} TerraPrimitiveRef;
+//--------------------------------------------------------------------------------------------------
+// Terra internal routines
+//--------------------------------------------------------------------------------------------------
+
 
 #endif
