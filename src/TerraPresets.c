@@ -21,6 +21,7 @@ TerraFloat3 terra_F_0 ( float ior, const TerraFloat3* albedo, float metalness ) 
 // http://www.rorydriscoll.com/2009/01/07/better-sampling/
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_bsdf_diffuse_sample ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo ) {
+#define terra_bsdf_importance_sample
 #ifdef terra_bsdf_importance_sample
     // cosine weighted hemisphere sampling
     // disk to hemisphere projection
@@ -50,13 +51,7 @@ float terra_bsdf_diffuse_pdf ( const TerraShadingSurface* surface, const TerraFl
 }
 
 TerraFloat3 terra_bsdf_diffuse_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
-#ifdef terra_bsdf_importance_sample
-    // diffuse reflectance
-    float NoL = terra_maxf ( 0.f, terra_dotf3 ( &surface->normal, wi ) );
-    return terra_mulf3 ( &surface->attributes[TERRA_DIFFUSE_ALBEDO], NoL / terra_PI );
-#else
     return terra_mulf3 ( &surface->attributes[TERRA_DIFFUSE_ALBEDO], 1. / terra_PI );
-#endif
 }
 
 void terra_bsdf_diffuse_init ( TerraBSDF* bsdf ) {
