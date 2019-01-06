@@ -62,6 +62,10 @@ void Console::clear() {
 }
 
 int Console::_text_edit_callback_stub ( ImGuiTextEditCallbackData* data ) {
+    if ( data->EventChar == '`' ) {
+        return 1;
+    }
+
     Console* console = ( Console* ) data->UserData;
     return console->_text_edit_callback ( data );
 }
@@ -149,7 +153,7 @@ void Console::draw ( int wnd_width, int wnd_height ) {
     };
 
     if ( InputTextEx ( "", _input_buf, IM_ARRAYSIZE ( _input_buf ), ImVec2 ( GetContentRegionAvailWidth(), 0 ),
-                       ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory,
+                       ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCharFilter,
                        &_text_edit_callback_stub, ( void* ) this ) ) {
         char* input_end = _input_buf + strlen ( _input_buf );
 
