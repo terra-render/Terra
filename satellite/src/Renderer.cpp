@@ -84,6 +84,7 @@ void terra_render_launcher ( void* _args ) {
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
+    TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION );
 
     if ( args->th->_on_tile_end ) {
         TileMsg msg2{ tile_msg_stub, args->th->_on_tile_end, args->x, args->y, args->width, args->height };
@@ -298,6 +299,7 @@ void TerraRenderer::_setup_profiler() {
     TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
     TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
     TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION, 0xaffff );
 
     for ( int i = 0; i < _concurrent_jobs; ++i ) {
         ClotoMessageJobPayload payload;
@@ -319,12 +321,14 @@ void TerraRenderer::_update_profiler_results() {
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
+    TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION );
 }
 
 void TerraRenderer::_clear_stats() {
     TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
     TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
+    TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION );
 }
 
 void TerraRenderer::_create_jobs() {
@@ -417,11 +421,13 @@ bool TerraRenderer::_apply_changes() {
         // Initializing state
         _tile_size = _next_tile_size;
         _concurrent_jobs = _next_concurrent_jobs;
+
         // Creating workers and jobs
         int tx, ty;
         _num_tiles ( tx, ty );
         int job_buffer_size = tx * ty;
-        // Rounding to next power of two, can also be done using `countleadingzeros` intrinsic
+
+        // Rounding to next power of two, we should also try the `countleadingzeros` intrinsic
         // http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
         {
             --job_buffer_size;
@@ -452,8 +458,10 @@ bool TerraRenderer::_launch () {
     }
 
     assert ( is_paused() );
+
     // Updating options
     _apply_changes();
+
     // Clearing the framebuffer if the scene has changes
     uint64_t scene_id = _gen_scene_id ( _target_camera, _target_scene );
 
@@ -466,8 +474,10 @@ bool TerraRenderer::_launch () {
     _paused      = false;
     _iterations  = 0;
     _options = *terra_scene_get_options ( _target_scene );
+
     // Pushing jobs
     _push_jobs();
+
     return true;
 }
 

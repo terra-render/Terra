@@ -11,7 +11,11 @@
 //--------------------------------------------------------------------------------------------------
 #define terra_PI 3.1416926535f
 #define terra_PI2 6.283185307f
-#define terra_Epsilon 0.0001f
+#define terra_Epsilon 1e-6
+
+typedef struct TerraInt4 {
+    int x, y, z, w;
+} TerraInt4;
 
 // 2D vector
 typedef struct TerraFloat2 {
@@ -44,7 +48,8 @@ typedef struct TerraFloat4x4 {
 static inline TerraFloat2   terra_f2_set ( float x, float y );
 static inline TerraFloat3   terra_f3_set ( float x, float y, float z );
 static inline TerraFloat3   terra_f3_set1 ( float xyz );
-static inline TerraFloat4   terra_f4 ( float x, float y, float z, float w );
+static inline TerraFloat4   terra_f4_set ( float x, float y, float z, float w );
+static inline TerraInt4     terra_i4_set ( int x, int y, int z, int w );
 static inline bool          terra_equalf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_addf3 ( const TerraFloat3* left, const TerraFloat3* right );
 static inline TerraFloat2   terra_addf2 ( const TerraFloat2* left, const TerraFloat2* right );
@@ -67,7 +72,8 @@ static inline size_t        terra_maxi ( size_t a, size_t b );
 static inline size_t        terra_mini ( size_t a, size_t b );
 static inline float         terra_maxf3 ( const TerraFloat3* vec );
 static inline float         terra_min3 ( const TerraFloat3* vec );
-static inline void          terra_swapf ( float* a, float* b );
+static inline void          terra_swap_xorf ( float* a, float* b );
+static inline void          terra_swap_xori ( int* a, int* b );
 static inline TerraFloat3   terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec );
 static inline bool          terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float         terra_lerp ( float a, float b, float t );

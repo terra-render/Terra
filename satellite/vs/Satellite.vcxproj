@@ -142,7 +142,6 @@
     <ClInclude Include="..\..\include\TerraPresets.h" />
     <ClInclude Include="..\..\include\TerraProfile.h" />
     <ClInclude Include="..\..\src\TerraBVH.h" />
-    <ClInclude Include="..\..\src\TerraKDTree.h" />
     <ClInclude Include="..\..\src\TerraPrivate.h" />
     <ClInclude Include="..\dependencies\gl3w\include\GL\gl3w.h" />
     <ClInclude Include="..\dependencies\gl3w\include\GL\glcorearb.h" />
@@ -177,9 +176,10 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\Terra.c" />
     <ClCompile Include="..\..\src\TerraBVH.c" />
-    <ClCompile Include="..\..\src\TerraKDTree.c" />
+    <ClCompile Include="..\..\src\TerraGeometry.c" />
     <ClCompile Include="..\..\src\TerraPresets.c" />
     <ClCompile Include="..\..\src\TerraProfile.c" />
+    <ClCompile Include="..\..\src\TerraSpatialAcceleration.c" />
     <ClCompile Include="..\dependencies\gl3w\src\gl3w.c" />
     <ClCompile Include="..\dependencies\glfw\src\context.c" />
     <ClCompile Include="..\dependencies\glfw\src\egl_context.c" />

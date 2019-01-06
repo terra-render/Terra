@@ -33,7 +33,7 @@ typedef struct {
 //--------------------------------------------------------------------------------------------------
 void        terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_count );
 void        terra_bvh_destroy ( TerraBVH* bvh );
-bool        terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray,
+bool        terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray, TerraRayState* ray_state,
                                  TerraFloat3* point_out, TerraPrimitiveRef* primitive_out );
 
 #endif // _TERRA_BVH_H_

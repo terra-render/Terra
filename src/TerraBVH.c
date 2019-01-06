@@ -238,7 +238,7 @@ void terra_bvh_destroy ( TerraBVH* bvh ) {
     terra_free ( bvh->nodes );
 }
 
-bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray,
+bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray, TerraRayState* ray_state,
                           TerraFloat3* point_out, TerraPrimitiveRef* primitive_out ) {
     int queue[64];
     queue[0] = 0;
@@ -247,6 +247,13 @@ bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const Terra
     float min_d = FLT_MAX;
     TerraFloat3 min_p = terra_f3_set1 ( FLT_MAX );
     bool found = false;
+
+    // Intersection queries (already initialized)
+    TerraRayIntersectionResult iset_result;
+    TerraRayIntersectionQuery  iset_query;
+    iset_query.ray = ray;
+    iset_query.state = ray_state;
+
 
     while ( queue_count > 0 ) {
         node = queue[--queue_count];
@@ -267,15 +274,15 @@ bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const Terra
                 {
                     int model_idx = bvh->nodes[node].index[i] & 0xff;
                     int tri_idx = bvh->nodes[node].index[i] >> 8;
-                    TerraFloat3 p;
 
-                    if ( terra_ray_triangle_intersection ( ray, &objects[model_idx].triangles[tri_idx], &p, NULL ) ) {
-                        TerraFloat3 po = terra_subf3 ( &p, &ray->origin );
-                        float d = terra_lenf3 ( &po );
+                    iset_query.primitive.triangle = objects[model_idx].triangles + tri_idx;
 
-                        if ( d < min_d ) {
-                            min_d = d;
-                            min_p = p;
+                    if ( terra_geom_ray_triangle_intersection_query ( &iset_query, &iset_result ) ) {
+                        TerraFloat3 po = terra_subf3 ( &iset_result.point, &ray->origin );
+
+                        if ( iset_result.ray_depth < min_d ) {
+                            min_d = iset_result.ray_depth;
+                            min_p = iset_result.point;
                             primitive_out->object_idx = model_idx;
                             primitive_out->triangle_idx = tri_idx;
                             found = true;

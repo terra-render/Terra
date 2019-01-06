@@ -11,6 +11,13 @@ extern "C" {
 // Terra
 #include "TerraMath.h"
 
+/*
+    Terra rendering options
+    This is a list of available options that can be set in `TerraSceneOptions` used when calling `terra_trace()`
+
+*/
+#define terra_bsdf_importance_sample 0
+
 //--------------------------------------------------------------------------------------------------
 // Shading Types
 //--------------------------------------------------------------------------------------------------
@@ -104,6 +111,10 @@ typedef struct TerraRayState {
     // Ray differentials
     TerraFloat3 dx_origin, dy_origin;
     TerraFloat3 dx_direction, dy_direction;
+
+    // ray/triangle intersection transformations (depends on algorithm, see TerraGeometry.c)
+    TerraFloat4 ray_transform_f4;
+    TerraInt4   ray_transform_i4;
 } TerraRayState;
 
 typedef struct TerraAABB {
@@ -142,8 +153,7 @@ typedef enum {
 } TerraTonemappingOperator;
 
 typedef enum {
-    kTerraAcceleratorBVH,
-    kTerraAcceleratorKDTree
+    kTerraAcceleratorBVH
 } TerraAccelerator;
 
 typedef enum {
@@ -189,6 +199,11 @@ typedef struct {
     size_t                     height;
 } TerraFramebuffer;
 
+typedef struct {
+    uint32_t object_idx : 8;
+    uint32_t triangle_idx : 24;
+} TerraPrimitiveRef;
+
 //--------------------------------------------------------------------------------------------------
 // Terra public API
 //--------------------------------------------------------------------------------------------------
@@ -225,11 +240,14 @@ void                terra_attribute_init_cubemap ( TerraAttribute* attr, TerraTe
 
 void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
 
+// terra_spatial_acceleration
+typedef void* HTerraSpatialAcceleration;
+
 //--------------------------------------------------------------------------------------------------
 // Terra system API
 //--------------------------------------------------------------------------------------------------
 // Client can override by defining TERRA_MALLOC
-//--------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------
 void*               terra_malloc ( size_t size );
 void*               terra_realloc ( void* ptr, size_t size );
 void                terra_free ( void* ptr );

@@ -22,8 +22,17 @@ inline TerraFloat3 terra_f3_set1 ( float xyz ) {
     return ret;
 }
 
-inline TerraFloat4 terra_f4 ( float x, float y, float z, float w ) {
+inline TerraFloat4 terra_f4_set ( float x, float y, float z, float w ) {
     TerraFloat4 ret;
+    ret.x = x;
+    ret.y = y;
+    ret.z = z;
+    ret.w = w;
+    return ret;
+}
+
+inline TerraInt4 terra_i4_set ( int x, int y, int z, int w ) {
+    TerraInt4 ret;
     ret.x = x;
     ret.y = y;
     ret.z = z;
@@ -151,10 +160,19 @@ inline float terra_min3 ( const TerraFloat3* vec ) {
     return fminf ( vec->x, fminf ( vec->y, vec->z ) );
 }
 
-inline void terra_swapf ( float* a, float* b ) {
-    float t = *a;
-    *a = *b;
-    *b = t;
+inline void terra_swap_xorf ( float* _a, float* _b ) {
+    uint32_t* a = ( uint32_t* ) _a;
+    uint32_t* b = ( uint32_t* ) _b;
+
+    *a ^= *b;
+    *b ^= *a;
+    *a ^= *b;
+}
+
+inline void terra_swap_xori ( int* a, int* b ) {
+    *a ^= *b;
+    *b ^= *a;
+    *a ^= *b;
 }
 
 inline TerraFloat3 terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec ) {
@@ -192,9 +210,9 @@ inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* normal ) {
     }
 
     normalbt = terra_crossf3 ( normal, &normalt );
-    xform.rows[0] = terra_f4 ( normalt.x, normal->x, normalbt.x, 0.f );
-    xform.rows[1] = terra_f4 ( normalt.y, normal->y, normalbt.y, 0.f );
-    xform.rows[2] = terra_f4 ( normalt.z, normal->z, normalbt.z, 0.f );
-    xform.rows[3] = terra_f4 ( 0.f, 0.f, 0.f, 1.f );
+    xform.rows[0] = terra_f4_set ( normalt.x, normal->x, normalbt.x, 0.f );
+    xform.rows[1] = terra_f4_set ( normalt.y, normal->y, normalbt.y, 0.f );
+    xform.rows[2] = terra_f4_set ( normalt.z, normal->z, normalbt.z, 0.f );
+    xform.rows[3] = terra_f4_set ( 0.f, 0.f, 0.f, 1.f );
     return xform;
 }

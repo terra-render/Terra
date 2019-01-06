@@ -129,9 +129,6 @@
     <ClInclude Include="..\..\src\TerraBVH.h">
       <Filter>Terra\Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\TerraKDTree.h">
-      <Filter>Terra\Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\TerraPrivate.h">
       <Filter>Terra\Source Files</Filter>
     </ClInclude>
@@ -233,9 +230,6 @@
     <ClCompile Include="..\..\src\TerraBVH.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\TerraKDTree.c">
-      <Filter>Terra\Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\TerraPresets.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
@@ -243,6 +237,12 @@
       <Filter>Internal Dependencies\gl3w</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\TerraProfile.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraSpatialAcceleration.c">
+      <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\TerraGeometry.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
   </ItemGroup>

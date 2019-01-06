@@ -289,6 +289,7 @@ TERRA_PROFILE_DEFINE_TARGET_CREATOR ( time, TerraClockTime )
     void terra_profile_add_sample_ ## postfix ( size_t session, size_t target, type value ) {           \
         TerraClockTime time = terra_clock();                                                            \
         TerraProfileBuffer* buffer = &TERRA_PDB.sessions[session].targets[target].buffers[TERRA_PID];   \
+        if (buffer->size == buffer->cap) { return; }                                                    \
         buffer->time[buffer->size] = time;                                                              \
         ( ( type* ) buffer->value ) [buffer->size] = value;                                             \
         ++buffer->size;                                                                                 \

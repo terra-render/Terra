@@ -463,6 +463,7 @@ success:
             _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, "render" );
             _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, "trace" );
             _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, "ray" );
+            _visualizer.add_stats_tracker ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION, "ray-triangle isect" );
         } else {
             _visualizer.remove_all_stats_trackers();
         }

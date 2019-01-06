@@ -402,7 +402,7 @@ bool terra_kdtree_traverse ( TerraKDTree* kdtree, const TerraRay* ray, TerraFloa
             float t;
             TerraFloat3 point;
 
-            if ( terra_ray_triangle_intersection ( ray, &ref.triangle, &point, &t ) ) {
+            if ( terra_geom_ray_triangle_intersection ( ray, &ref.triangle, &point, &t ) ) {
                 if ( t >= stack[enpt].t && t <= stack[expt].t && t < closest_t ) {
                     closest_t = t;
                     *primitive_out = ref.primitive;
