@@ -1013,17 +1013,18 @@ TerraFloat3 terra_trace ( const TerraScene* scene, const TerraRay* primary_ray )
         }
 
         // Emissive on first hit
-        //if ( bounce == 0 ) {
-        TerraFloat3 emissive = surface.emissive;
-        emissive = terra_pointf3 ( &throughput, &emissive );
-        Lo = terra_addf3 ( &Lo, &emissive );
-        //}
+        if ( bounce == 0 ) {
+            TerraFloat3 emissive = surface.emissive;
+            //emissive = terra_pointf3 ( &throughput, &emissive );
+            Lo = terra_addf3 ( &Lo, &emissive );
+        }
+
         // Direct lighting
-        /*{
+        {
             TerraFloat3 Ld = terra_compute_direct_mis ( scene, &surface, &object->material, &intersection_point, &wo );
             Ld = terra_pointf3 ( &Ld, &throughput );
             Lo = terra_addf3 ( &Lo, &Ld );
-        }*/
+        }
         // Sample for path continuation
         TerraFloat3 wi;
         float pdf;
@@ -1151,6 +1152,7 @@ TerraFloat3 terra_compute_direct_mis ( const TerraScene* scene, const TerraShadi
             TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
             wi = terra_normf3 ( &p_to_light );
         }
+        TerraFloat3 light_wo = terra_negf3 ( &wi );
         // Shadow ray
         TerraObject* object;
         TerraShadingSurface light_surface;
@@ -1165,6 +1167,12 @@ TerraFloat3 terra_compute_direct_mis ( const TerraScene* scene, const TerraShadi
             goto bsdf;
         }
 
+        float NoW = terra_dotf3 ( &light_surface.normal, &light_wo );
+
+        if ( NoW <= 0 ) {
+            goto bsdf;
+        }
+
         // If we hit the light, compute the pdf of such event
         float bsdf_pdf = material->bsdf.pdf ( surface, &wi, wo );
         // Compute weight
@@ -1174,7 +1182,7 @@ TerraFloat3 terra_compute_direct_mis ( const TerraScene* scene, const TerraShadi
         if ( light_pdf != 0 ) {
             TerraFloat3 f = material->bsdf.eval ( surface, &wi, wo );
             TerraFloat3 L = terra_pointf3 ( &light_surface.emissive, &f );
-            L = terra_mulf3 ( &L, terra_dotf3 ( &wi, &surface->normal ) * weight / light_pdf );
+            L = terra_mulf3 ( &L, NoW * terra_dotf3 ( &wi, &surface->normal ) * weight / light_pdf );
             Lo = terra_addf3 ( &Lo, &L );
         }
     }
@@ -1205,7 +1213,7 @@ bsdf:
             object = terra_scene_raycast ( scene, &ray, &light_surface, &intersection_point, &light_triangle );
         }
 
-        // Go to bsdf sampling on miss
+        // Exit on miss
         if ( object != light->object ) {
             goto exit;
         }
@@ -1217,14 +1225,14 @@ bsdf:
                 // TODO env light pdf
                 goto exit;
             } else {
-                float ndotw = terra_dotf3 ( &light_surface.normal, &light_wo );
+                float NoW = terra_dotf3 ( &light_surface.normal, &light_wo );
 
-                if ( ndotw <= 0 ) {
+                if ( NoW <= 0 ) {
                     goto exit;
                 }
 
                 float dist = terra_sqdistf3 ( &intersection_point, p );
-                light_pdf = dist / ( ndotw * terra_triangle_area ( &object->triangles[light_triangle] ) );
+                light_pdf = dist / ( NoW * terra_triangle_area ( &object->triangles[light_triangle] ) );
             }
         }
         // Compute weight
@@ -1440,7 +1448,7 @@ TerraFloat4x4 terra_camera_rotation ( const TerraCamera* camera ) {
     return xform;
 }
 
-// TODO move jitter, r1, r2 out, ad dx,dy as params
+// TODO move jitter, r1, r2 out, add dx,dy as params
 TerraFloat3 terra_camera_pixel_dir ( const TerraCamera* camera, const TerraFramebuffer* frame, size_t x, size_t y, float jitter, float r1, float r2 ) {
     float dx = -jitter + 2 * r1 * jitter;
     float dy = -jitter + 2 * r2 * jitter;
@@ -1460,7 +1468,7 @@ TerraFloat3 terra_camera_pixel_dir ( const TerraCamera* camera, const TerraFrame
 }
 
 //--------------------------------------------------------------------------------------------------
-// @TerraAttriubte
+// @TerraAttribute
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_attribute_eval ( const TerraAttribute* attribute, const void* uv, const TerraFloat3* xyz ) {
     if ( attribute->state != NULL ) {
