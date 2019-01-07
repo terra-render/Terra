@@ -385,22 +385,21 @@ void Visualizer::draw() {
         TerraProfileStats data = stats.data;
 
         float       unit_factor = 1.;
-        const char* unit_name = "ms";
-
-        if ( stats.target == TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION ) {
-            unit_factor = 1000.f;
-            unit_name = "us";
-        }
+        const char* unit_name = "us";
 
         if ( stats.type == TIME && stats.data.n > 0 ) {
-            data.avg = terra_clock_to_ms ( ( int64_t ) data.avg * unit_factor );
-            data.var = terra_clock_to_ms ( ( int64_t ) data.var * unit_factor );
-            data.min = terra_clock_to_ms ( ( int64_t ) data.min * unit_factor );
-            data.max = terra_clock_to_ms ( ( int64_t ) data.max * unit_factor );
-            data.sum = terra_clock_to_ms ( ( int64_t ) data.sum * unit_factor );
+            if ( stats.target == TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION ) {
+                fprintf ( stderr, "AVERAGE %e\n", data.avg );
+            }
+
+            data.avg = terra_clock_to_us ( ( int64_t ) ( data.avg * unit_factor ) );
+            data.var = terra_clock_to_us ( ( int64_t ) ( data.var * unit_factor ) );
+            data.min = terra_clock_to_us ( ( int64_t ) ( data.min * unit_factor ) );
+            data.max = terra_clock_to_us ( ( int64_t ) ( data.max * unit_factor ) );
+            data.sum = terra_clock_to_us ( ( int64_t ) ( data.sum * unit_factor ) );
         }
 
-        snprintf ( stats_buf, STATS_BUF_LEN, "%s(%s)\n avg: %15.11f\n var: %15.11f\n min: %15.11f\n max: %15.11f\n sum: %15.11f\n count: %.0f\n",
+        snprintf ( stats_buf, STATS_BUF_LEN, "%s(%s)\n avg: %e\n var: %e\n min: %e\n max: %e\n sum: %e\n count: %.0f\n",
                    unit_name, stats.name.c_str(), data.avg, data.var, data.min, data.max, data.sum, data.n );
         im_text_aligned ( ImAlign::TopRight, stats_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ), ImVec2 ( 0, offset ) );
         offset += 120;

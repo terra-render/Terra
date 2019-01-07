@@ -21,8 +21,8 @@ void terra_ray_state_init ( const TerraRay* ray, TerraRayState* state ) {
 // The Ray/Primitive intersections tests available are listed below. Note that only one should be enabled
 // for each type of primitive.
 // Ray/Triangle
-#define ray_triangle_intersection_moller_trumbore 0 // Naive Moller-Trumbore test
-#define ray_triangle_intersection_wald2013 1        // Faster (vertex/edge) watertight intersection algorithm
+#define ray_triangle_intersection_moller_trumbore 1 // Naive Moller-Trumbore test
+#define ray_triangle_intersection_wald2013 0        // Faster (vertex/edge) watertight intersection algorithm
 #define ray_triangle_intersection_wald2013_simd 0   // Simd version of the same algorithm
 
 // Ray/Box
@@ -30,8 +30,8 @@ void terra_ray_state_init ( const TerraRay* ray, TerraRayState* state ) {
 #define ray_box_branchless_simd 0
 #define ray_box_wald2013 0
 #define ray_box_wald2013_simd 0
-//--------------------------------------------------------------------------------------------------
 
+//--------------------------------------------------------------------------------------------------
 #if ray_triangle_intersection_moller_trumbore
 void terra_ray_triangle_intersection_init ( const TerraRay* ray, TerraRayState* state ) {
     TERRA_UNUSED ( ray );

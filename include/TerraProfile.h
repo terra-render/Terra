@@ -16,6 +16,7 @@ typedef clock_t TerraClockTime;
 void                terra_clock_init();
 TerraClockTime      terra_clock();
 double              terra_clock_to_ms ( TerraClockTime delta_time );
+double              terra_clock_to_us ( TerraClockTime delta_time );
 
 #ifdef TERRA_PROFILE
 

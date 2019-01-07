@@ -379,14 +379,22 @@ void terra_clock_init() {
     QueryPerformanceFrequency ( &terra_clock_frequency );
 }
 
+// Returning the performance counter in microseconds rather than seconds so that
+// average operations return meaningful values on smaller data and don't sum up to
+// something < 1 which will just return 0. Note that this can also be done by changing
+// the signature of `terra_clock_to_*` to take a real number rather than an integer.
 TerraClockTime terra_clock() {
     LARGE_INTEGER ts;
     QueryPerformanceCounter ( &ts );
-    return ( TerraClockTime ) ts.QuadPart;
+    return ( TerraClockTime ) ts.QuadPart * 1000 * 1000;
 }
 
 double terra_clock_to_ms ( TerraClockTime delta_time ) {
-    return ( ( double ) delta_time / terra_clock_frequency.QuadPart ) * 1000;
+    return ( ( double ) delta_time / ( terra_clock_frequency.QuadPart * 1000 ) );
+}
+
+double terra_clock_to_us ( TerraClockTime delta_time ) {
+    return ( ( double ) delta_time / terra_clock_frequency.QuadPart );
 }
 
 #else
