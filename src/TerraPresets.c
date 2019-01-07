@@ -21,7 +21,6 @@ TerraFloat3 terra_F_0 ( float ior, const TerraFloat3* albedo, float metalness ) 
 // http://www.rorydriscoll.com/2009/01/07/better-sampling/
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_bsdf_diffuse_sample ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo ) {
-#if terra_bsdf_importance_sample
     // cosine weighted hemisphere sampling
     // disk to hemisphere projection
     float r = sqrtf ( e1 );
@@ -29,23 +28,14 @@ TerraFloat3 terra_bsdf_diffuse_sample ( const TerraShadingSurface* surface, floa
     float x = r * cosf ( theta );
     float z = r * sinf ( theta );
     TerraFloat3 wi = terra_f3_set ( x, sqrtf ( terra_maxf ( 0.f, 1 - e1 ) ), z );
-    return terra_transformf3 ( &surface->transform, &wi );
-#else
-    const float r = sqrtf ( 1.0f - e1 * e1 );
-    const float phi = 2 * terra_PI * e2;
-    TerraFloat3 wi = terra_f3_set ( cosf ( phi ) * r, e1, sinf ( phi ) * r );
-    return terra_transformf3 ( &surface->transform, &wi );
-#endif
-
+    wi = terra_transformf3 ( &surface->transform, &wi );
+    wi = terra_normf3 ( &wi );
+    return wi;
 }
 
 float terra_bsdf_diffuse_pdf ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
-#if terra_bsdf_importance_sample
-    // cosine weighted hemisphere sampling pdf
-    return terra_maxf ( 0.f, terra_dotf3 ( &surface->normal, wi ) / terra_PI );
-#else
-    return 1.f;
-#endif
+    float NoL = terra_maxf ( 0.f, terra_dotf3 ( &surface->normal, wi ) );
+    return NoL / terra_PI;
 }
 
 TerraFloat3 terra_bsdf_diffuse_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {

@@ -1,6 +1,9 @@
 //--------------------------------------------------------------------------------------------------
 // Math inline implementation
 //--------------------------------------------------------------------------------------------------
+// TODO where to put this ?
+#define absf(v) ((v) < 0.f ? -(v) : (v))
+
 inline TerraFloat2 terra_f2_set ( float x, float y ) {
     TerraFloat2 ret;
     ret.x = x;
@@ -117,6 +120,13 @@ inline float terra_lenf3 ( const TerraFloat3* vec ) {
                vec->z * vec->z );
 }
 
+inline float terra_sqlenf3 ( const TerraFloat3* vec ) {
+    return
+        vec->x * vec->x +
+        vec->y * vec->y +
+        vec->z * vec->z;
+}
+
 inline float terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b ) {
     TerraFloat3 ba = terra_subf3 ( a, b );
     return terra_lenf3 ( &ba );
@@ -136,6 +146,22 @@ inline TerraFloat3 terra_normf3 ( const TerraFloat3* vec ) {
                vec->z / len );
 }
 
+inline int terra_max_coefff3 ( const TerraFloat3* vec ) {
+    if ( vec->x > vec->y ) {
+        if ( vec->x > vec->z ) {
+            return 0;
+        } else {
+            return 2;
+        }
+    } else {
+        if ( vec->y > vec->z ) {
+            return 1;
+        } else {
+            return 2;
+        }
+    }
+}
+
 inline float terra_maxf ( float a, float b ) {
     return a > b ? a : b;
 }
@@ -152,12 +178,33 @@ inline size_t terra_mini ( size_t a, size_t b ) {
     return a < b ? a : b;
 }
 
+inline int terra_signf ( float v ) {
+    return v == 0.f ? 0 :
+           ( ( v > 0.f ) ? 1 : -1 );
+}
+
+inline uint32_t terra_signf_mask ( float v ) {
+    const uint32_t sign_bit_mask = 0x80000000;
+    return * ( ( uint32_t* ) &v ) & sign_bit_mask;
+}
+
 inline float terra_maxf3 ( const TerraFloat3* vec ) {
     return fmaxf ( vec->x, fmaxf ( vec->y, vec->z ) );
 }
 
 inline float terra_min3 ( const TerraFloat3* vec ) {
     return fminf ( vec->x, fminf ( vec->y, vec->z ) );
+}
+
+inline TerraFloat3 terra_absf3 ( const TerraFloat3* vec ) {
+    return terra_f3_set ( absf ( vec->x ), absf ( vec->y ), absf ( vec->z ) );
+}
+
+inline float terra_xorf ( float _lhs, float _rhs ) {
+    uint32_t* lhs = ( uint32_t* ) &_lhs;
+    uint32_t* rhs = ( uint32_t* ) &_rhs;
+    uint32_t res = ( *lhs ) ^ ( *rhs );
+    return * ( float* ) &res;
 }
 
 inline void terra_swap_xorf ( float* _a, float* _b ) {

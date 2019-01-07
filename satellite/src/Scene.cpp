@@ -21,8 +21,8 @@ using namespace std;
 
 namespace {
     constexpr float       CAMERA_FOV = 60.f;
-    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 2.f };
-    constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, -1.f };
+    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 1.5f };
+    constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, 1.f };
     constexpr TerraFloat3 CAMERA_UP  = { 0.f, 1.f, 0.f };
 
     constexpr TerraFloat3 ENVMAP_COLOR = { 0.4f, 0.52f, 1.f };
@@ -207,6 +207,7 @@ bool Scene::load ( const char* filename ) {
 
         switch ( material.bsdf ) {
             case APOLLO_SPECULAR: {
+                Log::info ( FMT ( "Loading specular material" ) );
                 TerraAttribute albedo, specular_color, specular_intensity;
                 READ_ATTR ( albedo, material.diffuse, textures );
                 READ_ATTR ( specular_color, material.specular, textures );
@@ -227,6 +228,7 @@ bool Scene::load ( const char* filename ) {
                 Log::warning ( FMT ( "Scene(%s) Unsupported pbr material(%s). Defaulting to diffuse" ), name, material.name );
 
             case APOLLO_DIFFUSE: {
+                Log::info ( FMT ( "Loading diffuse material" ) );
                 TerraAttribute albedo;
                 READ_ATTR ( albedo, material.diffuse, textures );
                 object->material.attributes[TERRA_DIFFUSE_ALBEDO] = albedo;

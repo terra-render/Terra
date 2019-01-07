@@ -19,16 +19,15 @@ double              terra_clock_to_ms ( TerraClockTime delta_time );
 
 #ifdef TERRA_PROFILE
 
-// Dynamic resizing of sessions/targets is disabled.
-// These numbers are usually (always?) knwon at compile time.
-#define TERRA_PROFILE_SESSIONS             128
+// Max sessions/targets supported
+#define TERRA_PROFILE_SESSIONS             8
 #define TERRA_PROFILE_TARGETS_PER_SESSION  128
 
 // Threads that want to collect samples have to register before starting to collect.
-// Collected data is grouped in sessions and targets.
-// 99% of situations only require one session. A two sessions example might be something like profiling two different job systems at the same time.
-// Each component for which data is to be collected shall be a target. For each target, a data collection buffer is created for each thread.
-
+// Collected data is grouped in sessions and targets. Most situations should only require one session.
+// Targets are the entities to be profiled. For each target, a data collection buffer is created for each thread.
+// Currently the data buffer gets flushed on every stats update. This greatly helps in cases with very high sample collection frequency.
+// On the other hand, cool things like filtering off samples subsets based on e.g. time or outlier values become impossible.
 
 // Stats are always computed in double floating precision.
 typedef struct {
@@ -111,12 +110,8 @@ void                terra_profile_add_sample_f32 ( size_t session, size_t target
 void                terra_profile_add_sample_f64 ( size_t session, size_t target, double value );
 void                terra_profile_add_sample_time ( size_t session, size_t target, TerraClockTime value );
 
-// TODO
-// operations on entire sessions (clear/update/size)
-// an option to filter off the top/bottom parts of the samples before computing average/variance
-// an option to select a time period on which to compute avg/var, instead of the whole buffer
-
 // Use these macros to wrap profile calls so that when necessary they can be easily turned off without having to edit out code.
+// Stats getters are not wrapped since TerraProfile types are generally part of them anyway.
 #define TERRA_PROFILE_REGISTER_THREAD( session )                            terra_profile_register_thread (session )
 #define TERRA_PROFILE_CREATE_SESSION( session, threads )                    terra_profile_session_create ( session, threads )
 #define TERRA_PROFILE_CREATE_TARGET( format, session, target, sample_cap)   terra_profile_target_create_ ## format ( session, target, sample_cap )

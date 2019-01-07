@@ -95,28 +95,6 @@ typedef struct {
 //--------------------------------------------------------------------------------------------------
 // Geometric types ( Scene )
 //--------------------------------------------------------------------------------------------------
-typedef struct TerraRay {
-    TerraFloat3 origin;
-    TerraFloat3 direction;
-    TerraFloat3 inv_direction;
-} TerraRay;
-
-typedef struct TerraInteraction {
-    TerraFloat3 p;
-    TerraFloat3 dx_p, dy_p;
-    TerraFloat3 dp_u, dp_v;
-} TerraInteraction;
-
-typedef struct TerraRayState {
-    // Ray differentials
-    TerraFloat3 dx_origin, dy_origin;
-    TerraFloat3 dx_direction, dy_direction;
-
-    // ray/triangle intersection transformations (depends on algorithm, see TerraGeometry.c)
-    TerraFloat4 ray_transform_f4;
-    TerraInt4   ray_transform_i4;
-} TerraRayState;
-
 typedef struct TerraAABB {
     TerraFloat3 min;
     TerraFloat3 max;
@@ -216,11 +194,6 @@ void                terra_scene_commit ( HTerraScene scene );
 void                terra_scene_clear ( HTerraScene scene );
 TerraSceneOptions*  terra_scene_get_options ( HTerraScene scene );
 void                terra_scene_destroy ( HTerraScene scene );
-
-void                terra_ray_state_init ( TerraRayState* ray_state, const TerraRay* ray, const float footprint );
-void                terra_ray_state_interact_refract ( TerraRayState* ray_state, const TerraInteraction* ev );
-void                terra_ray_state_interact_reflect ( TerraRayState* ray_state, const TerraInteraction* ev );
-void                terra_ray_state_interact_surface ( TerraRayState* ray_state, const TerraInteraction* ev );
 
 bool                terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, size_t height );
 void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer );

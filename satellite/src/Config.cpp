@@ -217,12 +217,12 @@ namespace Config {
         }
 
         add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
-        add_opt ( JOB_TILE_SIZE,        RENDER_OPT_TILE_SIZE_DEFAULT,   RENDER_OPT_TILE_SIZE_NAME,    "Side length of area to be processed by a single worker." );
-        add_opt ( RENDER_MAX_BOUNCES,   RENDER_OPT_BOUNCES_DEFAULT,     RENDER_OPT_BOUNCES_NAME,      "Maximum ray bounces" );
-        add_opt ( RENDER_SAMPLES,       RENDER_OPT_SAMPLES_DEFAULT,     RENDER_OPT_SAMPLES_NAME,      "Samples per pixel" );
-        add_opt ( RENDER_GAMMA,         2.2f,           "gamma",        "Gamma" );
-        add_opt ( RENDER_EXPOSURE,      1.f,            "exposure",     "Manual exposure" );
-        add_opt ( RENDER_TONEMAP,       "linear",       "tonemap",      "Tonemapping operator [none|linear|reinhard|filmic|uncharted2]" );
+        add_opt ( JOB_TILE_SIZE,        RENDER_OPT_TILE_SIZE_DEFAULT,   RENDER_OPT_TILE_SIZE_NAME,    RENDER_OPT_TILE_SIZE_DESC );
+        add_opt ( RENDER_MAX_BOUNCES,   RENDER_OPT_BOUNCES_DEFAULT,     RENDER_OPT_BOUNCES_NAME,      RENDER_OPT_BOUNCES_DESC );
+        add_opt ( RENDER_SAMPLES,       RENDER_OPT_SAMPLES_DEFAULT,     RENDER_OPT_SAMPLES_NAME,      RENDER_OPT_SAMPLES_DESC );
+        add_opt ( RENDER_GAMMA,         RENDER_OPT_GAMMA_DEFAULT,       RENDER_OPT_GAMMA_NAME,        RENDER_OPT_GAMMA_DESC );
+        add_opt ( RENDER_EXPOSURE,      RENDER_OPT_EXPOSURE_DEFAULT,    RENDER_OPT_EXPOSURE_NAME,     RENDER_OPT_EXPOSURE_DESC );
+        add_opt ( RENDER_TONEMAP,       RENDER_OPT_TONEMAP_LINEAR,      RENDER_OPT_TONEMAP_NAME,    RENDER_OPT_TONEMAP_DESC );
         add_opt ( RENDER_ACCELERATOR,   "bvh",          "accelerator",  "Intersection acceleration structure [bvh|kdtree]" );
         add_opt ( RENDER_SAMPLING,      "random",       "sampling",     "Sampling mode [random|stratified|halton]" );
         //

@@ -7,6 +7,8 @@
 // libc
 #include <assert.h>
 
+#include <stdio.h> // todo: remove debug
+
 static float       terra_aabb_surface_area ( const TerraAABB* aabb );
 static TerraFloat3 terra_aabb_center ( const TerraAABB* aabb );
 static int         terra_bvh_volume_compare_x ( const void* left, const void* right );
@@ -238,7 +240,7 @@ void terra_bvh_destroy ( TerraBVH* bvh ) {
     terra_free ( bvh->nodes );
 }
 
-bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray, TerraRayState* ray_state,
+bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const TerraRay* ray, const TerraRayState* ray_state,
                           TerraFloat3* point_out, TerraPrimitiveRef* primitive_out ) {
     int queue[64];
     queue[0] = 0;
@@ -253,7 +255,6 @@ bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const Terra
     TerraRayIntersectionQuery  iset_query;
     iset_query.ray = ray;
     iset_query.state = ray_state;
-
 
     while ( queue_count > 0 ) {
         node = queue[--queue_count];
@@ -275,11 +276,18 @@ bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const Terra
                     int model_idx = bvh->nodes[node].index[i] & 0xff;
                     int tri_idx = bvh->nodes[node].index[i] >> 8;
 
+                    if ( model_idx == 0 ) {
+                        //printf ( "moo" );
+                    }
+
+                    if ( model_idx == 1 && tri_idx == 0 ) {
+                        //printf ( "moo" );
+                    }
+
                     iset_query.primitive.triangle = objects[model_idx].triangles + tri_idx;
 
-                    if ( terra_geom_ray_triangle_intersection_query ( &iset_query, &iset_result ) ) {
-                        TerraFloat3 po = terra_subf3 ( &iset_result.point, &ray->origin );
-
+                    if ( terra_ray_triangle_intersection_query ( &iset_query, &iset_result ) ) {
+                        // Is it within the bounds ?
                         if ( iset_result.ray_depth < min_d ) {
                             min_d = iset_result.ray_depth;
                             min_p = iset_result.point;

@@ -3,7 +3,6 @@
 // C++ STL
 #include <string>
 
-
 // Render options that can be set from the terminal through `option set <name> <value>`
 #define RENDER_OPT_WORKERS_DESC    "Number of worker threads concurrently rendering"
 #define RENDER_OPT_WORKERS_NAME    "workers"
@@ -11,23 +10,23 @@
 
 #define RENDER_OPT_TILE_SIZE_DESC "Side length of a rendering job. Dimension is in pixels"
 #define RENDER_OPT_TILE_SIZE_NAME "tile-size"
-#define RENDER_OPT_TILE_SIZE_DEFAULT 32
+#define RENDER_OPT_TILE_SIZE_DEFAULT 128
 
 #define RENDER_OPT_BOUNCES_DESC "Maximum ray bounces (if Russian Rulette is activated, this option is ignored)"
 #define RENDER_OPT_BOUNCES_NAME "bounces"
-#define RENDER_OPT_BOUNCES_DEFAULT 32
+#define RENDER_OPT_BOUNCES_DEFAULT 4
 
 #define RENDER_OPT_SAMPLES_DESC "Number of samples per pixel"
 #define RENDER_OPT_SAMPLES_NAME "samples"
-#define RENDER_OPT_SAMPLES_DEFAULT 32
+#define RENDER_OPT_SAMPLES_DEFAULT 1
 
 #define RENDER_OPT_GAMMA_DESC "Output display gamma for final color correction"
 #define RENDER_OPT_GAMMA_NAME "gamma"
-#define RENDER_OPT_GAMMA_DEFAULT 2.2
+#define RENDER_OPT_GAMMA_DEFAULT ((float)(2.2))
 
 #define RENDER_OPT_EXPOSURE_DESC "Manual camera exposure"
 #define RENDER_OPT_EXPOSURE_NAME "exposure"
-#define RENDER_OPT_EXPOSURE_DEFAULT 1.
+#define RENDER_OPT_EXPOSURE_DEFAULT ((float)1.)
 
 // See kTerraTonemappingOperator
 #define RENDER_OPT_TONEMAP_DESC "Tonemapping operator"

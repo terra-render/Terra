@@ -239,10 +239,10 @@
     <ClCompile Include="..\..\src\TerraProfile.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\TerraSpatialAcceleration.c">
+    <ClCompile Include="..\..\src\TerraGeometry.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\TerraGeometry.c">
+    <ClCompile Include="..\..\src\TerraAcceleration.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
   </ItemGroup>

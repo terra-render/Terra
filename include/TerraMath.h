@@ -1,17 +1,21 @@
 #ifndef _TERRA_MATH_H_
 #define _TERRA_MATH_H_
 
+// libc
 #include <stdbool.h>
 #include <math.h>
 #include <float.h>
 #include <stdint.h>
+
+// Matrices are stored row-major (in 4 adjacent 4-float arrays)
+// Vectors are columns, matrix vector multiplication is Mv
 
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
 //--------------------------------------------------------------------------------------------------
 #define terra_PI 3.1416926535f
 #define terra_PI2 6.283185307f
-#define terra_Epsilon 1e-6
+#define terra_Epsilon FLT_EPSILON
 
 typedef struct TerraInt4 {
     int x, y, z, w;
@@ -63,15 +67,21 @@ static inline float         terra_dotf3 ( const TerraFloat3* a, const TerraFloat
 static inline TerraFloat3   terra_crossf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_negf3 ( const TerraFloat3* vec );
 static inline float         terra_lenf3 ( const TerraFloat3* vec );
+static inline float         terra_sqlenf3 ( const TerraFloat3* vec );
 static inline float         terra_distf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline float         terra_sqdistf3 ( const TerraFloat3* a, const TerraFloat3* b );
 static inline TerraFloat3   terra_normf3 ( const TerraFloat3* vec );
+static inline int           terra_max_coefff3 ( const TerraFloat3* vec );
 static inline float         terra_maxf ( float a, float b );
 static inline float         terra_minf ( float a, float b );
 static inline size_t        terra_maxi ( size_t a, size_t b );
 static inline size_t        terra_mini ( size_t a, size_t b );
+static inline int           terra_signf ( float v );
+static inline uint32_t      terra_signf_mask ( float v );
 static inline float         terra_maxf3 ( const TerraFloat3* vec );
 static inline float         terra_min3 ( const TerraFloat3* vec );
+static inline TerraFloat3   terra_absf3 ( const TerraFloat3* vec );
+static inline float         terra_xorf ( float lhs, float rhs );
 static inline void          terra_swap_xorf ( float* a, float* b );
 static inline void          terra_swap_xori ( int* a, int* b );
 static inline TerraFloat3   terra_transformf3 ( const TerraFloat4x4* transform, const TerraFloat3* vec );

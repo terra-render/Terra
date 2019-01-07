@@ -38,6 +38,11 @@ class Visualizer {
 #endif
     };
 
+    struct Vertex {
+        TerraFloat3 pos;
+        TerraFloat3 norm;
+    };
+
   public:
     void init ( GFXLayer* gfx );
 
@@ -58,6 +63,8 @@ class Visualizer {
     std::vector<Stats>& stats();
 
   private:
+    void create_texture ( int width, int height, int gl_format, void* data );
+
     GFXLayer*    _gfx;
 
     Info         _info;
