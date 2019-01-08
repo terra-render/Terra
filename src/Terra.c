@@ -1190,6 +1190,7 @@ TerraFloat3 terra_compute_direct_mis ( TerraScene* scene, const TerraShadingSurf
             TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
             wi = terra_normf3 ( &p_to_light );
         }
+        TerraFloat3 light_wo = terra_negf3 ( &wi );
         // Shadow ray
         TerraObject* object;
         TerraShadingSurface light_surface;
@@ -1207,11 +1208,9 @@ TerraFloat3 terra_compute_direct_mis ( TerraScene* scene, const TerraShadingSurf
             goto bsdf;
         }
 
-        const TerraFloat3 light_wo = terra_negf3 ( &wi );
         float NoW = terra_dotf3 ( &light_surface.normal, &light_wo );
 
         if ( NoW <= 0 ) {
-            light_missed = 1;
             goto bsdf;
         }
 
@@ -1224,7 +1223,7 @@ TerraFloat3 terra_compute_direct_mis ( TerraScene* scene, const TerraShadingSurf
         if ( light_pdf != 0 ) {
             TerraFloat3 f = material->bsdf.eval ( surface, &wi, wo );
             TerraFloat3 L = terra_pointf3 ( &light_surface.emissive, &f );
-            L = terra_mulf3 ( &L,  NoW * terra_dotf3 ( &wi, &surface->normal ) * weight / light_pdf );
+            L = terra_mulf3 ( &L, NoW * terra_dotf3 ( &wi, &surface->normal ) * weight / light_pdf );
             Lo = terra_addf3 ( &Lo, &L );
         }
     }
@@ -1258,7 +1257,7 @@ bsdf:
             object = terra_scene_raycast ( scene, &ray, &ray_state, &light_surface, &intersection_point, &light_triangle );
         }
 
-        // Go to bsdf sampling on miss
+        // Exit on miss
         if ( object != light->object ) {
             goto exit;
         }
@@ -1270,14 +1269,14 @@ bsdf:
                 // TODO env light pdf
                 goto exit;
             } else {
-                float ndotw = terra_dotf3 ( &light_surface.normal, &light_wo );
+                float NoW = terra_dotf3 ( &light_surface.normal, &light_wo );
 
-                if ( ndotw <= 0 ) {
+                if ( NoW <= 0 ) {
                     goto exit;
                 }
 
                 float dist = terra_sqdistf3 ( &intersection_point, p );
-                light_pdf = dist / ( ndotw * terra_triangle_area ( &object->triangles[light_triangle] ) );
+                light_pdf = dist / ( NoW * terra_triangle_area ( &object->triangles[light_triangle] ) );
             }
         }
         // Compute weight
@@ -1518,7 +1517,7 @@ TerraFloat3 terra_camera_perspective_sample ( const TerraCamera* camera, const T
 }
 
 //--------------------------------------------------------------------------------------------------
-// @TerraAttriubte
+// @TerraAttribute
 //--------------------------------------------------------------------------------------------------
 TerraFloat3 terra_attribute_eval ( const TerraAttribute* attribute, const void* uv, const TerraFloat3* xyz ) {
     if ( attribute->state != NULL ) {

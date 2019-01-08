@@ -62,6 +62,10 @@ void Console::clear() {
 }
 
 int Console::_text_edit_callback_stub ( ImGuiTextEditCallbackData* data ) {
+    if ( data->EventChar == '`' ) {
+        return 1;
+    }
+
     Console* console = ( Console* ) data->UserData;
     return console->_text_edit_callback ( data );
 }
@@ -80,11 +84,10 @@ void Console::draw ( int wnd_width, int wnd_height ) {
     }
 
     PushStyleVar ( ImGuiStyleVar_WindowRounding, 0.f );
-    // Anchoring bottom right corner
-    _width = _width == 0.f ? 0.5f * wnd_width : _width;
-    _height = _height == 0.f ? 0.5f * wnd_height : _height;
-    SetNextWindowSize ( ImVec2 ( _width, _height ), ImGuiCond_Once );
-    //SetNextWindowPos(ImVec2(wnd_width - _width, wnd_height - _height));
+    // Anchoring bottom left corner
+    _width = 0.8f * wnd_width;
+    _height = wnd_height > 300 ? 300 : wnd_height;
+    SetNextWindowSize ( ImVec2 ( _width, _height ) );
     SetNextWindowPos ( ImVec2 ( 0, wnd_height - _height ) );
 
     if ( !Begin ( "Command Console", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize ) ) {
@@ -149,7 +152,7 @@ void Console::draw ( int wnd_width, int wnd_height ) {
     };
 
     if ( InputTextEx ( "", _input_buf, IM_ARRAYSIZE ( _input_buf ), ImVec2 ( GetContentRegionAvailWidth(), 0 ),
-                       ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory,
+                       ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCharFilter,
                        &_text_edit_callback_stub, ( void* ) this ) ) {
         char* input_end = _input_buf + strlen ( _input_buf );
 

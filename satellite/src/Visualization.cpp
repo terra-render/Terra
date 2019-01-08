@@ -360,9 +360,9 @@ void Visualizer::draw() {
     if ( _texture.data != nullptr ) {
         Image ( ( ImTextureID& ) _gl_texture, screen_size );
     } else {
-        const char* msg = "            render something!\n"
-                          "press ` (backtick) to toggle the console\n"
-                          "    enter help for a list of commands\n";
+        const char* msg = "          render something!\n"
+                          "press ` (backtick) to toggle console\n"
+                          "  enter help for a list of commands\n";
         im_text_aligned ( ImAlign::TopMiddle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, 50.f ) );
     }
 

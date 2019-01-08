@@ -20,8 +20,8 @@
 using namespace std;
 
 namespace {
-    constexpr float       CAMERA_FOV = 60.f;
-    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 1.5f };
+    constexpr float       CAMERA_FOV = 45.f;
+    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 2.3f };
     constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, 1.f };
     constexpr TerraFloat3 CAMERA_UP  = { 0.f, 1.f, 0.f };
 
