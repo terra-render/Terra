@@ -19,17 +19,16 @@ void terra_ray_state_init ( const TerraRay* ray, TerraRayState* state ) {
 
 //--------------------------------------------------------------------------------------------------
 // The Ray/Primitive intersections tests available are listed below. Note that only one should be enabled
-// for each type of primitive.
+// for each type of primitive. From our tests, Wald's primitive intersection test is typically faster
+// by ~10-15% in the classical test scenes present in the git directory.
 // Ray/Triangle
-#define ray_triangle_intersection_moller_trumbore 1 // Naive Moller-Trumbore test
-#define ray_triangle_intersection_wald2013 0        // Faster (vertex/edge) watertight intersection algorithm
+#define ray_triangle_intersection_moller_trumbore 0 // Naive Moller-Trumbore test
+#define ray_triangle_intersection_wald2013 1        // Faster (vertex/edge) watertight intersection algorithm
 #define ray_triangle_intersection_wald2013_simd 0   // Simd version of the same algorithm
 
-// Ray/Box
+// Ray/Box (todo: move from Terra.c)
 #define ray_box_branchless 1
-#define ray_box_branchless_simd 0
 #define ray_box_wald2013 0
-#define ray_box_wald2013_simd 0
 
 //--------------------------------------------------------------------------------------------------
 #if ray_triangle_intersection_moller_trumbore
@@ -142,11 +141,12 @@ void terra_ray_triangle_intersection_init ( const TerraRay* ray, TerraRayState* 
 
 #if ray_triangle_intersection_wald2013
 
-// Performs the ray/edge test in Pluecker coordinates after reducing the problem to 2D with the
-// precomputed ray transformation coefficients. The details on the original version of the algorithm
-// are in [Wald 2004][Bentin 2006].
-// Fundamentally, it exploits the property of the dot-product, for a ray R and E one of the edges
-// of the triangle (A, B, C): ray = [dir, dir x origin] edge = [A - B, A x B]
+// Performs the ray/edge test in Pluecker coordinates after reducing the problem to 2D transforming the triangle
+// in a frame with origin matching the ray and z-aligned aligned with it. More details on the original version of
+// the algorithms are in [Wald 2004][Bentin 2006].
+// It works by using the property of the dot-product in pluecker coordinates. The sign of the dot product value
+// indicates which side the two vectors are passing each other. For a ray and one of the edges E of the triangle
+// (A, B, C): ray = [dir, dir x origin] edge = [A - B, A x B]
 // The dot product: ray o edge = dir o (A-B) + (dir x origin) o (A x B)
 // return: = 0 if the two lines intersect (fallback to double precision)
 //         > 0 if the two lines two lines pass each other clockwise
@@ -207,9 +207,8 @@ int terra_ray_triangle_intersection_query ( const TerraRayIntersectionQuery* q, 
         W = ( float ) ( ( double ) Bx * ( double ) Ay - ( double ) By * ( double ) Ax );
     }
 
-    // Is the intersection point outside the triangle ?
+    // Is the intersection point outside the triangle (no back-face culling) ?
     // (any negative barycentric coordinate) and (any positive barycentric coordinate)
-    // no back-face culling, either sign is ok
     uint32_t sign_mask = terra_signf_mask ( U );
 
     if ( sign_mask != terra_signf_mask ( V ) ) {
@@ -234,12 +233,13 @@ int terra_ray_triangle_intersection_query ( const TerraRayIntersectionQuery* q, 
     //   1. The ray is behind a previously hit-ray
     //   2. Back-face culling checking the sign of the ray depth (< 0 -> miss)
     //   3. The ray is behind the origin
-    // 1. is performed by the caller, 2. is only for back-face culling, which is not done
+    // 1. is performed by the caller, 2. is only for back-face culling, which is also not done here
     const float Az = scalez * A[iz];
     const float Bz = scalez * B[iz];
     const float Cz = scalez * C[iz];
     const float ray_depth = U * Az + V * Bz + W * Cz;
 
+    // The sign mask is 0xafffffff
     if ( terra_xorf ( ray_depth, TERRA_AS ( sign_mask, float ) ) < 0.f ) {
         goto exit;
     }

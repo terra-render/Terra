@@ -138,6 +138,9 @@
     <ClInclude Include="..\dependencies\gl3w\include\GL\glcorearb.h">
       <Filter>Internal Dependencies\gl3w</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\terra_next.h">
+      <Filter>Terra\Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">

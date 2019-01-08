@@ -18,7 +18,7 @@
 
 #define RENDER_OPT_SAMPLES_DESC "Number of samples per pixel"
 #define RENDER_OPT_SAMPLES_NAME "samples"
-#define RENDER_OPT_SAMPLES_DEFAULT 1
+#define RENDER_OPT_SAMPLES_DEFAULT 8
 
 #define RENDER_OPT_GAMMA_DESC "Output display gamma for final color correction"
 #define RENDER_OPT_GAMMA_NAME "gamma"
