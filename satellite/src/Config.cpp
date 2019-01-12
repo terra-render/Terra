@@ -146,13 +146,12 @@ namespace Config {
         }
 
         bool next_line ( ifstream& fs, string& name, string& value ) {
-            string line;
-            getline ( fs, line );
-
             if ( !fs.good() ) {
                 return false;
             }
 
+            string line;
+            getline ( fs, line );
             const char* p = line.data();
 
             // Finding separator
@@ -209,7 +208,6 @@ namespace Config {
         add_opt ( CMD_LOAD,             Type::Str,      "load",         "Load specified scene at startup." );
         add_opt ( CMD_RENDER,           Type::Exec,     "render",       "Renders the loaded scene." );
         add_opt ( CMD_SAVE,             Type::Str,      "save",         "Saves the rendererd scene to the specified file." );
-
         int n_threads = RENDER_OPT_WORKERS_DEFAULT;
 
         if ( n_threads == -1 ) {
@@ -241,23 +239,23 @@ namespace Config {
         string name, value;
 
         while ( next_line ( config_fs, name, value ) ) {
-            int opt = find ( name.c_str() );
+            int opt_idx = find ( name.c_str() );
 
-            if ( opt == -1 ) {
+            if ( opt_idx == -1 ) {
                 Log::error ( FMT ( "Unrecognized option name %s", name.c_str() ) );
                 continue;
             }
 
-            Opt opt_val;
+            Opt& opt = opts[opt_idx];
 
-            switch ( opts[opt].type ) {
+            switch ( opt.type ) {
                 case Type::Int: {
                     int v;
 
                     if ( !parse_i ( value.c_str(), v ) ) {
                         Log::error ( FMT ( "Argument %s expects an integral, but found %s", value.c_str() ) );
                     } else {
-                        opt_val.v.i = v;
+                        opt.v.i = v;
                     }
 
                     break;
@@ -269,14 +267,14 @@ namespace Config {
                     if ( !parse_f ( value.c_str(), v ) ) {
                         Log::error ( FMT ( "Argument %s expects a real number, but found %s", value.c_str() ) );
                     } else {
-                        opt_val.v.r = v;
+                        opt.v.r = v;
                     }
 
                     break;
                 }
 
                 case Type::Str: {
-                    opt_val.v.s = _strdup ( value.c_str() ); // Have fun
+                    opt.v.s = _strdup ( value.c_str() ); // Have fun
                     break;
                 }
 

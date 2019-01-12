@@ -8,3 +8,4 @@ satellite/scenes/*
 !satellite/vs/Satellite.vcxproj
 !satellite/vs/Satellite.vcxproj.filters
 satellite/comparisons/*
+satellite/satellite.config
