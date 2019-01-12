@@ -83,6 +83,7 @@ namespace Config {
         unique_ptr<Opt[]> opts;
         map<string, int>  opts_map;
         shared_mutex      opts_lock;
+        const char*       config_path = CONFIG_PATH;
 
         bool add_opt ( int idx, Type type, const char* name, const char* desc, Opt** opt = nullptr ) {
             if ( opts[idx].type != Type::None || opts_map.find ( name ) != opts_map.end() ) {
@@ -130,15 +131,20 @@ namespace Config {
         }
 
         bool find_config_file ( ifstream& fs ) {
+            unique_lock<shared_mutex> ( opts_lock );
+
             if ( file_exists ( CONFIG_PATH, fs ) ) {
+                config_path = CONFIG_PATH;
                 return true;
             }
 
             if ( file_exists ( "../" CONFIG_PATH, fs ) ) {
+                config_path = "../" CONFIG_PATH;
                 return true;
             }
 
             if ( file_exists ( "data" CONFIG_PATH, fs ) ) {
+                config_path = "data/" CONFIG_PATH;
                 return true;
             }
 
@@ -201,44 +207,10 @@ namespace Config {
         }
     }
 
-    bool init ( ) {
-        unique_lock<shared_mutex> ( opts_lock );
-        opts = unique_ptr<Opt[]> ( new Opt[OPTS_COUNT] );
-        add_opt ( CMD_CONFIG,           Type::Str,      "config",       "Read render configuration options from file." );
-        add_opt ( CMD_LOAD,             Type::Str,      "load",         "Load specified scene at startup." );
-        add_opt ( CMD_RENDER,           Type::Exec,     "render",       "Renders the loaded scene." );
-        add_opt ( CMD_SAVE,             Type::Str,      "save",         "Saves the rendererd scene to the specified file." );
-        int n_threads = RENDER_OPT_WORKERS_DEFAULT;
-
-        if ( n_threads == -1 ) {
-            n_threads = ( int ) thread::hardware_concurrency();
-        }
-
-        add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
-        add_opt ( JOB_TILE_SIZE,        RENDER_OPT_TILE_SIZE_DEFAULT,   RENDER_OPT_TILE_SIZE_NAME,    RENDER_OPT_TILE_SIZE_DESC );
-        add_opt ( RENDER_MAX_BOUNCES,   RENDER_OPT_BOUNCES_DEFAULT,     RENDER_OPT_BOUNCES_NAME,      RENDER_OPT_BOUNCES_DESC );
-        add_opt ( RENDER_SAMPLES,       RENDER_OPT_SAMPLES_DEFAULT,     RENDER_OPT_SAMPLES_NAME,      RENDER_OPT_SAMPLES_DESC );
-        add_opt ( RENDER_GAMMA,         RENDER_OPT_GAMMA_DEFAULT,       RENDER_OPT_GAMMA_NAME,        RENDER_OPT_GAMMA_DESC );
-        add_opt ( RENDER_EXPOSURE,      RENDER_OPT_EXPOSURE_DEFAULT,    RENDER_OPT_EXPOSURE_NAME,     RENDER_OPT_EXPOSURE_DESC );
-        add_opt ( RENDER_TONEMAP,       RENDER_OPT_TONEMAP_LINEAR,      RENDER_OPT_TONEMAP_NAME,    RENDER_OPT_TONEMAP_DESC );
-        add_opt ( RENDER_ACCELERATOR,   "bvh",          "accelerator",  "Intersection acceleration structure [bvh|kdtree]" );
-        add_opt ( RENDER_SAMPLING,      "random",       "sampling",     "Sampling mode [random|stratified|halton]" );
-        //
-        // Configuration file
-        // each line is split at the first = into <name>=<value>
-        // ignore line with #
-        // warning are generated if no = is present
-        //
-        ifstream config_fs;
-
-        if ( !find_config_file ( config_fs ) ) {
-            Log::info ( STR ( "No configuration file loaded." ) );
-            return true;
-        }
-
+    void _load ( ifstream& fs ) {
         string name, value;
 
-        while ( next_line ( config_fs, name, value ) ) {
+        while ( next_line ( fs, name, value ) ) {
             int opt_idx = find ( name.c_str() );
 
             if ( opt_idx == -1 ) {
@@ -274,7 +246,7 @@ namespace Config {
                 }
 
                 case Type::Str: {
-                    opt.v.s = _strdup ( value.c_str() ); // Have fun
+                    opt.v.s = _strdup ( value.c_str() );
                     break;
                 }
 
@@ -292,6 +264,38 @@ namespace Config {
         }
 
         dump();
+    }
+
+    bool init ( ) {
+        unique_lock<shared_mutex> ( opts_lock );
+        opts = unique_ptr<Opt[]> ( new Opt[OPTS_COUNT] );
+        int n_threads = RENDER_OPT_WORKERS_DEFAULT;
+
+        if ( n_threads == -1 ) {
+            n_threads = ( int ) thread::hardware_concurrency();
+        }
+
+        add_opt ( JOB_N_WORKERS,        n_threads,      "workers",      "Number of worker threads used by the renderer." );
+        add_opt ( JOB_TILE_SIZE,        RENDER_OPT_TILE_SIZE_DEFAULT,   RENDER_OPT_TILE_SIZE_NAME,    RENDER_OPT_TILE_SIZE_DESC );
+        add_opt ( RENDER_MAX_BOUNCES,   RENDER_OPT_BOUNCES_DEFAULT,     RENDER_OPT_BOUNCES_NAME,      RENDER_OPT_BOUNCES_DESC );
+        add_opt ( RENDER_SAMPLES,       RENDER_OPT_SAMPLES_DEFAULT,     RENDER_OPT_SAMPLES_NAME,      RENDER_OPT_SAMPLES_DESC );
+        add_opt ( RENDER_GAMMA,         RENDER_OPT_GAMMA_DEFAULT,       RENDER_OPT_GAMMA_NAME,        RENDER_OPT_GAMMA_DESC );
+        add_opt ( RENDER_EXPOSURE,      RENDER_OPT_EXPOSURE_DEFAULT,    RENDER_OPT_EXPOSURE_NAME,     RENDER_OPT_EXPOSURE_DESC );
+        add_opt ( RENDER_TONEMAP,       RENDER_OPT_TONEMAP_LINEAR,      RENDER_OPT_TONEMAP_NAME,    RENDER_OPT_TONEMAP_DESC );
+        add_opt ( RENDER_ACCELERATOR,   "bvh",          "accelerator",  "Intersection acceleration structure [bvh|kdtree]" );
+        add_opt ( RENDER_SAMPLING,      "random",       "sampling",     "Sampling mode [random|stratified|halton]" );
+        //
+        // Configuration file
+        // each line is split at the first = into <name>=<value>
+        // ignore line with #
+        // warning are generated if no = is present
+        //
+
+        if ( !load () ) {
+            Log::info ( STR ( "No configuration file loaded." ) );
+            return true;
+        }
+
         return true;
     }
 
@@ -329,8 +333,43 @@ namespace Config {
         }
     }
 
-    void save ( const char* path ) {
+    bool load ( const char* path ) {
         unique_lock<shared_mutex> ( opts_lock );
+        ifstream fs;
+
+        if ( !file_exists ( path, fs ) ) {
+            return false;
+        }
+
+        _load ( fs );
+        config_path = path;
+        return true;
+    }
+
+    bool load() {
+        unique_lock<shared_mutex> ( opts_lock );
+        ifstream fs;
+
+        if ( !find_config_file ( fs ) ) {
+            return false;
+        }
+
+        _load ( fs );
+        return true;
+    }
+
+    bool save ( const char* path ) {
+        unique_lock<shared_mutex> ( opts_lock );
+        // TODO save at given path
+        Log::info ( FMT ( "Feature not supported yet." ) );
+        return true;
+    }
+
+    bool save() {
+        unique_lock<shared_mutex> ( opts_lock );
+        // TODO save at config_path
+        Log::info ( FMT ( "Feature not supported yet." ) );
+        return true;
     }
 
     Type type ( int opt ) {

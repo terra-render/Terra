@@ -97,7 +97,10 @@ namespace Config {
 
     bool init ();
     void dump ( int from = -1, int to = -1 );
-    void save ( const char* path );
+    bool save ( const char* path );
+    bool save();
+    bool load ( const char* path );
+    bool load();
 
     Type type ( int opt );              // Opt  => type
     Type type ( const char* name );     // name => type

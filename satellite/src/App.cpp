@@ -27,21 +27,23 @@ using namespace std;
 /*
     List of command names (`option list` from the terminal)
 */
-#define COMMAND_CLEAR_NAME "clear"
-#define COMMAND_HELP_NAME "help"
-#define COMMAND_LOAD_NAME "load"
-#define COMMAND_STEP_NAME "step"
-#define COMMAND_LOOP_NAME "loop"
-#define COMMAND_PAUSE_NAME "pause"
-#define COMMAND_SAVE_NAME "save"
-#define COMMAND_TOGGLE_NAME "toggle"
-#define COMMAND_OPTION_NAME "option"
-#define COMMAND_OPTION_LIST_NAME "list"
-#define COMMAND_OPTION_RESET_NAME "reset"
-#define COMMAND_OPTION_SET_NAME "set"
-#define COMMAND_RESIZE_NAME "resize"
-#define COMMAND_HIDE_NAME "hide"
-#define COMMAND_STATS_NAME "stats"
+#define CMD_CLEAR_NAME "clear"
+#define CMD_HELP_NAME "help"
+#define CMD_LOAD_NAME "load"
+#define CMD_STEP_NAME "step"
+#define CMD_LOOP_NAME "loop"
+#define CMD_PAUSE_NAME "pause"
+#define CMD_SAVE_NAME "save"
+#define CMD_TOGGLE_NAME "toggle"
+#define CMD_OPTION_NAME "option"
+#define CMD_OPTION_LIST_NAME "list"
+#define CMD_OPTION_RESET_NAME "reset"
+#define CMD_OPTION_SET_NAME "set"
+#define CMD_RESIZE_NAME "resize"
+#define CMD_HIDE_NAME "hide"
+#define CMD_STATS_NAME "stats"
+#define CMD_CONFIG_LOAD "cfg_load"
+#define CMD_CONFIG_SAVE "cfg_save"
 
 #define DEFAULT_UI_FONT "Inconsolata.ttf"
 
@@ -129,7 +131,6 @@ App::~App() {
 }
 
 int App::run ( int width, int height ) {
-
     bool gfx_init = _gfx.init ( width, height, "Satellite",
     [ = ] ( int w, int h ) { // on resize
         _renderer.resize ( w, h );
@@ -380,14 +381,14 @@ void App::_init_cmd_map() {
         }
 
         // Running option subcommand
-        if ( args[0].compare ( COMMAND_OPTION_LIST_NAME ) == 0 ) {
+        if ( args[0].compare ( CMD_OPTION_LIST_NAME ) == 0 ) {
             _scene.dump_opts();
             Log::info ( FMT ( "workers           = %d", _renderer.concurrent_jobs() ) );
             Log::info ( FMT ( "tile_size         = %d", _renderer.tile_size() ) );
-        } else if ( args[0].compare ( COMMAND_OPTION_RESET_NAME ) == 0 ) {
+        } else if ( args[0].compare ( CMD_OPTION_RESET_NAME ) == 0 ) {
             _scene.reset_options();
             Log::info ( STR ( "Reset options to Config default" ) );
-        } else if ( args[0].compare ( COMMAND_OPTION_SET_NAME ) == 0 ) {
+        } else if ( args[0].compare ( CMD_OPTION_SET_NAME ) == 0 ) {
             if ( args.size() < 3 ) {
                 Log::error ( STR ( "Expected <name> <value> pair." ) );
                 return 1;
@@ -473,21 +474,46 @@ success:
 #endif
         return 0;
     };
+    // config load
+    auto cmd_cfg_load = [this] ( const CommandArgs & args ) {
+        if ( args.size() == 0 ) {
+            if ( !Config::load() ) {
+                Log::error ( STR ( "No satellite.config file found while looking at default dirs." ) );
+            }
+        } else {
+            if ( !Config::load ( args[0].c_str() ) ) {
+                Log::error ( STR ( "File not found." ) );
+            }
+        }
 
+        return 0;
+    };
+    // config save
+    auto cmd_cfg_save = [this] ( const CommandArgs & args ) {
+        if ( args.size() == 0 ) {
+            Config::save();
+        } else {
+            Config::save ( args[0].c_str() );
+        }
+
+        return 0;
+    };
     //
     // Fillcommands to
-    _c_map[COMMAND_CLEAR_NAME] = cmd_clear;
-    _c_map[COMMAND_HELP_NAME] = cmd_help;
-    _c_map[COMMAND_LOAD_NAME] = cmd_load;
-    _c_map[COMMAND_STEP_NAME] = cmd_step;
-    _c_map[COMMAND_LOOP_NAME] = cmd_loop;
-    _c_map[COMMAND_PAUSE_NAME] = cmd_pause;
-    _c_map[COMMAND_SAVE_NAME] = cmd_save;
-    _c_map[COMMAND_TOGGLE_NAME] = cmd_toggle;
-    _c_map[COMMAND_OPTION_NAME] = cmd_option;
-    _c_map[COMMAND_RESIZE_NAME] = cmd_resize;
-    _c_map[COMMAND_HIDE_NAME] = cmd_hide;
-    _c_map[COMMAND_STATS_NAME] = cmd_stats;
+    _c_map[CMD_CLEAR_NAME] = cmd_clear;
+    _c_map[CMD_HELP_NAME] = cmd_help;
+    _c_map[CMD_LOAD_NAME] = cmd_load;
+    _c_map[CMD_STEP_NAME] = cmd_step;
+    _c_map[CMD_LOOP_NAME] = cmd_loop;
+    _c_map[CMD_PAUSE_NAME] = cmd_pause;
+    _c_map[CMD_SAVE_NAME] = cmd_save;
+    _c_map[CMD_TOGGLE_NAME] = cmd_toggle;
+    _c_map[CMD_OPTION_NAME] = cmd_option;
+    _c_map[CMD_RESIZE_NAME] = cmd_resize;
+    _c_map[CMD_HIDE_NAME] = cmd_hide;
+    _c_map[CMD_STATS_NAME] = cmd_stats;
+    _c_map[CMD_CONFIG_LOAD] = cmd_cfg_load;
+    _c_map[CMD_CONFIG_SAVE] = cmd_cfg_save;
 }
 
 void App::_boot() {
