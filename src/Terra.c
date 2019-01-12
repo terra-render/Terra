@@ -36,8 +36,6 @@ typedef struct {
     TerraFloat3         envmap_light_power;
     TerraBVH        bvh;
 
-    HTerraSpatialAcceleration acceleration;
-
     TerraSceneOptions   new_opts;
     bool                dirty_objects;
     bool                dirty_lights;
@@ -428,7 +426,6 @@ TerraFloat3 terra_texture_sample_latlong ( void* _texture, const void* _dir, con
     TerraFloat3 d = terra_normf3 ( dir );
     float theta = acosf ( d.y );
     float phi = atan2f ( d.z, d.x ) + terra_PI;
-
     size_t u = ( size_t ) ( ( phi / ( 2 * terra_PI ) ) * texture->width );
     size_t v = ( size_t ) ( ( theta / ( terra_PI ) ) * texture->height );
     return terra_texture_read ( texture, u, v );
@@ -512,17 +509,14 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
                 // Sample random jitter
                 float r1 = terra_sampler_random_next ( &random_sampler );
                 float r2 = terra_sampler_random_next ( &random_sampler );
-
                 // Build camera ray
                 TerraFloat3 ray_dir = terra_camera_perspective_sample ( camera, framebuffer, j, i, scene->opts.subpixel_jitter, r1, r2 );
                 ray_dir = terra_transformf3 ( &camera_rotation, &ray_dir );
                 TerraRay ray = terra_ray ( &camera->position, &ray_dir );
-
                 // Trace
                 TerraClockTime t = TERRA_CLOCK();
                 TerraFloat3 dL = terra_trace ( scene, &ray );
                 TERRA_PROFILE_ADD_SAMPLE ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, TERRA_CLOCK() - t );
-
                 // Accumulate radiance
                 acc = terra_addf3 ( &acc, &dL );
             }
@@ -1006,7 +1000,6 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
 
     for ( size_t bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
         terra_ray_state_init ( &ray, &ray_state );
-
         TerraFloat3 wo = terra_negf3 ( &ray.direction );
         // Raycast
         TerraShadingSurface surface;
@@ -1031,8 +1024,6 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         }
 
 #endif
-
-
 #define terra_direct_light_sampling 1
 #if terra_direct_light_sampling
 
@@ -1046,13 +1037,11 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         TerraFloat3 Ld = terra_compute_direct_mis ( scene, &surface, &object->material, &intersection_point, &wo );
         Ld = terra_pointf3 ( &Ld, &throughput );
         Lo = terra_addf3 ( &Lo, &Ld );
-
 #else
         TerraFloat3 emissive = surface.emissive;
         emissive = terra_pointf3 ( &throughput, &emissive );
         Lo = terra_addf3 ( &Lo, &emissive );
 #endif
-
         // Evaluate integral for path continuation
         TerraFloat3 wi;
         float pdf;
@@ -1063,12 +1052,10 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
             wi = object->material.bsdf.sample ( &surface, e0, e1, e2, &wo );
             pdf = terra_maxf ( object->material.bsdf.pdf ( &surface, &wi, &wo ), terra_Epsilon );
         }
-
         // Update throughput for next ray
         TerraFloat3 f_brdf = object->material.bsdf.eval ( &surface, &wi, &wo );
         f_brdf = terra_mulf3 ( &f_brdf, 1.f / pdf );
         throughput = terra_pointf3 ( &throughput, &f_brdf );
-
         // Russian roulette for termination probability using the ray's throughput
         {
             float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
@@ -1096,7 +1083,6 @@ TerraFloat3 terra_compute_direct ( TerraScene* scene, const TerraShadingSurface*
         float e = _randf() - terra_Epsilon;
         light = terra_scene_pick_light ( scene, e, &light_pdf );
     }
-
     // Pick triangle to sample
     size_t tri_idx;
     float tri_pdf;
@@ -1104,7 +1090,6 @@ TerraFloat3 terra_compute_direct ( TerraScene* scene, const TerraShadingSurface*
         float e = _randf();
         tri_idx = terra_light_pick_triangle ( light, e, &tri_pdf );
     }
-
     // Sample triangle
     TerraFloat3 sample_pos;
     TerraFloat2 sample_uv;
@@ -1115,7 +1100,6 @@ TerraFloat3 terra_compute_direct ( TerraScene* scene, const TerraShadingSurface*
         float e2 = _randf();
         terra_light_sample_triangle ( light, tri_idx, e1, e2, &sample_pos, &sample_uv, &sample_norm, &sample_pdf );
     }
-
     // Raycast
     TerraFloat3 p_to_light = terra_subf3 ( &sample_pos, p );
     TerraFloat3 wi = terra_normf3 ( &p_to_light );
@@ -1133,7 +1117,6 @@ TerraFloat3 terra_compute_direct ( TerraScene* scene, const TerraShadingSurface*
             return terra_f3_zero;
         }
     }
-
     // Compute reflected radiance
     TerraFloat3 L;
     {
@@ -1149,7 +1132,6 @@ TerraFloat3 terra_compute_direct ( TerraScene* scene, const TerraShadingSurface*
         L = terra_pointf3 ( &light_surface.emissive, &f );
         L = terra_mulf3 ( &L, 1 / pdf );
     }
-
     return L;
 }
 
@@ -1157,7 +1139,6 @@ TerraFloat3 terra_compute_direct_mis ( TerraScene* scene, const TerraShadingSurf
     TerraFloat3 Lo = terra_f3_zero;
     TerraLight* light;
     int light_missed = 0;
-
     // Sample light
     {
         // Sample and compute pdf
@@ -1250,7 +1231,6 @@ bsdf:
         size_t light_triangle;
         TerraRay ray;
         TerraRayState ray_state;
-
         {
             ray = terra_surface_ray ( surface, p, &wi, 1 );
             terra_ray_state_init ( &ray, &ray_state );
@@ -1281,7 +1261,6 @@ bsdf:
         }
         // Compute weight
         float weight = bsdf_pdf * bsdf_pdf / ( light_pdf * light_pdf + bsdf_pdf * bsdf_pdf );
-
         // Fetch light radiance
         TerraFloat3 L = terra_f3_zero;
         {
@@ -1341,7 +1320,6 @@ TerraObject* terra_scene_raycast ( TerraScene* scene, const TerraRay* _ray, cons
     TerraPrimitiveRef primitive;
     TerraClockTime t = TERRA_CLOCK();
     bool miss = false;
-
     // Tracing the ray an epsilon above/below the surface
     TerraRay ray = *_ray;
     const TerraFloat3 surface_offset = terra_mulf3 ( &ray.direction, 0.001f );

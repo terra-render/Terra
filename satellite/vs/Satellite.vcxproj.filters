@@ -245,9 +245,6 @@
     <ClCompile Include="..\..\src\TerraGeometry.c">
       <Filter>Terra\Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\TerraAcceleration.c">
-      <Filter>Terra\Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\dependencies\glfw\src\mappings.h.in">

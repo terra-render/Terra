@@ -213,9 +213,6 @@ void                terra_attribute_init_cubemap ( TerraAttribute* attr, TerraTe
 
 void                terra_render ( const TerraCamera* camera, HTerraScene scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height );
 
-// terra_spatial_acceleration
-typedef void* HTerraSpatialAcceleration;
-
 //--------------------------------------------------------------------------------------------------
 // Terra system API
 //--------------------------------------------------------------------------------------------------
