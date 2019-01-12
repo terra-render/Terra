@@ -24,6 +24,13 @@ extern "C" {
 
 #define CLOTO_L1D$_SIZE 64
 
+#define CLOTO_IDLE_MODE_SLEEP 0
+#define CLOTO_IDLE_MODE_YIELD 1
+
+#ifndef CLOTO_IDLE_MODE
+#define CLOTO_IDLE_MODE CLOTO_IDLE_MODE_SLEEP
+#endif
+
 //--------------------------------------------------------------------------------------------------
 // Atomics
 
@@ -170,7 +177,7 @@ bool        cloto_usermsgqueue_pop ( ClotoUserMessageQueue* queue, ClotoUserMess
 // Thread
 // Simple standard thread interface. Each thread has a MessageQueue (and its user dedicated conterpart).
 // Call cloto_thread_register() only from threads that were not stared using the Cloto API (e.g. the main thread).
-// If you do that, that thread should also call cloto_thread_dispose() before it exits (doesn't really do much in case of the main thread).
+// If you do that, that thread should also call cloto_thread_dispose() before it exits (doesn't really do much in case of the main thread I suppose).
 
 typedef void ClotoThreadRoutine ( void* args );
 
@@ -194,15 +201,14 @@ bool            cloto_thread_create ( ClotoThread* thread, ClotoThreadRoutine* r
 bool            cloto_thread_join ( ClotoThread* thread );
 bool            cloto_thread_destroy ( ClotoThread* thread );
 void            cloto_thread_yield();
+void            cloto_thread_sleep ( int ms );
 uint32_t        cloto_thread_send_message ( ClotoThread* destinatary, ClotoMessageType type, const void* payload, size_t size );
 bool            cloto_thread_query_message_status ( ClotoThread* destinatary, uint32_t msg_id );
 
 //--------------------------------------------------------------------------------------------------
 // Slave (job fetch-execute only worker thread)
-// Since they only fetch and execute jobs, a single queue is used. The real world use cases can be many (infinite)
-// and each has its own peculiarity and optimal scheduling. This is an approximation.
-// The typical use case for this is static, push-all-jobs-then-execute workloads.
-// If this is the case, after executon it is also possible to reset the queue and redo all the jobs.
+// A single queue is used. The typical use case for this is static, push-all-jobs-then-execute workloads.
+// After executon it is possible to reset the queue and redo all the jobs.
 
 typedef struct ClotoSlaveGroup ClotoSlaveGroup;
 typedef struct {
@@ -228,7 +234,7 @@ void        cloto_slavegroup_join ( ClotoSlaveGroup* group );
 void        cloto_slavegroup_reset ( ClotoSlaveGroup* group );
 
 //--------------------------------------------------------------------------------------------------
-// Worker (job fetch-execute-dispatch thread)
+// Worker (job fetch-execute-dispatch worker thread)
 // Each worker in a workgroup owns one work queue and can steal fron the other members of the group.
 // When creating a workgroup, the calling thread is somewhat special in the sense that it needs to be a simple thread,
 // e.g. the main thread or a thread created through cloto_thread_create().
@@ -705,6 +711,10 @@ void cloto_thread_yield() {
     SwitchToThread();
 }
 
+void cloto_thread_sleep ( int ms ) {
+    Sleep ( ms );
+}
+
 #else
 
 void* cloto_thread_launcher ( void* param ) {
@@ -745,6 +755,10 @@ bool cloto_thread_destroy ( ClotoThread* thread ) {
 
 void cloto_thread_yield() {
     pthread_yield();
+}
+
+void cloto_thread_sleep ( int ms ) {
+    usleep ( ms * 1000 );
 }
 
 #endif
@@ -820,7 +834,11 @@ void cloto_slave_thread_routine ( void* args ) {
         if ( cloto_workqueue_steal ( &self->group->queue, &job ) ) {
             job.routine ( job.args );
         } else {
+#if CLOTO_IDLE_MODE == CLOTO_IDLE_MODE_YIELD
             cloto_thread_yield();
+#elif CLOTO_IDLE_MODE == CLOTO_IDLE_MODE_SLEEP
+            cloto_thread_sleep ( 1 );
+#endif
         }
     }
 }
@@ -923,7 +941,11 @@ void cloto_worker_thread_routine ( void* args ) {
             }
 
             if ( !job_found ) {
+#if CLOTO_IDLE_MODE == CLOTO_IDLE_MODE_YIELD
                 cloto_thread_yield();
+#elif CLOTO_IDLE_MODE == CLOTO_IDLE_MODE_SLEEP
+                cloto_thread_sleep ( 1 );
+#endif
             }
         }
     }
