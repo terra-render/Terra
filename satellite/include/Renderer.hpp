@@ -25,56 +25,50 @@ class TerraRenderer {
     TerraRenderer ();
     ~TerraRenderer();
 
-    bool init ( int width, int height, int tile_side_length = 8, int concurrent_jobs = 8 );
+    // Call this inside the main loop to progress the rendering, after starting one with step/loop.
+    void update();
 
-    // call init() once and the following setters when something changes. Note that the changes
-    // are lazy, they are applied right before new jobs are pushed. Even if paused() the internal
-    // state is not changed and it can be safely read (e.g. framebuffer())
-    void resize ( int width, int height );
-    void set_concurrent_jobs ( int concurrent_jobs );
-    void set_tile_size ( int tile_side_length );
-    void set_progressive ( bool progressive );
-
-    // Takes care of pushing new jobs if iterative() is true; processing
-    // option changes and notying steps.
-    void refresh_jobs();
-
-    // Any call to step or loop resumes the rendering (unpausing).
-    // Returns true if jobs were successfully launched
+    // Clears the framebuffer.
     void clear();
+
+    // Step the rendering.
     bool step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
+
+    // Keep stepping until further input (e.g. pause).
     bool loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
 
-    // Pauses rendering once the current step has finished executing
-    void pause_at_next_step();
+    // Pause the current rendering.
+    void pause();
 
-    // Get framebuffer data
-    const TextureData&       framebuffer();
-    const TerraSceneOptions& options() const;
+    // Call this when a config opt is set that requires the rendering to restart.
+    // void set_dirty_config();
 
-    // Renderer state
-    bool is_rendering() const;
-    bool is_paused() const;
-    bool is_iterative() const;
-    bool is_progressive() const;
-    int  iterations() const;
+    // Call every time config changes. Returns CLEAR if the current rendering has been invalidated by the change.
+    enum ConfigChangeResult {
+        CONFIG_CHANGE_OK,
+        CONFIG_CHANGE_CLEAR,
+        CONFIG_CHANGE_ERROR,
+    };
+    ConfigChangeResult on_config_change ( int opt );
+    ConfigChangeResult config_change_result ( int opt );
 
-    int concurrent_jobs() const;
-    int tile_size() const;
-    ClotoThread* thread() const;
+    // Getters
+    const TextureData&          framebuffer();
+    const TerraSceneOptions&    options() const;
+    bool                        is_framebuffer_clear() const;
+    int                         iterations() const;
+    ClotoThread*                thread() const;
 
   private:
-    void     _setup_profiler();
-    void     _update_profiler_results();
-    void     _clear_stats();
-    void     _create_jobs();
+    bool     _launch();
+    void     _setup_threads();
     void     _push_jobs();
-    void     _num_tiles ( int& tiles_x, int& tiles_y ); // Calculates the number of tiles from the current framebuffer / tile_size
-    uint64_t _gen_scene_id ( const TerraCamera* camera, HTerraScene scene );
-    bool     _state_changed(); // True fi
-    bool     _apply_changes();
-    bool     _launch ();
+    void     _restart_jobs();
+    void     _update_stats();
+    void     _clear_stats();
     void     _process_messages();
+
+    void     _num_tiles ( int& tiles_x, int& tiles_y ); // Calculates the number of tiles from the current framebuffer / tile_size
 
     typedef struct TerraRenderArgs {
         TerraRenderer*  th;
@@ -95,11 +89,11 @@ class TerraRenderer {
     std::vector<TerraRenderArgs>     _job_args;
 
     // Renderer state
+    bool         _opt_render_change;
+    bool         _opt_job_change;
     bool         _paused;
     bool         _iterative;
-    bool         _progressive;
-    int          _tile_size;
-    int          _concurrent_jobs;
+    bool         _clear_framebuffer;
     int          _iterations;
     Event        _on_step_end;   // Also called at the end of every loop iteration
     TileEvent    _on_tile_begin;
@@ -107,11 +101,4 @@ class TerraRenderer {
     TerraCamera* _target_camera;
     HTerraScene  _target_scene;
     std::mutex   _callback_mutex;
-
-    // Cached here and applied when rendering pauses
-    uint64_t _scene_id; // hash(scene) ^ hash(camera)
-    int      _next_tile_size;
-    int      _next_concurrent_jobs;
-    int      _next_width;
-    int      _next_height;
 };

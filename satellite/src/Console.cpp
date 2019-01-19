@@ -108,6 +108,7 @@ void Console::draw ( int wnd_width, int wnd_height ) {
 
     PushStyleVar ( ImGuiStyleVar_ItemSpacing, ImVec2 ( 4, 1 ) );
     ImVec4 col_default_text = GetStyleColorVec4 ( ImGuiCol_Text );
+    PushTextWrapPos ( _width - 30 );
 
     for ( int i = 0; i < ( int ) _items.size(); i++ ) {
         const char* item = _items[i];
@@ -125,6 +126,7 @@ void Console::draw ( int wnd_width, int wnd_height ) {
         }
     }
 
+    PopTextWrapPos();
     TextUnformatted ( "" );
 
     if ( _scroll_to_bottom ) {
@@ -252,4 +254,13 @@ int Console::_text_edit_callback ( ImGuiTextEditCallbackData* data ) {
 
 void Console::set_callback ( const CommandCallback& callback ) {
     _callback = callback;
+}
+
+void Console::set_one_time_callback ( const CommandCallback& callback ) {
+    auto prev_callback = _callback;
+    _callback = [callback, prev_callback, this] ( const CommandArgs & args ) -> int {
+        int result = callback ( args );
+        _callback = prev_callback;
+        return result;
+    };
 }

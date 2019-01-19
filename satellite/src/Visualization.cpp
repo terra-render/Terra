@@ -366,7 +366,7 @@ void Visualizer::draw() {
         im_text_aligned ( ImAlign::TopMiddle, msg, IM_WHITE, IM_TRANSPARENT, ImVec2 ( 0.f, 50.f ) );
     }
 
-    if ( ! _info.scene.empty() ) {
+    /*if ( ! _info.scene.empty() ) {
         if ( !_hide_info ) {
             constexpr int INFO_BUF_LEN = 1024;
             char info_buf[INFO_BUF_LEN];
@@ -374,8 +374,7 @@ void Visualizer::draw() {
             snprintf ( info_buf, INFO_BUF_LEN, "%s\nspp: %s\naccelerator: %s\nsampling: %s\nresolution: %dx%d", _info.scene.c_str(), spp.c_str(), _info.accelerator.c_str(), _info.sampling.c_str(), _texture.width, _texture.height );
             im_text_aligned ( ImAlign::TopLeft, info_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ) );
         }
-    }
-
+    }*/
 #ifdef TERRA_PROFILE
     size_t offset = 0;
 
@@ -383,7 +382,6 @@ void Visualizer::draw() {
         constexpr int STATS_BUF_LEN = 1024;
         char stats_buf[STATS_BUF_LEN];
         TerraProfileStats data = stats.data;
-
         float       unit_factor = 1.;
         const char* unit_name = "us";
 

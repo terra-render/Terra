@@ -4,15 +4,14 @@
 #include <string>
 
 // Render options that can be set from the terminal through `option set <name> <value>`
-#define RENDER_OPT_WORKERS_DESC    "Number of worker threads concurrently rendering"
-#define RENDER_OPT_WORKERS_NAME    "workers"
-#define RENDER_OPT_WORKERS_DEFAULT 16 // -1 to use all possible threads
+#define RENDER_OPT_WORKERS_DESC     "Number of worker threads"
+#define RENDER_OPT_WORKERS_NAME     "workers"
 
-#define RENDER_OPT_TILE_SIZE_DESC "Side length of a rendering job. Dimension is in pixels"
+#define RENDER_OPT_TILE_SIZE_DESC "Side length in pixels of a rendering job"
 #define RENDER_OPT_TILE_SIZE_NAME "tile-size"
 #define RENDER_OPT_TILE_SIZE_DEFAULT 128
 
-#define RENDER_OPT_BOUNCES_DESC "Maximum ray bounces (if Russian Rulette is activated, this option is ignored)"
+#define RENDER_OPT_BOUNCES_DESC "Maximum ray bounces (-1 for unbounded)"
 #define RENDER_OPT_BOUNCES_NAME "bounces"
 #define RENDER_OPT_BOUNCES_DEFAULT 4
 
@@ -29,20 +28,62 @@
 #define RENDER_OPT_EXPOSURE_DEFAULT ((float)1.)
 
 // See kTerraTonemappingOperator
-#define RENDER_OPT_TONEMAP_DESC "Tonemapping operator"
+#define RENDER_OPT_TONEMAP_DESC "Tonemapping operator [none|linear|filmic|reinhard|uncharted]"
 #define RENDER_OPT_TONEMAP_NAME "tonemap"
 #define RENDER_OPT_TONEMAP_NONE "none"
 #define RENDER_OPT_TONEMAP_LINEAR "linear"
 #define RENDER_OPT_TONEMAP_REINHARD "reinhard"
 #define RENDER_OPT_TONEMAP_FILMIC "filmic"
 #define RENDER_OPT_TONEMAP_UNCHARTED2 "uncharted"
-#define RENDER_OPT_TONEMAP_DEFAULT RENDER_OPT_TONEMAPE_LINEAR
+#define RENDER_OPT_TONEMAP_DEFAULT RENDER_OPT_TONEMAP_LINEAR
 
-#define RENDER_OPT_SAMPLER_DESC "Sampling strategy for the monte carlo integration"
+#define RENDER_OPT_SAMPLER_DESC "Monte carlo sampler [random|stratified|halton]"
 #define RENDER_OPT_SAMPLER_NAME "sampler"
 #define RENDER_OPT_SAMPLER_RANDOM "random"
 #define RENDER_OPT_SAMPLER_STRATIFIED "stratified"
 #define RENDER_OPT_SAMPLER_HALTON "halton"
+#define RENDER_OPT_SAMPLER_DEFAULT RENDER_OPT_SAMPLER_RANDOM
+
+#define RENDER_OPT_ACCELERATOR_DESC "Intersection acceleration structure [bvh]"
+#define RENDER_OPT_ACCELERATOR_NAME "accelerator"
+#define RENDER_OPT_ACCELERATOR_BVH "bvh"
+#define RENDER_OPT_ACCELERATOR_DEFAULT RENDER_OPT_ACCELERATOR_BVH
+
+#define RENDER_OPT_WIDTH_DESC "Render width"
+#define RENDER_OPT_WIDTH_NAME "width"
+#define RENDER_OPT_WIDTH_DEFAULT 800
+
+#define RENDER_OPT_HEIGHT_DESC "Render height"
+#define RENDER_OPT_HEIGHT_NAME "height"
+#define RENDER_OPT_HEIGHT_DEFAULT 600
+
+#define RENDER_OPT_PROGRESSIVE_DESC "Update the display every time a job finishes"
+#define RENDER_OPT_PROGRESSIVE_NAME "progressive"
+#define RENDER_OPT_PROGRESSIVE_DEFAULT 1
+
+#define RENDER_OPT_CAMERA_POS_DESC "Camera position"
+#define RENDER_OPT_CAMERA_POS_NAME "campos"
+#define RENDER_OPT_CAMERA_POS_DEFAULT { 0.f, 0.9f, 2.3f }
+
+#define RENDER_OPT_CAMERA_DIR_DESC "Camera direction"
+#define RENDER_OPT_CAMERA_DIR_NAME "camdir"
+#define RENDER_OPT_CAMERA_DIR_DEFAULT { 0.f, 0.f, 1.f }
+
+#define RENDER_OPT_CAMERA_UP_DESC "Camera up"
+#define RENDER_OPT_CAMERA_UP_NAME "camup"
+#define RENDER_OPT_CAMERA_UP_DEFAULT { 0.f, 1.f, 0.f }
+
+#define RENDER_OPT_CAMERA_VFOV_DEG_DESC "Camera vertical field of view in degrees"
+#define RENDER_OPT_CAMERA_VFOV_DEG_NAME "camfov"
+#define RENDER_OPT_CAMERA_VFOV_DEG_DEFAULT 45.f
+
+#define RENDER_OPT_SCENE_PATH_DESC "Scene file path"
+#define RENDER_OPT_SCENE_PATH_NAME "scene"
+#define RENDER_OPT_SCENE_PATH_DEFAULT "scene.obj"
+
+#define RENDER_OPT_ENVMAP_COLOR_DESC "Envmap color"
+#define RENDER_OPT_ENVMAP_COLOR_NAME "envmap"
+#define RENDER_OPT_ENVMAP_COLOR_DEFAULT { 0.4f, 0.52f, 1.f }
 
 //
 // Config wraps any configurable bit of the app.
@@ -65,12 +106,7 @@ namespace Config {
     enum Opts {
         OPTS_NONE = -1,
 
-        CMD_CONFIG,
-        CMD_LOAD,
-        CMD_RENDER,
-        CMD_SAVE,
-
-        JOB_N_WORKERS,
+        JOB_N_WORKERS = 0,
         JOB_TILE_SIZE,
 
         RENDER_MAX_BOUNCES,
@@ -80,6 +116,16 @@ namespace Config {
         RENDER_TONEMAP,
         RENDER_ACCELERATOR,
         RENDER_SAMPLING,
+        RENDER_WIDTH,
+        RENDER_HEIGHT,
+        RENDER_SCENE_PATH,
+        RENDER_CAMERA_POS,
+        RENDER_CAMERA_DIR,
+        RENDER_CAMERA_UP,
+        RENDER_CAMERA_VFOV_DEG,
+        RENDER_ENVMAP_COLOR,
+
+        VISUALIZER_PROGRESSIVE,
 
         OPTS_COUNT
     };
@@ -89,6 +135,7 @@ namespace Config {
 
         Int,
         Real,
+        Real3,
         Str,
         Exec,
 
@@ -97,6 +144,8 @@ namespace Config {
 
     bool init ();
     void dump ( int from = -1, int to = -1 );
+    void dump_desc ( int from = -1, int to = -1 );
+    void reset_to_default();
     bool save ( const char* path );
     bool save();
     bool load ( const char* path );
@@ -106,15 +155,18 @@ namespace Config {
     Type type ( const char* name );     // name => type
     int  find ( const char* name );     // name => Opt
 
-    // More clear without templates
     int         read_i ( int opt );
     float       read_f ( int opt );
-    std::string read_s ( int opt ); // copy to avoid reference to internal data structure which can be written to.
+    bool        read_f3 ( int opt, float* f3 );
+    std::string read_s ( int opt );
 
+    void write ( int opt, const std::string& val );
     void write_i ( int opt, int val );
     void write_f ( int opt, float val );
+    void write_f3 ( int opt, float* f3 );
     void write_s ( int opt, const char* val );
 
     bool parse_i ( const char* s, int& v );
     bool parse_f ( const char* s, float& v );
+    bool parse_f3 ( const char* s, float* f3 );
 }

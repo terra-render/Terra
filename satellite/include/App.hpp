@@ -20,12 +20,18 @@ class App {
     App ( int argc, char** argv );
     ~App();
 
-    int run ( int width, int height );
+    int run ();
 
   private:
     void _init_ui();
     void _init_cmd_map();
     void _boot();
+    void _clear ();
+
+    void _opt_set ( int opt, const std::string& value );
+    void _opt_set ( int opt, int value );
+    void _opt_set ( bool clear_check, std::function<void() > setter );
+    void _on_opt_set ( int opt );
 
     GFXLayer      _gfx;
     Scene         _scene;

@@ -9,6 +9,7 @@
 #include <Logging.hpp>
 #define CLOTO_IMPLEMENTATION
 #include <Cloto.h>
+#include <Config.hpp>
 
 // Terra
 #include <TerraProfile.h>
@@ -101,6 +102,11 @@ void terra_render_launcher ( void* _args ) {
 TerraRenderer::TerraRenderer ( ) {
     cloto_thread_register();
     _this_thread = cloto_thread_get();
+    memset ( &_framebuffer, 0, sizeof ( TerraFramebuffer ) );
+    _paused = true;
+    _tile_counter = 0;
+    _target_camera = nullptr;
+    _target_scene = nullptr;
 }
 
 TerraRenderer::~TerraRenderer() {
@@ -111,95 +117,38 @@ TerraRenderer::~TerraRenderer() {
     cloto_thread_dispose();
 }
 
-bool TerraRenderer::init ( int width, int height, int tile_side_length, int concurrent_jobs ) {
-    if ( concurrent_jobs == -1 ) {
-        concurrent_jobs = std::thread::hardware_concurrency();
-    }
-
-    if ( concurrent_jobs == 0 ) {
-        concurrent_jobs = 1;
-    }
-
-    // Initial state
-    memset ( &_framebuffer, 0, sizeof ( TerraFramebuffer ) );
-    _paused          = true;
-    _iterative       = true;
-    _progressive     = true;
-    _tile_counter    = 0;
-    _tile_size       = 0; // Triggers job creation when _apply_changes is called()
-    _concurrent_jobs = 0;
-    _target_camera   = nullptr;
-    _target_scene    = nullptr;
-    // Initialization values
-    _scene_id             = 0x0;
-    _next_tile_size       = tile_side_length;
-    _next_concurrent_jobs = concurrent_jobs;
-    _next_width           = width;
-    _next_height          = height;
-    return _apply_changes();
-}
-
-void TerraRenderer::resize ( int width, int height ) {
-    _next_width = width;
-    _next_height = height;
-
-    if ( is_rendering() ) {
-        Log::warning ( STR ( "Can't resize while rendering. Changes will be applied at the end of the step." ) );
-        return;
-    }
-}
-
-void TerraRenderer::set_concurrent_jobs ( int concurrent_jobs ) {
-    _next_concurrent_jobs = concurrent_jobs;
-
-    if ( is_rendering() ) {
-        Log::warning ( STR ( "Can't resize while rendering. Changes will be applied at the end of the step." ) );
-        return;
-    }
-}
-
-void TerraRenderer::set_tile_size ( int tile_side_length ) {
-    _next_tile_size = tile_side_length;
-
-    if ( is_rendering() ) {
-        Log::warning ( STR ( "Can't resize while rendering. Changes will be applied at the end of the step." ) );
-        return;
-    }
-}
-
-void TerraRenderer::set_progressive ( bool progressive ) {
-    _progressive = progressive;
-}
-
-void TerraRenderer::refresh_jobs() {
+void TerraRenderer::update() {
     _process_messages();
 
-    if ( is_paused() ) {
+    if ( _paused ) {
         return;
     }
 
     // The current job queue has finished executing, we can now read from TerraFramebuffer
     if ( _tile_counter == 0 ) {
-        _update_profiler_results();
+        _update_stats();
 
         // Notifying
         if ( _on_step_end ) {
             _on_step_end();
         }
 
-        if ( is_iterative() ) {
+        if ( _iterative ) {
             Log::verbose ( FMT ( "Finished iteration %d", _iterations ) );
 
-            // Let's give time to save the file / ..
-            if ( _state_changed() ) {
-                Log::warning ( STR ( "Renderer settings changed while looping, Renderer is now paused. Call step() or loop() to resume." ) );
+            if ( _opt_render_change ) {
+                // TODO move this out, make the rendering stop asap
+                Log::warning ( STR ( "Rendering settings were changed. Call step() or loop() to begin a new rendering." ) );
                 _paused = true;
             } else {
-                int tx, ty;
-                _num_tiles ( tx, ty );
-                int n_jobs = tx * ty;
-                _tile_counter = n_jobs;
-                cloto_slavegroup_reset ( _workers.get() );
+                if ( _opt_job_change ) {
+                    _setup_threads();
+                    _opt_job_change = false;
+                    _push_jobs();
+                } else {
+                    _restart_jobs();
+                }
+
                 ++_iterations;
             }
         } else {
@@ -212,41 +161,46 @@ void TerraRenderer::refresh_jobs() {
 void TerraRenderer::clear() {
     terra_framebuffer_clear ( &_framebuffer );
     _clear_stats();
+    _clear_framebuffer = true;
 }
 
 bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
-    if ( is_rendering() ) {
-        Log::error ( STR ( "Cannot launch rendering while another one is in progress." ) );
+    if ( !_paused ) {
+        Log::error ( STR ( "Rendering is already in progress." ) );
         return false;
     }
 
-    _target_scene  = scene;
-    _target_camera = camera;
-    _on_step_end   = on_step_end;
-    _on_tile_begin = on_tile_begin;
-    _on_tile_end   = on_tile_end;
-    _iterative     = false;
+    _target_scene   = scene;
+    _target_camera  = camera;
+    _on_step_end    = on_step_end;
+    _on_tile_begin  = on_tile_begin;
+    _on_tile_end    = on_tile_end;
+    _iterative      = false;
     return _launch ();
 }
 
 bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
-    if ( is_rendering() ) {
-        Log::error ( STR ( "Cannot launch rendering while another one is in progress." ) );
+    if ( !_paused ) {
+        Log::error ( STR ( "Rendering is already in progress." ) );
         return false;
     }
 
-    _target_scene  = scene;
-    _target_camera = camera;
-    _on_step_end   = on_step_end;
-    _on_tile_begin = on_tile_begin;
-    _on_tile_end   = on_tile_end;
-    _iterative     = true;
+    _target_scene   = scene;
+    _target_camera  = camera;
+    _on_step_end    = on_step_end;
+    _on_tile_begin  = on_tile_begin;
+    _on_tile_end    = on_tile_end;
+    _iterative      = true;
     return _launch ();
 }
 
-void TerraRenderer::pause_at_next_step() {
-    Log::verbose ( STR ( "Pausing rendering at the end of the current step" ) );
-    _iterative = false;
+void TerraRenderer::pause() {
+    if ( !_paused ) {
+        Log::verbose ( STR ( "Renderer will pause at the end of the current step" ) );
+        _paused = true;
+    } else {
+        Log::verbose ( STR ( "Renderer is already paused" ) );
+    }
 }
 
 const TextureData& TerraRenderer::framebuffer() {
@@ -262,62 +216,23 @@ const TerraSceneOptions& TerraRenderer::options() const {
     return _options;
 }
 
-bool TerraRenderer::is_rendering() const {
-    return !_paused;
+bool TerraRenderer::is_framebuffer_clear() const {
+    return _clear_framebuffer;
 }
 
-bool TerraRenderer::is_paused() const {
-    return _paused;
-}
-
-bool TerraRenderer::is_iterative() const {
-    return _iterative;
-}
-
-bool TerraRenderer::is_progressive() const {
-    return _progressive;
-}
+/*void TerraRenderer::set_dirty_config() {
+    _dirty_config = true;
+}*/
 
 int TerraRenderer::iterations() const {
     return _iterations;
-}
-
-int TerraRenderer::concurrent_jobs() const {
-    return _concurrent_jobs;
-}
-
-int TerraRenderer::tile_size() const {
-    return _tile_size;
 }
 
 ClotoThread* TerraRenderer::thread() const {
     return _this_thread;
 }
 
-void TerraRenderer::_setup_profiler() {
-    TERRA_PROFILE_CREATE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT, _concurrent_jobs );
-    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
-    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
-    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
-    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION, 0xafffff );
-
-    for ( int i = 0; i < _concurrent_jobs; ++i ) {
-        ClotoMessageJobPayload payload;
-        struct {
-            size_t session;
-        } msg_args;
-        auto msg_routine = [] ( void* args ) -> void {
-            size_t* session = ( size_t* ) args;
-            TERRA_PROFILE_REGISTER_THREAD ( *session );
-        };
-        payload.routine = msg_routine;
-        size_t session = TERRA_PROFILE_SESSION_DEFAULT;
-        memcpy ( payload.buffer, &session, sizeof ( session ) );
-        cloto_thread_send_message ( &_workers->slaves[i].thread, CLOTO_MSG_JOB_LOCAL_ARGS, &payload, CLOTO_MSG_PAYLOAD_SIZE );
-    }
-}
-
-void TerraRenderer::_update_profiler_results() {
+void TerraRenderer::_update_stats() {
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
     TERRA_PROFILE_UPDATE_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
@@ -331,20 +246,83 @@ void TerraRenderer::_clear_stats() {
     TERRA_PROFILE_CLEAR_TARGET ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION );
 }
 
-void TerraRenderer::_create_jobs() {
+void TerraRenderer::_num_tiles ( int& tiles_x, int& tiles_y ) {
+    int tile_size = Config::read_i ( Config::Opts::JOB_TILE_SIZE );
+
+    if ( _framebuffer.pixels == nullptr || tile_size < 0 ) {
+        Log::error ( STR ( "Internal state not initialized" ) );
+        return;
+    }
+
+    tiles_x = ( int ) ceilf ( ( float ) _framebuffer.width / tile_size );
+    tiles_y = ( int ) ceilf ( ( float ) _framebuffer.height / tile_size );
+}
+
+void TerraRenderer::_setup_threads () {
+    int workers = Config::read_i ( Config::JOB_N_WORKERS );
+
+    // Free previous allocations
+    if ( _workers != nullptr ) {
+        cloto_slavegroup_destroy ( _workers.get() );
+        _workers = nullptr;
+        TERRA_PROFILE_DELETE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT );
+    }
+
+    // Compute tile/queue size
+    int tx, ty;
+    _num_tiles ( tx, ty );
+    int job_buffer_size = tx * ty;
+    // Rounding to next power of two, we should also try the `countleadingzeros` intrinsic
+    // http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
+    {
+        --job_buffer_size;
+        job_buffer_size |= job_buffer_size >> 1;
+        job_buffer_size |= job_buffer_size >> 2;
+        job_buffer_size |= job_buffer_size >> 4;
+        job_buffer_size |= job_buffer_size >> 8;
+        job_buffer_size |= job_buffer_size >> 16;
+        ++job_buffer_size;
+    }
+    // create workers
+    _workers.reset ( new ClotoSlaveGroup );
+    cloto_slavegroup_create ( _workers.get(), workers, job_buffer_size );
+    // setup profiler
+    TERRA_PROFILE_CREATE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT, workers );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY, 0xaffff );
+    TERRA_PROFILE_CREATE_TARGET ( time, TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION, 0xafffff );
+
+    for ( int i = 0; i < workers; ++i ) {
+        ClotoMessageJobPayload payload;
+        struct {
+            size_t session;
+        } msg_args;
+        auto msg_routine = [] ( void* args ) -> void {
+            size_t* session = ( size_t* ) args;
+            TERRA_PROFILE_REGISTER_THREAD ( *session );
+        };
+        payload.routine = msg_routine;
+        size_t session = TERRA_PROFILE_SESSION_DEFAULT;
+        memcpy ( payload.buffer, &session, sizeof ( session ) );
+        cloto_thread_send_message ( &_workers->slaves[i].thread, CLOTO_MSG_JOB_LOCAL_ARGS, &payload, CLOTO_MSG_PAYLOAD_SIZE );
+    }
+
+    // create jobs
+    int tile_size = Config::read_i ( Config::Opts::JOB_TILE_SIZE );
+    int num_tiles_x, num_tiles_y;
+    _num_tiles ( num_tiles_x, num_tiles_y );
     _job_args.clear();
-    const int num_tiles_x = ( int ) ceilf ( ( float ) _framebuffer.width / _tile_size );
-    const int num_tiles_y = ( int ) ceilf ( ( float ) _framebuffer.height / _tile_size );
     _job_args.resize ( num_tiles_x * num_tiles_y );
 
     for ( int i = 0; i < num_tiles_y; ++i ) {
         for ( int j = 0; j < num_tiles_x; ++j ) {
             TerraRenderArgs* args = _job_args.data() + i * num_tiles_x + j;
             args->th = this;
-            args->x = j * _tile_size;
-            args->y = i * _tile_size;
-            args->width =  ( int ) terra_mini ( ( size_t ) ( j + 1 ) * _tile_size,  _framebuffer.width ) - j * _tile_size;
-            args->height = ( int ) terra_mini ( ( size_t ) ( i + 1 ) * _tile_size, _framebuffer.height ) - i * _tile_size;
+            args->x = j * tile_size;
+            args->y = i * tile_size;
+            args->width = ( int ) terra_mini ( ( size_t ) ( j + 1 ) * tile_size, _framebuffer.width ) - j * tile_size;
+            args->height = ( int ) terra_mini ( ( size_t ) ( i + 1 ) * tile_size, _framebuffer.height ) - i * tile_size;
         }
     }
 }
@@ -358,7 +336,7 @@ void TerraRenderer::_push_jobs() {
 
     for ( int i = 0; i < num_tiles_y; ++i ) {
         for ( int j = 0; j < num_tiles_x; ++j ) {
-            TerraRenderArgs* args = _job_args.data() +  i * num_tiles_x + j;
+            TerraRenderArgs* args = _job_args.data() + i * num_tiles_x + j;
             ClotoJob job;
             job.routine = &terra_render_launcher;
             job.args = args;
@@ -367,120 +345,127 @@ void TerraRenderer::_push_jobs() {
     }
 }
 
-void TerraRenderer::_num_tiles ( int& tiles_x, int& tiles_y ) {
-    if ( _framebuffer.pixels == nullptr || _tile_size < 0 ) {
-        Log::error ( STR ( "Internal state not initialized" ) );
-        return;
-    }
-
-    tiles_x = ( int ) ceilf ( ( float ) _framebuffer.width / _tile_size );
-    tiles_y = ( int ) ceilf ( ( float ) _framebuffer.height / _tile_size );
+void TerraRenderer::_restart_jobs() {
+    int tx, ty;
+    _num_tiles ( tx, ty );
+    int n_jobs = tx * ty;
+    _tile_counter = n_jobs;
+    cloto_slavegroup_reset ( _workers.get() );
 }
 
-uint64_t TerraRenderer::_gen_scene_id ( const TerraCamera* camera, HTerraScene scene ) {
-    return hash<HTerraScene> () ( scene ) ^ hash<TerraCamera>() ( *camera );
-    //return hash<uint64_t>() ( ( uint64_t& ) camera ) ^ hash<uint64_t>() ( ( uint64_t& ) scene );
-}
+bool TerraRenderer::_launch () {
+    //if ( _framebuffer.pixels == nullptr ) {
+    //    Log::error ( STR ( "Cannot launch rendering, invalid destination Terra framebuffer" ) );
+    //    return false;
+    //}
+    assert ( _target_camera );
+    assert ( _target_scene );
+    assert ( _paused );
 
-bool TerraRenderer::_state_changed() {
-    return _framebuffer.width != _next_width ||
-           _framebuffer.height != _next_height ||
-           _tile_size != _next_tile_size ||
-           _concurrent_jobs != _next_concurrent_jobs;
-}
-
-bool TerraRenderer::_apply_changes() {
-    bool threading_changed = _tile_size != _next_tile_size || _concurrent_jobs != _next_concurrent_jobs;
-    bool resolution_changed = _next_width != _framebuffer.width || _next_height != _framebuffer.height;
-
-    if ( resolution_changed ) {
+    // Sync config
+    if ( _opt_render_change ) {
         if ( _framebuffer.pixels != nullptr ) {
             terra_framebuffer_destroy ( &_framebuffer );
             memset ( &_framebuffer, 0, sizeof ( TerraFramebuffer ) );
         }
 
-        if ( !terra_framebuffer_create ( &_framebuffer, _next_width, _next_height ) ) {
+        int width = Config::read_i ( Config::Opts::RENDER_WIDTH );
+        int height = Config::read_i ( Config::Opts::RENDER_HEIGHT );
+
+        if ( !terra_framebuffer_create ( &_framebuffer, width, height ) ) {
             Log::error ( STR ( "Failed to create Terra framebuffer, subsequent calls will fail" ) );
             return false;
         }
 
         Log::verbose ( FMT ( "Creating Terra framebuffer %dx%d", _framebuffer.width, _framebuffer.height ) );
-        _next_width  = ( int ) _framebuffer.width;
-        _next_height = ( int ) _framebuffer.height;
-    }
-
-    if ( resolution_changed || threading_changed ) {
         Log::verbose ( STR ( "Creating Terra render jobs" ) );
-
-        if ( _workers != nullptr ) {
-            cloto_slavegroup_destroy ( _workers.get() );
-            _workers = nullptr;
-            TERRA_PROFILE_DELETE_SESSION ( TERRA_PROFILE_SESSION_DEFAULT );
-        }
-
-        // Initializing state
-        _tile_size = _next_tile_size;
-        _concurrent_jobs = _next_concurrent_jobs;
-
-        // Creating workers and jobs
-        int tx, ty;
-        _num_tiles ( tx, ty );
-        int job_buffer_size = tx * ty;
-
-        // Rounding to next power of two, we should also try the `countleadingzeros` intrinsic
-        // http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-        {
-            --job_buffer_size;
-            job_buffer_size |= job_buffer_size >> 1;
-            job_buffer_size |= job_buffer_size >> 2;
-            job_buffer_size |= job_buffer_size >> 4;
-            job_buffer_size |= job_buffer_size >> 8;
-            job_buffer_size |= job_buffer_size >> 16;
-            ++job_buffer_size;
-        }
-        _workers.reset (  new ClotoSlaveGroup );
-        cloto_slavegroup_create ( _workers.get(), _concurrent_jobs, job_buffer_size );
-        _setup_profiler();
-        _create_jobs();
+        // Creating workers and jobs (required on framebuffer size change)
+        _setup_threads ();
+        // Update camera
+        Config::read_f3 ( Config::RENDER_CAMERA_POS, &_target_camera->position.x );
+        Config::read_f3 ( Config::RENDER_CAMERA_DIR, &_target_camera->direction.x );
+        _target_camera->direction = terra_normf3 ( &_target_camera->direction );
+        Config::read_f3 ( Config::RENDER_CAMERA_UP, &_target_camera->up.x );
+        _target_camera->up = terra_normf3 ( &_target_camera->up );
+        _target_camera->fov = Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG );
+    } else if ( _opt_job_change ) {
+        _setup_threads ();
     }
 
-    return true;
-}
-
-bool TerraRenderer::_launch () {
-    if ( _target_camera == nullptr ||  _target_scene == nullptr ) {
-        return false;
-    }
-
-    if ( _framebuffer.pixels == nullptr ) {
-        Log::error ( STR ( "Cannot launch rendering, invalid destination Terra framebuffer" ) );
-        return false;
-    }
-
-    assert ( is_paused() );
-
-    // Updating options
-    _apply_changes();
-
-    // Clearing the framebuffer if the scene has changes
-    uint64_t scene_id = _gen_scene_id ( _target_camera, _target_scene );
-
-    if ( _scene_id != scene_id ) {
-        terra_framebuffer_clear ( &_framebuffer );
-        _scene_id = scene_id;
-    }
-
-    // Setting internal state (used only by TerraRenderer)
-    _paused      = false;
-    _iterations  = 0;
+    _opt_job_change = false;
+    _opt_render_change = false;
+    // Setup internal state
+    _paused             = false;
+    _iterations         = 0;
+    _clear_framebuffer  = false;
     _options = *terra_scene_get_options ( _target_scene );
-
-    // Pushing jobs
+    // Push jobs
     _push_jobs();
-
     return true;
 }
 
 void TerraRenderer::_process_messages() {
     cloto_thread_process_messages ( _this_thread );
+}
+
+TerraRenderer::ConfigChangeResult TerraRenderer::on_config_change ( int opt ) {
+    switch ( opt ) {
+        case Config::RENDER_WIDTH:
+        case Config::RENDER_HEIGHT:
+        case Config::RENDER_MAX_BOUNCES:
+        case Config::RENDER_SAMPLES:
+        case Config::RENDER_GAMMA:
+        case Config::RENDER_EXPOSURE:
+        case Config::RENDER_TONEMAP:
+        case Config::RENDER_ACCELERATOR:
+        case Config::RENDER_SAMPLING:
+        case Config::RENDER_SCENE_PATH:
+        case Config::RENDER_CAMERA_POS:
+        case Config::RENDER_CAMERA_DIR:
+        case Config::RENDER_CAMERA_UP:
+        case Config::RENDER_CAMERA_VFOV_DEG:
+        case Config::RENDER_ENVMAP_COLOR:
+            _opt_render_change = true;
+            return ConfigChangeResult::CONFIG_CHANGE_CLEAR;
+
+        case Config::JOB_TILE_SIZE:
+        case Config::JOB_N_WORKERS:
+            _opt_job_change = true;
+            return ConfigChangeResult::CONFIG_CHANGE_OK;
+
+        case Config::VISUALIZER_PROGRESSIVE:
+            return ConfigChangeResult::CONFIG_CHANGE_OK;
+
+        default:
+            return ConfigChangeResult::CONFIG_CHANGE_ERROR;
+    }
+}
+
+TerraRenderer::ConfigChangeResult TerraRenderer::config_change_result ( int opt ) {
+    switch ( opt ) {
+        case Config::RENDER_MAX_BOUNCES:
+        case Config::RENDER_SAMPLES:
+        case Config::RENDER_GAMMA:
+        case Config::RENDER_EXPOSURE:
+        case Config::RENDER_TONEMAP:
+        case Config::RENDER_ACCELERATOR:
+        case Config::RENDER_SAMPLING:
+        case Config::RENDER_WIDTH:
+        case Config::RENDER_HEIGHT:
+        case Config::RENDER_SCENE_PATH:
+        case Config::RENDER_CAMERA_POS:
+        case Config::RENDER_CAMERA_DIR:
+        case Config::RENDER_CAMERA_UP:
+        case Config::RENDER_CAMERA_VFOV_DEG:
+        case Config::RENDER_ENVMAP_COLOR:
+            return ConfigChangeResult::CONFIG_CHANGE_CLEAR;
+
+        case Config::JOB_TILE_SIZE:
+        case Config::JOB_N_WORKERS:
+        case Config::VISUALIZER_PROGRESSIVE:
+            return ConfigChangeResult::CONFIG_CHANGE_OK;
+
+        default:
+            return ConfigChangeResult::CONFIG_CHANGE_ERROR;
+    }
 }

@@ -34,16 +34,15 @@ using namespace std;
 #define CMD_LOOP_NAME "loop"
 #define CMD_PAUSE_NAME "pause"
 #define CMD_SAVE_NAME "save"
-#define CMD_TOGGLE_NAME "toggle"
-#define CMD_OPTION_NAME "option"
+#define CMD_OPTION_NAME "opt"
 #define CMD_OPTION_LIST_NAME "list"
 #define CMD_OPTION_RESET_NAME "reset"
 #define CMD_OPTION_SET_NAME "set"
+#define CMD_OPTION_LOAD_NAME "load"
+#define CMD_OPTION_SAVE_NAME "save"
 #define CMD_RESIZE_NAME "resize"
 #define CMD_HIDE_NAME "hide"
 #define CMD_STATS_NAME "stats"
-#define CMD_CONFIG_LOAD "cfg_load"
-#define CMD_CONFIG_SAVE "cfg_save"
 
 #define DEFAULT_UI_FONT "Inconsolata.ttf"
 
@@ -130,10 +129,20 @@ App::App ( int argc, char** argv ) {
 App::~App() {
 }
 
-int App::run ( int width, int height ) {
+void App::_clear() {
+    if ( !_renderer.is_framebuffer_clear() ) {
+        _renderer.clear();
+        _visualizer.set_texture_data ( _renderer.framebuffer() );
+    }
+
+    _visualizer.update_stats();
+}
+
+int App::run () {
+    int width = Config::read_i ( Config::RENDER_WIDTH );
+    int height = Config::read_i ( Config::RENDER_HEIGHT );
     bool gfx_init = _gfx.init ( width, height, "Satellite",
     [ = ] ( int w, int h ) { // on resize
-        _renderer.resize ( w, h );
     },
     [ = ] ( const ImGuiIO & io ) { // on key
         if ( io.KeysDown[GLFW_KEY_GRAVE_ACCENT] && io.KeysDownDuration[GLFW_KEY_GRAVE_ACCENT] == 0 ) {
@@ -147,7 +156,6 @@ int App::run ( int width, int height ) {
 
     _init_ui();
     Log::flush();
-    _renderer.init ( width, height, Config::read_i ( Config::JOB_TILE_SIZE ), Config::read_i ( Config::JOB_N_WORKERS ) );
     _visualizer.init ( &_gfx );
     _init_cmd_map();
     _boot();
@@ -156,7 +164,7 @@ int App::run ( int width, int height ) {
         // i/o
         _gfx.process_events ();
         // update
-        _renderer.refresh_jobs();
+        _renderer.update();
         // draw
         ImGui_ImplGlfwGL3_NewFrame();
         glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
@@ -264,13 +272,13 @@ void App::_init_cmd_map() {
             _visualizer.info().spp = ( int ) _renderer.options().samples_per_pixel;
             _visualizer.update_stats();
 
-            if ( !_renderer.is_progressive() ) {
+            if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
                 _visualizer.set_texture_data ( _renderer.framebuffer() );
             }
         },
         nullptr,
         [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
-            if ( _renderer.is_progressive() ) {
+            if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
                 _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
             }
         } );
@@ -288,13 +296,13 @@ void App::_init_cmd_map() {
         [ = ]() {
             _visualizer.update_stats();
 
-            if ( !_renderer.is_progressive() ) {
+            if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
                 _visualizer.set_texture_data ( _renderer.framebuffer() );
             }
         },
         nullptr,
         [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
-            if ( _renderer.is_progressive() ) {
+            if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
                 _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
             }
         } );
@@ -308,7 +316,7 @@ void App::_init_cmd_map() {
     };
     // pause
     auto cmd_pause = [ this ] ( const CommandArgs & args ) -> int {
-        _renderer.pause_at_next_step();
+        _renderer.pause();
         return 0;
     };
     // save
@@ -348,7 +356,7 @@ void App::_init_cmd_map() {
         return 0;
     };
     // toggle
-    auto cmd_toggle = [this] ( const CommandArgs & args ) -> int {
+    /*auto cmd_toggle = [this] ( const CommandArgs & args ) -> int {
         string usage = MULTILINE ( R"(
             [console|info|stats])" );
 
@@ -367,7 +375,7 @@ void App::_init_cmd_map() {
         }
 
         return 0;
-    };
+    };*/
     // option
     auto cmd_option = [ this ] ( const CommandArgs & args ) -> int {
         string usage = MULTILINE ( R"(
@@ -382,11 +390,13 @@ void App::_init_cmd_map() {
 
         // Running option subcommand
         if ( args[0].compare ( CMD_OPTION_LIST_NAME ) == 0 ) {
-            _scene.dump_opts();
-            Log::info ( FMT ( "workers           = %d", _renderer.concurrent_jobs() ) );
-            Log::info ( FMT ( "tile_size         = %d", _renderer.tile_size() ) );
+            Config::dump_desc();
+            //_scene.dump_opts();
+            //Log::info ( FMT ( "workers           = %d", _renderer.concurrent_jobs() ) );
+            //Log::info ( FMT ( "tile_size         = %d", _renderer.tile_size() ) );
         } else if ( args[0].compare ( CMD_OPTION_RESET_NAME ) == 0 ) {
-            _scene.reset_options();
+            Config::reset_to_default();
+            //_scene.reset_options();
             Log::info ( STR ( "Reset options to Config default" ) );
         } else if ( args[0].compare ( CMD_OPTION_SET_NAME ) == 0 ) {
             if ( args.size() < 3 ) {
@@ -394,26 +404,53 @@ void App::_init_cmd_map() {
                 return 1;
             }
 
-            // Finding command/name mapping
             int opt = Config::find ( args[1].c_str() );
 
-            // We don't want to lookup the options here
-            if ( !_scene.set_opt ( opt, args[2].c_str() ) ) {
-                int v;
-
-                if ( Config::parse_i ( args[2].c_str(), v ) ) {
-                    if ( opt == Config::JOB_N_WORKERS ) {
-                        _renderer.set_concurrent_jobs ( v );
-                        goto success;
-                    } else if ( opt == Config::JOB_TILE_SIZE ) {
-                        _renderer.set_tile_size ( v );
-                        goto success;
-                    }
-                }
-
+            if ( !opt ) {
                 Log::error ( FMT ( "Failed to find any matching option for %s", args[1].c_str() ) );
                 return 1;
             }
+
+            if ( args.size() == 5 ) {
+                char* arg = ( char* ) malloc ( args[2].length() + args[3].length() + args[4].length() + 2 );
+                char* p = arg;
+                strcpy ( p, args[2].c_str() );
+                p += args[2].length();
+                *p++ = ' ';
+                strcpy ( p, args[3].c_str() );
+                p += args[3].length();
+                *p++ = ' ';
+                strcpy ( p, args[4].c_str() );
+                _opt_set ( opt, arg );
+            } else {
+                _opt_set ( opt, args[2] );
+            }
+        } else if ( args[0].compare ( CMD_OPTION_LOAD_NAME ) == 0 ) {
+            if ( args.size() == 1 ) {
+                if ( !Config::load() ) {
+                    Log::error ( STR ( "No satellite.config file found while looking at default dirs." ) );
+                    return 1;
+                }
+            } else {
+                if ( Config::load ( args[1].c_str() ) ) {
+                    Log::error ( STR ( "File not found." ) );
+                    return 1;
+                }
+            }
+
+            goto success;
+        } else if ( args[0].compare ( CMD_OPTION_SAVE_NAME ) == 0 ) {
+            if ( args.size() == 1 ) {
+                if ( !Config::save() ) {
+                    return 1;
+                }
+            } else {
+                if ( !Config::save ( args[1].c_str() ) ) {
+                    return 1;
+                }
+            }
+
+            goto success;
         } else {
             Log::error ( STR ( "Unrecognized command" ) );
             return 1;
@@ -437,18 +474,21 @@ success:
             return 1;
         }
 
-        _gfx.force_resize ( width, height );
-        _renderer.resize ( width, height );
-
-        Log::console ( "New resolution %d %d", width, height );
+        _opt_set ( true, [this, width, height]() {
+            Config::write_i ( Config::RENDER_WIDTH, width );
+            Config::write_i ( Config::RENDER_HEIGHT, height );
+            _gfx.force_resize ( width, height );
+            _renderer.on_config_change ( Config::RENDER_WIDTH );
+            _renderer.on_config_change ( Config::RENDER_HEIGHT );
+            _clear();
+            Log::console ( "New resolution %d %d", width, height );
+        } );
 
         return 0;
     };
     // clear
     auto cmd_clear = [this] ( const CommandArgs & args ) -> int {
-        _renderer.clear();
-        _visualizer.set_texture_data ( _renderer.framebuffer() );
-        _visualizer.update_stats();
+        _clear();
         return 0;
     };
     // hide
@@ -474,30 +514,6 @@ success:
 #endif
         return 0;
     };
-    // config load
-    auto cmd_cfg_load = [this] ( const CommandArgs & args ) {
-        if ( args.size() == 0 ) {
-            if ( !Config::load() ) {
-                Log::error ( STR ( "No satellite.config file found while looking at default dirs." ) );
-            }
-        } else {
-            if ( !Config::load ( args[0].c_str() ) ) {
-                Log::error ( STR ( "File not found." ) );
-            }
-        }
-
-        return 0;
-    };
-    // config save
-    auto cmd_cfg_save = [this] ( const CommandArgs & args ) {
-        if ( args.size() == 0 ) {
-            Config::save();
-        } else {
-            Config::save ( args[0].c_str() );
-        }
-
-        return 0;
-    };
     //
     // Fillcommands to
     _c_map[CMD_CLEAR_NAME] = cmd_clear;
@@ -507,16 +523,88 @@ success:
     _c_map[CMD_LOOP_NAME] = cmd_loop;
     _c_map[CMD_PAUSE_NAME] = cmd_pause;
     _c_map[CMD_SAVE_NAME] = cmd_save;
-    _c_map[CMD_TOGGLE_NAME] = cmd_toggle;
+    //_c_map[CMD_TOGGLE_NAME] = cmd_toggle;
     _c_map[CMD_OPTION_NAME] = cmd_option;
     _c_map[CMD_RESIZE_NAME] = cmd_resize;
     _c_map[CMD_HIDE_NAME] = cmd_hide;
     _c_map[CMD_STATS_NAME] = cmd_stats;
-    _c_map[CMD_CONFIG_LOAD] = cmd_cfg_load;
-    _c_map[CMD_CONFIG_SAVE] = cmd_cfg_save;
 }
 
 void App::_boot() {
     // TODO do we want this?
-    _c_map["load"] ( { "../scenes/cornell-box/cornell-box-glossy.obj" } );
+    //_c_map["load"] ( { "../scenes/cornell-box/cornell-box-glossy.obj" } );
+    _c_map["load"] ( { Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() } );
+}
+
+void App::_opt_set ( int opt, const std::string& value ) {
+    auto setter = [this, opt, value]() {
+        Config::write ( opt, value );
+        _on_opt_set ( opt );
+    };
+
+    if ( _renderer.is_framebuffer_clear() || _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_OK ) {
+        setter();
+        return;
+    } else {
+        Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
+        _console.set_one_time_callback ( [this, setter] ( const CommandArgs & args ) -> int {
+            if ( args.size() == 0 ) {
+                return 1;
+            }
+            if ( args[0].compare ( "y" ) == 0 ) {
+                setter();
+            }
+            return 0;
+        } );
+    }
+}
+
+void App::_opt_set ( int opt, int value ) {
+    auto setter = [this, opt, value]() {
+        Config::write_i ( opt, value );
+        _on_opt_set ( opt );
+    };
+
+    if ( _renderer.is_framebuffer_clear() || _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_OK ) {
+        setter();
+    } else {
+        Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
+        _console.set_one_time_callback ( [this, setter] ( const CommandArgs & args ) -> int {
+            if ( args.size() == 0 ) {
+                return 1;
+            }
+            if ( args[0].compare ( "y" ) == 0 ) {
+                setter();
+            }
+            return 0;
+        } );
+    }
+}
+
+void App::_opt_set ( bool clear_check, std::function<void() > setter ) {
+    if ( _renderer.is_framebuffer_clear() || !clear_check ) {
+        setter();
+        return;
+    }
+
+    Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
+    _console.set_one_time_callback ( [this, setter] ( const CommandArgs & args ) -> int {
+        if ( args.size() == 0 ) {
+            return 1;
+        }
+        if ( args[0].compare ( "y" ) == 0 ) {
+            setter();
+        }
+        return 0;
+    } );
+}
+
+void App::_on_opt_set ( int opt ) {
+    if ( opt == Config::RENDER_WIDTH || opt == Config::RENDER_HEIGHT ) {
+        _gfx.force_resize ( Config::read_i ( Config::RENDER_WIDTH ), Config::read_i ( Config::RENDER_HEIGHT ) );
+    }
+
+    if ( _renderer.on_config_change ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR ) {
+        _clear();
+    }
 }

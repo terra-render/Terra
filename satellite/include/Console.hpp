@@ -32,6 +32,7 @@ class Console {
     void toggle();
 
     void set_callback ( const CommandCallback& callback );
+    void set_one_time_callback ( const CommandCallback& callback );
 
   private:
     static int _text_edit_callback_stub ( ImGuiTextEditCallbackData* data );
