@@ -7,5 +7,6 @@ satellite/vs/*
 satellite/scenes/*
 !satellite/vs/Satellite.vcxproj
 !satellite/vs/Satellite.vcxproj.filters
+!satellite/vs/Satellite.vcxproj.user
 satellite/comparisons/*
 satellite/satellite.config

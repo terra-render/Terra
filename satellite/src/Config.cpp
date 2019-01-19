@@ -154,8 +154,8 @@ namespace Config {
                 return true;
             }
 
-            if ( file_exists ( "../" CONFIG_PATH, fs ) ) {
-                config_path = "../" CONFIG_PATH;
+            if ( file_exists ( CONFIG_PATH, fs ) ) {
+                config_path = CONFIG_PATH;
                 return true;
             }
 
