@@ -103,6 +103,11 @@ void terra_profile_session_delete ( size_t id ) {
 
 void terra_profile_target_clear ( size_t _session, size_t _target ) {
     TerraProfileSession* session = TERRA_PDB.sessions + _session;
+
+    if ( !session ) {
+        return;
+    }
+
     TerraProfileTarget* target = session->targets + _target;
 
     for ( size_t i = 0; i < session->threads; ++i ) {
