@@ -336,19 +336,19 @@ TERRA_PROFILE_DEFINE_THREAD_UPDATE ( f32, float )
 TERRA_PROFILE_DEFINE_THREAD_UPDATE ( f64, double )
 TERRA_PROFILE_DEFINE_THREAD_UPDATE ( time, TerraClockTime )
 
-#define TERRA_PROFILE_DEFINE_LOCAL_UPDATE( postfix, type )                                  \
+#define TERRA_PROFILE_DEFINE_LOCAL_UPDATE( postfix )                                  \
     void terra_profile_update_local_stats_ ## postfix ( size_t session, size_t target ) {   \
         terra_profile_update_thread_stats_ ## postfix ( session, target, TERRA_PID );       \
     }
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( u32, uint32_t )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( u64, uint64_t )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( i32, int32_t )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( i64, int64_t )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( f32, float )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( f64, double )
-TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( time, TerraClockTime )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( u32 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( u64 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( i32 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( i64 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( f32 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( f64 )
+TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( time )
 
-#define TERRA_PROFILE_DEFINE_UPDATE( postfix, type )                                                \
+#define TERRA_PROFILE_DEFINE_UPDATE( postfix )                                                \
     void terra_profile_update_stats_ ## postfix( size_t session, size_t target ) {                  \
         for ( size_t i = 0; i < TERRA_PDB.sessions[session].threads; ++i ) {                        \
             terra_profile_update_thread_stats_ ## postfix ( session, target, i );                   \
@@ -361,13 +361,13 @@ TERRA_PROFILE_DEFINE_LOCAL_UPDATE ( time, TerraClockTime )
         }                                                                                           \
         TERRA_PDB.sessions[session].targets[target].stats = stats;                                  \
     }
-TERRA_PROFILE_DEFINE_UPDATE ( u32, uint32_t )
-TERRA_PROFILE_DEFINE_UPDATE ( u64, uint64_t )
-TERRA_PROFILE_DEFINE_UPDATE ( i32, int32_t )
-TERRA_PROFILE_DEFINE_UPDATE ( i64, int64_t )
-TERRA_PROFILE_DEFINE_UPDATE ( f32, float )
-TERRA_PROFILE_DEFINE_UPDATE ( f64, double )
-TERRA_PROFILE_DEFINE_UPDATE ( time, TerraClockTime )
+TERRA_PROFILE_DEFINE_UPDATE ( u32 )
+TERRA_PROFILE_DEFINE_UPDATE ( u64 )
+TERRA_PROFILE_DEFINE_UPDATE ( i32 )
+TERRA_PROFILE_DEFINE_UPDATE ( i64 )
+TERRA_PROFILE_DEFINE_UPDATE ( f32 )
+TERRA_PROFILE_DEFINE_UPDATE ( f64 )
+TERRA_PROFILE_DEFINE_UPDATE ( time )
 #endif
 
 // time goes to the bottom because otherwise it fucks up MVS 2017 Intellisense...

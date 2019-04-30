@@ -184,7 +184,6 @@ void App::_init_ui() {
     // Initializing ImGui (TODO: move to app?)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    //( void ) io; //TODO do we need this?
     ImGui_ImplGlfwGL3_Init ( ( GLFWwindow* ) _gfx.get_window(), true );
     ImGui::StyleColorsDark();
     io.IniFilename = nullptr;
@@ -515,7 +514,6 @@ success:
         return 0;
     };
     //
-    // Fillcommands to
     _c_map[CMD_CLEAR_NAME] = cmd_clear;
     _c_map[CMD_HELP_NAME] = cmd_help;
     _c_map[CMD_LOAD_NAME] = cmd_load;
@@ -539,33 +537,35 @@ void App::_boot() {
 void App::_opt_set ( int opt, const std::string& value ) {
     auto setter = [this, opt, value]() {
         Config::write ( opt, value );
-        _on_opt_set ( opt );
-    };
 
-    if ( _renderer.is_framebuffer_clear() || _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_OK ) {
-        setter();
-        return;
-    } else {
-        Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
-        _console.set_one_time_callback ( [this, setter] ( const CommandArgs & args ) -> int {
-            if ( args.size() == 0 ) {
-                return 1;
-            }
-            if ( args[0].compare ( "y" ) == 0 ) {
-                setter();
-            }
-            return 0;
-        } );
-    }
+        if ( opt == Config::RENDER_WIDTH || opt == Config::RENDER_HEIGHT ) {
+            _gfx.force_resize ( Config::read_i ( Config::RENDER_WIDTH ), Config::read_i ( Config::RENDER_HEIGHT ) );
+        }
+
+        if ( _renderer.on_config_change ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR ) {
+            _clear();
+        }
+    };
+    _opt_set ( _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR, setter );
 }
 
 void App::_opt_set ( int opt, int value ) {
     auto setter = [this, opt, value]() {
         Config::write_i ( opt, value );
-        _on_opt_set ( opt );
-    };
 
-    if ( _renderer.is_framebuffer_clear() || _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_OK ) {
+        if ( opt == Config::RENDER_WIDTH || opt == Config::RENDER_HEIGHT ) {
+            _gfx.force_resize ( Config::read_i ( Config::RENDER_WIDTH ), Config::read_i ( Config::RENDER_HEIGHT ) );
+        }
+
+        if ( _renderer.on_config_change ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR ) {
+            _clear();
+        }
+    };
+    _opt_set ( _renderer.config_change_result ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR, setter );
+}
+
+void App::_opt_set ( bool clear_check, std::function< void() > setter ) {
+    if ( _renderer.is_framebuffer_clear() || !clear_check ) {
         setter();
     } else {
         Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
@@ -578,33 +578,5 @@ void App::_opt_set ( int opt, int value ) {
             }
             return 0;
         } );
-    }
-}
-
-void App::_opt_set ( bool clear_check, std::function<void() > setter ) {
-    if ( _renderer.is_framebuffer_clear() || !clear_check ) {
-        setter();
-        return;
-    }
-
-    Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
-    _console.set_one_time_callback ( [this, setter] ( const CommandArgs & args ) -> int {
-        if ( args.size() == 0 ) {
-            return 1;
-        }
-        if ( args[0].compare ( "y" ) == 0 ) {
-            setter();
-        }
-        return 0;
-    } );
-}
-
-void App::_on_opt_set ( int opt ) {
-    if ( opt == Config::RENDER_WIDTH || opt == Config::RENDER_HEIGHT ) {
-        _gfx.force_resize ( Config::read_i ( Config::RENDER_WIDTH ), Config::read_i ( Config::RENDER_HEIGHT ) );
-    }
-
-    if ( _renderer.on_config_change ( opt ) == TerraRenderer::CONFIG_CHANGE_CLEAR ) {
-        _clear();
     }
 }

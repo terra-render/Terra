@@ -19,12 +19,12 @@ typedef enum {
     APOLLO_ERROR
 } ApolloResult;
 
-#define APOLLO_PATH 1024
-#define APOLLO_NAME 256
+#define APOLLO_PATH_LEN 1024
+#define APOLLO_NAME_LEN 256
 
-#define APOLLO_TARGET_VERTEX_COUNT  (1 << 18)
-#define APOLLO_TARGET_INDEX_COUNT   (1 << 18)
-#define APOLLO_TARGET_MESH_COUNT    128
+#define APOLLO_PREALLOC_VERTEX_COUNT  (1 << 18)
+#define APOLLO_PREALLOC_INDEX_COUNT   (1 << 18)
+#define APOLLO_PREALLOC_MESH_COUNT    128
 
 typedef struct {
     float x;
@@ -110,6 +110,7 @@ typedef struct {
 } ApolloMesh;
 
 typedef struct {
+    char name[APOLLO_NAME_LEN];
     ApolloVertex* vertices;
     size_t vertex_count;
     ApolloMesh* meshes;
@@ -150,11 +151,11 @@ typedef struct {
     int          emissive_map_id;       // map_Ke
     int          normal_map_id;         // norm
     ApolloBSDF   bsdf;
-    char         name[APOLLO_NAME];
+    char         name[APOLLO_NAME_LEN];
 } ApolloMaterial;
 
 typedef struct {
-    char name[APOLLO_NAME];
+    char name[APOLLO_NAME_LEN];
 } ApolloTexture;
 
 size_t  apollo_buffer_size ( void* buffer );
@@ -215,12 +216,13 @@ bool            apollo_read_float3 ( FILE* file, ApolloFloat3* val );
 typedef struct {
     FILE* file;
     ApolloMaterial* materials;
-    char filename[APOLLO_PATH];
+    char filename[APOLLO_PATH_LEN];
 } ApolloMaterialLib;
 
 ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures );
 
 // Tables are used to speed up model load times
+// ApolloIndexTable is an index set, used to
 typedef struct {
     size_t count;
     size_t capacity;
@@ -242,7 +244,7 @@ bool            apollo_index_table_lookup ( ApolloIndexTable* table, ApolloIndex
 
 typedef struct {
     ApolloFloat3 key;
-    uint32_t value;
+    ApolloIndex value;
 } ApolloVertexTableItem;
 
 typedef struct {
@@ -266,19 +268,19 @@ void                    apollo_vertex_table_insert ( ApolloVertexTable* table, c
 ApolloVertexTableItem*  apollo_vertex_table_lookup ( ApolloVertexTable* table, const ApolloFloat3* key );
 
 // AdjacencyTable
-#define APOLLO_ADJACENCY_EXTENSION_CAPACITY 13
-#define APOLLO_ADJACENCY_ITEM_CAPACITY 11
+#define APOLLO_ADJACENCY_EXTENSION_CAPACITY 14
+#define APOLLO_ADJACENCY_ITEM_CAPACITY 13
 
 typedef struct ApolloAdjacencyTableExtension {
     uint32_t count;
-    uint32_t values[APOLLO_ADJACENCY_EXTENSION_CAPACITY];   // face indices
+    ApolloIndex values[APOLLO_ADJACENCY_EXTENSION_CAPACITY];   // face indices
     struct ApolloAdjacencyTableExtension* next;
 } ApolloAdjacencyTableExtension;
 
 typedef struct {
     ApolloIndex key;
     uint32_t count;
-    uint32_t values[APOLLO_ADJACENCY_ITEM_CAPACITY];    // face indices
+    ApolloIndex values[APOLLO_ADJACENCY_ITEM_CAPACITY];    // face indices
     ApolloAdjacencyTableExtension* next;
 } ApolloAdjacencyTableItem;
 
@@ -379,19 +381,20 @@ void apollo_buffer_free ( void* buffer ) {
 // >= 0 valid texture index
 // -1 -> format error
 // -2 -> texture error
-ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* idx_out ) {
-    char map_name[APOLLO_NAME];
 
-    if ( fscanf ( file, "%s", map_name ) != 1 ) {
+ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, size_t* idx_out ) {
+    char name[APOLLO_NAME_LEN];
+
+    if ( fscanf ( file, "%s", name ) != 1 ) {
         return APOLLO_INVALID_FORMAT;
     }
 
-    size_t idx = apollo_find_texture ( textures, map_name );
+    size_t idx = apollo_find_texture ( textures, name );
 
     if ( idx == SIZE_MAX ) {
         idx = sb_count ( textures );
         ApolloTexture* texture = sb_add ( textures, 1 );
-        strncpy ( texture->name, map_name, 256 );
+        strncpy ( texture->name, name, 256 );
     }
 
     *idx_out = idx;
@@ -684,27 +687,33 @@ error:
 // Model
 //--------------------------------------------------------------------------------------------------
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** _materials, ApolloTexture** _textures, bool rh, bool flip_faces ) {
-    FILE* file = NULL;
-    file = fopen ( filename, "r" );
+    // Open mesh file
+    FILE* file = fopen ( filename, "r" );
 
     if ( file == NULL ) {
         fprintf ( stderr, "Cannot open file %s", filename );
         return APOLLO_FILE_NOT_FOUND;
     }
 
+    // Extract mesh file name
     size_t filename_len = strlen ( filename );
     const char* dir_end = filename + filename_len;
 
     while ( --dir_end != filename && *dir_end != '/' && *dir_end != '\\' )
         ;
 
-    assert ( filename_len < APOLLO_PATH );
-    char base_dir[APOLLO_PATH];
-    base_dir[0] = '\0';
-    size_t base_dir_len = 0;
-
     if ( dir_end != filename ) {
         ++dir_end;
+    }
+
+    strncpy ( model->name, dir_end, APOLLO_NAME_LEN );
+    // Extract mesh file dir path
+    assert ( filename_len < APOLLO_PATH_LEN );
+    char base_dir[APOLLO_PATH_LEN];
+    size_t base_dir_len = 0;
+    base_dir[0] = '\0';
+
+    if ( dir_end != filename ) {
         base_dir_len = dir_end - filename;
         strncpy ( base_dir, filename, base_dir_len );
     }
@@ -728,21 +737,22 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     Mesh* meshes = NULL;
     ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
     ApolloMaterialLib* material_libs = NULL;
-    // Non-temporary buffers (part of the ApolloModel)
+    // Non-temporary buffers (will go in the final ApolloModel)
     ApolloIndex* indices = NULL;
     ApolloVertex* vertices = NULL;
     // Prealloc memory
-    apollo_vertex_table_create ( &vtable, 2 * APOLLO_TARGET_VERTEX_COUNT );
-    apollo_adjacency_table_create ( &atable, 2 * APOLLO_TARGET_VERTEX_COUNT );
-    apollo_index_table_create ( &itable, APOLLO_TARGET_INDEX_COUNT );
-    sb_prealloc ( vertex_pos, APOLLO_TARGET_VERTEX_COUNT );
-    sb_prealloc ( tex_coords, APOLLO_TARGET_VERTEX_COUNT );
-    sb_prealloc ( normals, APOLLO_TARGET_VERTEX_COUNT );
-    sb_prealloc ( indices, APOLLO_TARGET_INDEX_COUNT );
-    sb_prealloc ( vertices, APOLLO_TARGET_VERTEX_COUNT );
-    sb_prealloc ( meshes, APOLLO_TARGET_MESH_COUNT );
-    sb_prealloc ( used_materials, APOLLO_TARGET_MESH_COUNT );
-    sb_prealloc ( material_libs, APOLLO_TARGET_MESH_COUNT );
+    apollo_vertex_table_create ( &vtable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
+    apollo_adjacency_table_create ( &atable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
+    apollo_index_table_create ( &itable, 2 * APOLLO_PREALLOC_INDEX_COUNT );
+    sb_prealloc ( vertex_pos, APOLLO_PREALLOC_VERTEX_COUNT );
+    sb_prealloc ( tex_coords, APOLLO_PREALLOC_VERTEX_COUNT );
+    sb_prealloc ( normals, APOLLO_PREALLOC_VERTEX_COUNT );
+    sb_prealloc ( indices, APOLLO_PREALLOC_INDEX_COUNT );
+    sb_prealloc ( vertices, APOLLO_PREALLOC_VERTEX_COUNT );
+    sb_prealloc ( meshes, APOLLO_PREALLOC_MESH_COUNT );
+    sb_prealloc ( used_materials, APOLLO_PREALLOC_MESH_COUNT );
+    sb_prealloc ( material_libs, APOLLO_PREALLOC_MESH_COUNT );
+    // Start parsing
     ApolloResult result;
     int x;
     bool material_loaded = false;
@@ -770,7 +780,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                     break;
                 }
 
-                char lib_name[APOLLO_PATH];
+                char lib_name[APOLLO_PATH_LEN];
                 memcpy ( lib_name, base_dir, base_dir_len );
                 fscanf ( file, "%s", lib_name + base_dir_len );
                 size_t lib_name_len = strlen ( lib_name );
@@ -1096,7 +1106,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         }
     }
 
-    // The unnnecessary scoping is just so that it is possible to write goto error on error.
+    // The unnnecessary scoping is just so that it is possible to call goto error.
     {
         ApolloFloat3* face_normals = NULL;
         sb_add ( face_normals, face_count );
@@ -1153,8 +1163,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 continue;
             }
 
-            // Vertex normals foreach mesh
-
+            // Vertex normals
             for ( size_t i = 0; i < mesh_index_count; ++i ) {
                 ApolloFloat3 norm_sum;
                 norm_sum.x = norm_sum.y = norm_sum.z = 0;
@@ -1164,7 +1173,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 if ( already_computed_vertex ) {
                     continue;
                 } else {
-                    //computed_indices[computed_indices_count++] = indices[mesh_index_base + i];
                     apollo_index_table_insert ( &itable, mesh_index_base + i );
                 }
 
@@ -1201,7 +1209,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 vertices[indices[mesh_index_base + i]].norm = normal;
             }
 
-            //free ( computed_indices );
             apollo_index_table_clear ( &itable );
         }
 
