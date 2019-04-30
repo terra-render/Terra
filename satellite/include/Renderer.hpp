@@ -31,10 +31,6 @@ class TerraRenderer {
     // Clears the framebuffer.
     void clear();
 
-    // TODO
-    //void set_camera ( TerraCamera* camera );
-    //void set_scene ( HTerraScene scene );
-
     // Step the rendering.
     bool step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end );
 
