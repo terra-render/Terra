@@ -1185,12 +1185,12 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 ApolloFloat3 norm_sum;
                 norm_sum.x = norm_sum.y = norm_sum.z = 0;
                 // skip the index if the corresponding vertex has already been processed
-                bool already_computed_vertex = apollo_index_table_lookup ( &itable, mesh_index_base + i );
+                bool already_computed_vertex = apollo_index_table_lookup ( &itable, m_idx[mesh_index_base + i] );
 
                 if ( already_computed_vertex ) {
                     continue;
                 } else {
-                    apollo_index_table_insert ( &itable, mesh_index_base + i );
+                    apollo_index_table_insert ( &itable, m_idx[mesh_index_base + i] );
                 }
 
                 ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, m_idx[mesh_index_base + i] );
