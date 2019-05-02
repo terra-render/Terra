@@ -30,7 +30,7 @@ namespace {
     // Making life easier, more readability, less errors (hpf)
 #define READ_ATTR(attr, apollo_attr, textures )\
     {\
-        int tidx = apollo_attr##_map_id;\
+        int tidx = apollo_attr##_texture;\
         TerraTexture* texture = nullptr;\
         TerraFloat3   constant = to_constant(apollo_attr);\
         if (tidx != -1) { texture = _allocate_texture(textures[tidx].name); }\
@@ -38,15 +38,18 @@ namespace {
         else { terra_attribute_init_texture(&attr, texture);}}
 
     template <typename T>
-    TerraFloat3 to_constant ( const T& v ) { }
+    TerraFloat3 to_constant ( const T v ) { }
+
+    template <typename T>
+    TerraFloat3 to_constant ( const T* v ) { }
 
     template <>
-    TerraFloat3 to_constant ( const ApolloFloat3& v ) {
-        return terra_f3_set ( v.x, v.y, v.z );
+    TerraFloat3 to_constant ( const float* v ) {
+        return terra_f3_set ( v[0], v[1], v[2] );
     }
 
     template <>
-    TerraFloat3 to_constant ( const float& v ) {
+    TerraFloat3 to_constant ( const float v ) {
         return terra_f3_set1 ( v );
     }
 }
@@ -152,8 +155,11 @@ bool Scene::load ( const char* filename ) {
     ApolloMaterial* materials = NULL;
     ApolloTexture* textures = NULL;
     ApolloModel model;
+    ApolloLoadOptions options;
+    options.flip_faces = false;
+    options.right_handed_coords = false;
 
-    if ( apollo_import_model_obj ( filename, &model, &materials, &textures, false, false ) != APOLLO_SUCCESS ) {
+    if ( apollo_import_model_obj ( filename, &model, &materials, &textures, &options ) != APOLLO_SUCCESS ) {
         Log::error ( "Failed to import %s", filename );
         return false;
     }
@@ -181,17 +187,32 @@ bool Scene::load ( const char* filename ) {
         // Reading geometry
         //
 
-        for ( int i = 0; i < object->triangles_count; ++i ) {
-            const ApolloMeshFace* apollo_face = &model.meshes[m].faces[i];
-            object->triangles[i].b = * ( TerraFloat3* ) &model.vertices[apollo_face->b].pos;
-            object->triangles[i].a = * ( TerraFloat3* ) &model.vertices[apollo_face->a].pos;
-            object->triangles[i].c = * ( TerraFloat3* ) &model.vertices[apollo_face->c].pos;
-            object->properties[i].normal_a = * ( TerraFloat3* ) &model.vertices[apollo_face->a].norm;
-            object->properties[i].normal_b = * ( TerraFloat3* ) &model.vertices[apollo_face->b].norm;
-            object->properties[i].normal_c = * ( TerraFloat3* ) &model.vertices[apollo_face->c].norm;
-            object->properties[i].texcoord_a = * ( TerraFloat2* ) &model.vertices[apollo_face->a].tex;
-            object->properties[i].texcoord_b = * ( TerraFloat2* ) &model.vertices[apollo_face->b].tex;
-            object->properties[i].texcoord_c = * ( TerraFloat2* ) &model.vertices[apollo_face->c].tex;
+        for ( size_t i = 0; i < object->triangles_count; ++i ) {
+            const ApolloMeshFaceData* face = &model.meshes[m].face_data;
+            object->triangles[i].a.x = model.vertex_data.pos_x[face->idx_a[i]];
+            object->triangles[i].a.y = model.vertex_data.pos_y[face->idx_a[i]];
+            object->triangles[i].a.z = model.vertex_data.pos_z[face->idx_a[i]];
+            object->triangles[i].b.x = model.vertex_data.pos_x[face->idx_b[i]];
+            object->triangles[i].b.y = model.vertex_data.pos_y[face->idx_b[i]];
+            object->triangles[i].b.z = model.vertex_data.pos_z[face->idx_b[i]];
+            object->triangles[i].c.x = model.vertex_data.pos_x[face->idx_c[i]];
+            object->triangles[i].c.y = model.vertex_data.pos_y[face->idx_c[i]];
+            object->triangles[i].c.z = model.vertex_data.pos_z[face->idx_c[i]];
+            object->properties[i].normal_a.x = model.vertex_data.norm_x[face->idx_a[i]];
+            object->properties[i].normal_a.y = model.vertex_data.norm_y[face->idx_a[i]];
+            object->properties[i].normal_a.z = model.vertex_data.norm_z[face->idx_a[i]];
+            object->properties[i].normal_b.x = model.vertex_data.norm_x[face->idx_b[i]];
+            object->properties[i].normal_b.y = model.vertex_data.norm_y[face->idx_b[i]];
+            object->properties[i].normal_b.z = model.vertex_data.norm_z[face->idx_b[i]];
+            object->properties[i].normal_c.x = model.vertex_data.norm_x[face->idx_c[i]];
+            object->properties[i].normal_c.y = model.vertex_data.norm_y[face->idx_c[i]];
+            object->properties[i].normal_c.z = model.vertex_data.norm_z[face->idx_c[i]];
+            object->properties[i].texcoord_a.x = model.vertex_data.tex_u[face->idx_a[i]];
+            object->properties[i].texcoord_a.y = model.vertex_data.tex_v[face->idx_a[i]];
+            object->properties[i].texcoord_b.x = model.vertex_data.tex_u[face->idx_b[i]];
+            object->properties[i].texcoord_b.y = model.vertex_data.tex_v[face->idx_b[i]];
+            object->properties[i].texcoord_c.x = model.vertex_data.tex_u[face->idx_c[i]];
+            object->properties[i].texcoord_c.y = model.vertex_data.tex_v[face->idx_c[i]];
         }
 
         //
