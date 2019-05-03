@@ -116,22 +116,25 @@ typedef struct {
 
 typedef void* ( apollo_alloc_fun ) ( void* allocator, size_t size, size_t alignment );
 typedef void* ( apollo_realloc_fun ) ( void* allocator, void* addr, size_t old_size, size_t new_size, size_t new_alignment );
-typedef void* ( apollo_free_fun ) ( void* allocator, void* addr, size_t size );
+typedef void ( apollo_free_fun ) ( void* allocator, void* addr, size_t size );
 
 size_t  apollo_buffer_size ( void* buffer );
 void    apollo_buffer_free ( void* buffer );
 
 typedef struct {
     void* temp_allocator;
-    apollo_alloc_fun temp_alloc;
-    apollo_realloc_fun temp_realloc;
-    apollo_free_fun temp_free;
+    apollo_alloc_fun* temp_alloc;
+    apollo_realloc_fun* temp_realloc;
+    apollo_free_fun* temp_free;
     void* final_allocator;
-    apollo_alloc_fun final_alloc;
-    bool right_handed_coords;
+    apollo_alloc_fun* final_alloc;
+    bool flip_z;
+    bool flip_texcoord_v;
     bool flip_faces;
 } ApolloLoadOptions;
 
+// The provided allocator is not required to strictly follow the alignment requirements. A malloc-based allocator is fine.
+// If it does, the output data arrays are guaranteed to be 16-byte aligned.
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** materials, ApolloTexture** textures, const ApolloLoadOptions* options );
 
 #ifdef __cplusplus
@@ -190,18 +193,6 @@ inline bool apollo_equalf2 ( const ApolloFloat2* a, const ApolloFloat2* b ) {
 
 inline bool apollo_equalf3 ( const ApolloFloat3* a, const ApolloFloat3* b ) {
     return a->x == b->x && a->y == b->y && a->z == b->z;
-}
-
-// Names are a bit misleading, but whatever
-inline void apollo_setf2 ( float* dest, const float* source ) {
-    dest[0] = source[0];
-    dest[1] = source[1];
-}
-
-inline void apollo_setf3 ( float* dest, const float* source ) {
-    dest[0] = source[0];
-    dest[1] = source[1];
-    dest[2] = source[2];
 }
 
 uint32_t        apollo_find_texture ( const ApolloTexture* textures, const char* texture_name );
@@ -309,7 +300,17 @@ void                        apollo_adjacency_table_resize ( ApolloAdjacencyTable
 ApolloAdjacencyTableItem*   apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key );
 ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable* table, uint32_t key );
 
-// https://github.com/nothings/stb/blob/master/stretchy_buffer.h
+void* apollo_temp_allocator = NULL;
+apollo_alloc_fun* apollo_temp_alloc_f = NULL;
+apollo_realloc_fun* apollo_temp_realloc_f = NULL;
+apollo_free_fun* apollo_temp_free_f = NULL;
+
+#define APOLLO_TEMP_ALLOC(T, n) (T*)apollo_temp_alloc_f(apollo_temp_allocator, sizeof(T) * n, alignof(T))
+#define APOLLO_TEMP_ALLOC_ALIGN(T, n, a) (T*)apollo_temp_alloc_f(apollo_temp_allocator, sizeof(T) * n, a)
+#define APOLLO_TEMP_FREE(p, n) apollo_temp_free_f(apollo_temp_allocator, p, sizeof(*p) * n);
+
+// Custom version of https://github.com/nothings/stb/blob/master/stretchy_buffer.h
+// Depends on apollo temp allocators
 #define sb_free     stb_sb_free
 #define sb_push     stb_sb_push
 #define sb_count    stb_sb_count
@@ -317,7 +318,7 @@ ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable
 #define sb_last     stb_sb_last
 #define sb_prealloc stb_sb_prealloc
 
-#define stb_sb_free(a)          ((a) ? free(stb__sbraw(a)),0 : 0)
+#define stb_sb_free(a)          ((a) ? apollo_temp_free_f(apollo_temp_allocator,stb__sbraw(a),stb__sbm(a)),0 : 0)
 #define stb_sb_push(a,v)        (stb__sbmaybegrow(a,1), (a)[stb__sbn(a)++] = (v))
 #define stb_sb_count(a)         ((a) ? stb__sbn(a) : 0)
 #define stb_sb_add(a,n)         (stb__sbmaybegrow(a,n), stb__sbn(a)+=(n), &(a)[stb__sbn(a)-(n)])
@@ -695,6 +696,11 @@ error:
 // Model
 //--------------------------------------------------------------------------------------------------
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** _materials, ApolloTexture** _textures, const ApolloLoadOptions* options ) {
+    // Setup sb
+    apollo_temp_allocator = options->temp_allocator;
+    apollo_temp_alloc_f = options->temp_alloc;
+    apollo_temp_realloc_f = options->temp_realloc;
+    apollo_temp_free_f = options->temp_free;
     // Open mesh file
     FILE* file = fopen ( filename, "r" );
 
@@ -883,7 +889,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             goto error;
                         }
 
-                        if ( options->right_handed_coords ) {
+                        if ( options->flip_z ) {
                             pos->z = pos->z * -1.f;
                         }
                     }
@@ -897,7 +903,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             goto error;
                         }
 
-                        if ( options->right_handed_coords ) {
+                        if ( options->flip_texcoord_v ) {
                             uv->y = 1.f - uv->y;
                         }
                     }
@@ -911,7 +917,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             goto error;
                         }
 
-                        if ( options->right_handed_coords ) {
+                        if ( options->flip_z ) {
                             norm->z = norm->z * -1;
                         }
                     }
@@ -1255,15 +1261,16 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         }
 
         // Build ApolloModel
+#define APOLLO_FINAL_MALLOC(T, n) (T*) options->final_alloc(options->final_allocator, sizeof(T) * n, 16);
         // Vertices
-        model->vertex_data.pos_x = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.pos_y = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.pos_z = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.norm_x = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.norm_y = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.norm_z = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.tex_u = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
-        model->vertex_data.tex_v = ( float* ) malloc ( sizeof ( float ) * sb_count ( m_vert ) );
+        model->vertex_data.pos_x = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.pos_y = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.pos_z = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.norm_x = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.norm_y = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.norm_z = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.tex_u = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
+        model->vertex_data.tex_v = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
         model->vertex_count = sb_count ( m_vert );
 
         for ( size_t i = 0; i < sb_count ( m_vert ); ++i ) {
@@ -1278,7 +1285,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         }
 
         // Meshes
-        model->meshes = ( ApolloMesh* ) malloc ( sizeof ( ApolloMesh ) * sb_count ( meshes ) );
+        model->meshes = APOLLO_FINAL_MALLOC ( ApolloMesh, sb_count ( meshes ) );
         model->mesh_count = sb_count ( meshes );
 
         for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
@@ -1293,18 +1300,18 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 goto error;
             }
 
-            model->meshes[i].face_data.idx_a = ( uint32_t* ) malloc ( sizeof ( uint32_t ) * mesh_face_count );
-            model->meshes[i].face_data.idx_b = ( uint32_t* ) malloc ( sizeof ( uint32_t ) * mesh_face_count );
-            model->meshes[i].face_data.idx_c = ( uint32_t* ) malloc ( sizeof ( uint32_t ) * mesh_face_count );
-            model->meshes[i].face_data.normal_x = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.normal_y = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.normal_z = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.tangent_x = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.tangent_y = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.tangent_z = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.bitangent_x = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.bitangent_y = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
-            model->meshes[i].face_data.bitangent_z = ( float* ) malloc ( sizeof ( float ) * mesh_face_count );
+            model->meshes[i].face_data.idx_a = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
+            model->meshes[i].face_data.idx_b = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
+            model->meshes[i].face_data.idx_c = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
+            model->meshes[i].face_data.normal_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.normal_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.normal_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.tangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.tangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.tangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.bitangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.bitangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            model->meshes[i].face_data.bitangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
             model->meshes[i].face_count = mesh_face_count;
 
             for ( size_t j = 0; j < mesh_face_count; ++j ) {
@@ -1453,6 +1460,10 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     sb_free ( m_idx );
     sb_free ( m_vert );
     sb_free ( meshes );
+    apollo_temp_allocator = NULL;
+    apollo_temp_alloc_f = NULL;
+    apollo_temp_realloc_f = NULL;
+    apollo_temp_free_f = NULL;
     return APOLLO_SUCCESS;
 error:
     apollo_vertex_table_destroy ( &vtable );
@@ -1466,7 +1477,12 @@ error:
     sb_free ( m_idx );
     sb_free ( m_vert );
     sb_free ( meshes );
+    apollo_temp_allocator = NULL;
+    apollo_temp_alloc_f = NULL;
+    apollo_temp_realloc_f = NULL;
+    apollo_temp_free_f = NULL;
     return result;
+#undef APOLLO_FINAL_MALLOC
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1474,7 +1490,7 @@ error:
 //--------------------------------------------------------------------------------------------------
 void apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity ) {
     assert ( ( capacity & ( capacity - 1 ) ) == 0 ); // is power of 2
-    table->items = ( uint32_t* ) malloc ( sizeof ( uint32_t ) * capacity );
+    table->items = APOLLO_TEMP_ALLOC ( uint32_t, capacity );
     memset ( table->items, 0, sizeof ( uint32_t ) * capacity );
     table->capacity = capacity;
     table->count = 0;
@@ -1483,7 +1499,7 @@ void apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity ) {
 }
 
 void apollo_index_table_destroy ( ApolloIndexTable* table ) {
-    free ( table->items );
+    APOLLO_TEMP_FREE ( table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -1536,7 +1552,7 @@ void apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity 
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 ); // is power of 2
     uint32_t* old_items = table->items;
     uint32_t old_capacity = table->capacity;
-    table->items = ( uint32_t* ) malloc ( sizeof ( uint32_t ) * new_capacity );
+    table->items = APOLLO_TEMP_ALLOC ( uint32_t, new_capacity );
     memset ( table->items, 0, sizeof ( uint32_t ) * new_capacity );
     table->capacity = new_capacity;
     table->access_mask = new_capacity - 1;
@@ -1554,7 +1570,7 @@ void apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity 
         }
     }
 
-    free ( old_items );
+    APOLLO_TEMP_FREE ( old_items, old_capacity );
 }
 
 void apollo_index_table_insert ( ApolloIndexTable* table, uint32_t item ) {
@@ -1606,7 +1622,7 @@ bool apollo_index_table_lookup ( ApolloIndexTable* table, uint32_t item ) {
 //--------------------------------------------------------------------------------------------------
 void apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity ) {
     assert ( ( capacity & ( capacity - 1 ) ) == 0 ); // is power of 2
-    table->items = ( ApolloVertexTableItem* ) malloc ( sizeof ( ApolloVertexTableItem ) * capacity );
+    table->items = APOLLO_TEMP_ALLOC ( ApolloVertexTableItem, capacity );
     memset ( table->items, 0, sizeof ( *table->items ) * capacity );
     table->capacity = capacity;
     table->count = 0;
@@ -1616,7 +1632,7 @@ void apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity ) 
 }
 
 void apollo_vertex_table_destroy ( ApolloVertexTable* table ) {
-    free ( table->items );
+    APOLLO_TEMP_FREE ( table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -1649,8 +1665,8 @@ int apollo_vertex_table_item_distance ( const ApolloVertexTable* table, ApolloVe
 void apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacity ) {
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 ); // is power of 2
     ApolloVertexTableItem* old_items = table->items;
-    int old_capacity = table->capacity;
-    table->items = ( ApolloVertexTableItem* ) malloc ( sizeof ( ApolloVertexTableItem ) * new_capacity );
+    uint32_t old_capacity = table->capacity;
+    table->items = APOLLO_TEMP_ALLOC ( ApolloVertexTableItem, new_capacity );
     memset ( table->items, 0, sizeof ( *table->items ) * new_capacity );
     table->capacity = new_capacity;
     table->access_mask = new_capacity - 1;
@@ -1669,7 +1685,7 @@ void apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacit
         }
     }
 
-    free ( old_items );
+    APOLLO_TEMP_FREE ( old_items, old_capacity );
 }
 
 void apollo_vertex_table_insert ( ApolloVertexTable* table, const ApolloVertexTableItem* item ) {
@@ -1760,14 +1776,14 @@ bool apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t
             item->values[item->count++] = value;
             return false;
         } else {
-            item->next = ( ApolloAdjacencyTableExtension* ) malloc ( sizeof ( ApolloAdjacencyTableExtension ) );
+            item->next = ( ApolloAdjacencyTableExtension* ) apollo_temp_alloc_f ( apollo_temp_allocator, sizeof ( ApolloAdjacencyTableExtension ), 64 );
             memset ( item->next, 0, sizeof ( *item->next ) );
             ext = item->next;
         }
     }
 
     if ( ext->count == APOLLO_ADJACENCY_EXTENSION_CAPACITY ) {
-        ext->next = ( ApolloAdjacencyTableExtension* ) malloc ( sizeof ( ApolloAdjacencyTableExtension ) );
+        ext->next = ( ApolloAdjacencyTableExtension* ) apollo_temp_alloc_f ( apollo_temp_allocator, sizeof ( ApolloAdjacencyTableExtension ), 64 );
         memset ( ext->next, 0, sizeof ( *ext->next ) );
         ext = ext->next;
     }
@@ -1806,13 +1822,23 @@ void apollo_adjacency_table_create ( ApolloAdjacencyTable* table, uint32_t capac
     table->count = 0;
     table->capacity = capacity;
     table->access_mask = capacity - 1;
-    table->items = ( ApolloAdjacencyTableItem* ) malloc ( sizeof ( ApolloAdjacencyTableItem ) * capacity );
+    table->items = APOLLO_TEMP_ALLOC ( ApolloAdjacencyTableItem, capacity );
     memset ( table->items, 0, sizeof ( ApolloAdjacencyTableItem ) * capacity );
     memset ( &table->zero_key_item, 0, sizeof ( table->zero_key_item ) );
 }
 
 void apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table ) {
-    free ( table->items );
+    for ( size_t i = 0; i < table->capacity; ++i ) {
+        ApolloAdjacencyTableExtension* ext = table->items[i].next;
+
+        while ( ext ) {
+            ApolloAdjacencyTableExtension* p = ext;
+            ext = ext->next;
+            APOLLO_TEMP_FREE ( p, 1 );
+        }
+    }
+
+    APOLLO_TEMP_FREE ( table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -1839,8 +1865,8 @@ int apollo_adjacency_table_distance ( const ApolloAdjacencyTable* table, const A
 void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_capacity ) {
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 );
     ApolloAdjacencyTableItem* old_items = table->items;
-    int old_capacity = table->capacity;
-    table->items = ( ApolloAdjacencyTableItem* ) malloc ( sizeof ( ApolloAdjacencyTableItem ) * new_capacity );
+    uint32_t old_capacity = table->capacity;
+    table->items = APOLLO_TEMP_ALLOC ( ApolloAdjacencyTableItem, new_capacity );
     memset ( table->items, 0, sizeof ( ApolloAdjacencyTableItem ) * new_capacity );
     table->capacity = new_capacity;
 
@@ -1855,7 +1881,7 @@ void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_c
         *new_item = *old_item;
     }
 
-    free ( old_items );
+    APOLLO_TEMP_FREE ( old_items, old_capacity );
 }
 
 ApolloAdjacencyTableItem* apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key ) {
@@ -1916,7 +1942,8 @@ static void* stb__sbgrowf ( void* arr, int increment, int itemsize ) {
     int dbl_cur = arr ? 2 * stb__sbm ( arr ) : 0;
     int min_needed = stb_sb_count ( arr ) + increment;
     int m = dbl_cur > min_needed ? dbl_cur : min_needed;
-    int* p = ( int* ) realloc ( arr ? stb__sbraw ( arr ) : 0, itemsize * m + sizeof ( int ) * 2 );
+    int* p = arr ? ( int* ) apollo_temp_realloc_f ( apollo_temp_allocator, stb__sbraw ( arr ), stb__sbm ( arr ) * itemsize, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 )
+             : ( int* ) apollo_temp_alloc_f ( apollo_temp_allocator, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 );
 
     if ( p ) {
         if ( !arr ) {

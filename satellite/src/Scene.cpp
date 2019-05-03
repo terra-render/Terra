@@ -140,6 +140,18 @@ Scene::Scene() {
 Scene::~Scene() {
 }
 
+void* apollo_alloc ( void* _, size_t size, size_t align ) {
+    return malloc ( size );
+}
+
+void* apollo_realloc ( void* _, void* p, size_t old_size, size_t new_size, size_t align ) {
+    return realloc ( p, new_size );
+}
+
+void apollo_free ( void* _, void* p, size_t size ) {
+    free ( p );
+}
+
 bool Scene::load ( const char* filename ) {
     // TODO move this into Scene constructor?
     if ( _first_load ) {
@@ -155,9 +167,11 @@ bool Scene::load ( const char* filename ) {
     ApolloMaterial* materials = NULL;
     ApolloTexture* textures = NULL;
     ApolloModel model;
-    ApolloLoadOptions options;
-    options.flip_faces = false;
-    options.right_handed_coords = false;
+    ApolloLoadOptions options = { 0 };
+    options.temp_alloc = &apollo_alloc;
+    options.temp_realloc = &apollo_realloc;
+    options.temp_free = &apollo_free;
+    options.final_alloc = &apollo_alloc;
 
     if ( apollo_import_model_obj ( filename, &model, &materials, &textures, &options ) != APOLLO_SUCCESS ) {
         Log::error ( "Failed to import %s", filename );
