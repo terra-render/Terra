@@ -22,10 +22,6 @@ typedef enum {
 #define APOLLO_PATH_LEN 1024
 #define APOLLO_NAME_LEN 256
 
-#define APOLLO_PREALLOC_VERTEX_COUNT  (1 << 18)
-#define APOLLO_PREALLOC_INDEX_COUNT   (1 << 18)
-#define APOLLO_PREALLOC_MESH_COUNT    128
-
 typedef struct {
     uint32_t*   idx_a;
     uint32_t*   idx_b;
@@ -137,6 +133,9 @@ typedef struct {
     bool compute_tangents;
     bool compute_bitangents;
     bool compute_bounds;
+    size_t prealloc_vertex_count;
+    size_t prealloc_index_count;
+    size_t prealloc_mesh_count;
 } ApolloLoadOptions;
 
 // The provided allocator is not required to strictly follow the alignment requirements. A malloc-based allocator is fine.
@@ -778,22 +777,22 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
     // Prealloc memory
     if ( options->remove_vertex_duplicates ) {
-        apollo_vertex_table_create ( &vtable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
+        apollo_vertex_table_create ( &vtable, 2 * options->prealloc_vertex_count );
     }
 
     if ( options->recompute_vertex_normals ) {
-        apollo_adjacency_table_create ( &atable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
-        apollo_index_table_create ( &itable, 2 * APOLLO_PREALLOC_INDEX_COUNT );
+        apollo_adjacency_table_create ( &atable, 2 * options->prealloc_vertex_count );
+        apollo_index_table_create ( &itable, 2 * options->prealloc_index_count );
     }
 
-    sb_prealloc ( f_pos, APOLLO_PREALLOC_VERTEX_COUNT );
-    sb_prealloc ( f_tex, APOLLO_PREALLOC_VERTEX_COUNT );
-    sb_prealloc ( f_norm, APOLLO_PREALLOC_VERTEX_COUNT );
-    sb_prealloc ( m_idx, APOLLO_PREALLOC_INDEX_COUNT );
-    sb_prealloc ( m_vert, APOLLO_PREALLOC_VERTEX_COUNT );
-    sb_prealloc ( meshes, APOLLO_PREALLOC_MESH_COUNT );
-    sb_prealloc ( used_materials, APOLLO_PREALLOC_MESH_COUNT );
-    sb_prealloc ( material_libs, APOLLO_PREALLOC_MESH_COUNT );
+    sb_prealloc ( f_pos, options->prealloc_vertex_count );
+    sb_prealloc ( f_tex, options->prealloc_vertex_count );
+    sb_prealloc ( f_norm, options->prealloc_vertex_count );
+    sb_prealloc ( m_idx, options->prealloc_index_count );
+    sb_prealloc ( m_vert, options->prealloc_vertex_count );
+    sb_prealloc ( meshes, options->prealloc_mesh_count );
+    sb_prealloc ( used_materials, options->prealloc_mesh_count );
+    sb_prealloc ( material_libs, options->prealloc_mesh_count );
     // Start parsing
     ApolloResult result;
     int x;

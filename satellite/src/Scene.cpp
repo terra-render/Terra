@@ -180,6 +180,9 @@ bool Scene::load ( const char* filename ) {
     options.temp_realloc = &apollo_realloc;
     options.temp_free = &apollo_free;
     options.final_alloc = &apollo_alloc;
+    options.prealloc_vertex_count = 1 << 18;
+    options.prealloc_index_count = 1 << 18;
+    options.prealloc_mesh_count = 16;
 
     if ( apollo_import_model_obj ( filename, &model, &materials, &textures, &options ) != APOLLO_SUCCESS ) {
         Log::error ( "Failed to import %s", filename );
