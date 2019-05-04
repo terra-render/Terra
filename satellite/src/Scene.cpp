@@ -151,21 +151,13 @@ void apollo_free ( void* _, void* p, size_t size ) {
     free ( p );
 }
 
-bool Scene::load ( const char* filename ) {
-    // TODO move this into Scene constructor?
-    if ( _first_load ) {
-        reset_options();
-    }
-
-    clear(); // release current scene
-
+bool Scene::_load_scene ( const char* filename ) {
     if ( filename == nullptr ) {
         return false;
     }
 
-    ApolloMaterial* materials = NULL;
-    ApolloTexture* textures = NULL;
-    ApolloModel model;
+    free ( _apollo_model );
+    _apollo_model = ( ApolloModel* ) malloc ( sizeof ( ApolloModel ) );
     ApolloLoadOptions options = { 0 };
     options.compute_tangents = true;
     options.compute_bitangents = true;
@@ -183,102 +175,114 @@ bool Scene::load ( const char* filename ) {
     options.prealloc_vertex_count = 1 << 18;
     options.prealloc_index_count = 1 << 18;
     options.prealloc_mesh_count = 16;
+    Log::info ( FMT ( "Importing model file %s", filename ) );
 
-    if ( apollo_import_model_obj ( filename, &model, &materials, &textures, &options ) != APOLLO_SUCCESS ) {
+    if ( apollo_import_model_obj ( filename, _apollo_model, &_apollo_materials, &_apollo_textures, &options ) != APOLLO_SUCCESS ) {
         Log::error ( "Failed to import %s", filename );
         return false;
     }
 
-    // Extracing filename as name
-    size_t filename_len = strlen ( filename );
-    const char* name = filename + filename_len - 1;
+    int bsdf_count[APOLLO_BSDF_COUNT];
+    memset ( bsdf_count, 0, sizeof ( int ) * APOLLO_BSDF_COUNT );
 
-    while ( name != filename && ( *name != '/' && *name != '\\' ) ) {
-        --name;
+    for ( size_t i = 0; i < sb_count ( _apollo_materials ); ++i ) {
+        bsdf_count[_apollo_materials[i].bsdf] += 1;
     }
 
-    name = name != '\0' ? name + 1 : name;
-    _name = name;
+    Log::info ( FMT ( "Finished importing %s.", filename ) );
+    Log::info ( FMT ( "Meshes(%d) [ pbr(%d) diffuse(%d) specular(%d) mirror(%d) ], textures(%d)",
+                      _apollo_model->mesh_count, bsdf_count[APOLLO_PBR], bsdf_count[APOLLO_DIFFUSE], bsdf_count[APOLLO_SPECULAR], bsdf_count[APOLLO_MIRROR], _textures.size() ) );
+    return true;
+}
+
+bool Scene::_build_scene() {
+    // TODO move this into Scene constructor?
+    if ( _first_load ) {
+        reset_options();
+    }
+
+    clear(); // release current scene
     //
     // Importing into Terra Scene
     //
-    Log::info ( FMT ( "Read %d objects from %s", model.mesh_count, name ) );
+    Log::info ( FMT ( "Building %d meshes from %s", _apollo_model->mesh_count, _apollo_model->name ) );
     _scene = terra_scene_create();
     uint64_t n_triangles = 0;
 
-    for ( int m = 0; m < model.mesh_count; ++m ) {
-        TerraObject* object = terra_scene_add_object ( _scene, model.meshes[m].face_count );
+    for ( int m = 0; m < _apollo_model->mesh_count; ++m ) {
+        TerraObject* object = terra_scene_add_object ( _scene, _apollo_model->meshes[m].face_count );
         //
         // Reading geometry
         //
 
         for ( size_t i = 0; i < object->triangles_count; ++i ) {
-            const ApolloMeshFaceData* face = &model.meshes[m].face_data;
-            object->triangles[i].a.x = model.vertex_data.pos_x[face->idx_a[i]];
-            object->triangles[i].a.y = model.vertex_data.pos_y[face->idx_a[i]];
-            object->triangles[i].a.z = model.vertex_data.pos_z[face->idx_a[i]];
-            object->triangles[i].b.x = model.vertex_data.pos_x[face->idx_b[i]];
-            object->triangles[i].b.y = model.vertex_data.pos_y[face->idx_b[i]];
-            object->triangles[i].b.z = model.vertex_data.pos_z[face->idx_b[i]];
-            object->triangles[i].c.x = model.vertex_data.pos_x[face->idx_c[i]];
-            object->triangles[i].c.y = model.vertex_data.pos_y[face->idx_c[i]];
-            object->triangles[i].c.z = model.vertex_data.pos_z[face->idx_c[i]];
-            object->properties[i].normal_a.x = model.vertex_data.norm_x[face->idx_a[i]];
-            object->properties[i].normal_a.y = model.vertex_data.norm_y[face->idx_a[i]];
-            object->properties[i].normal_a.z = model.vertex_data.norm_z[face->idx_a[i]];
-            object->properties[i].normal_b.x = model.vertex_data.norm_x[face->idx_b[i]];
-            object->properties[i].normal_b.y = model.vertex_data.norm_y[face->idx_b[i]];
-            object->properties[i].normal_b.z = model.vertex_data.norm_z[face->idx_b[i]];
-            object->properties[i].normal_c.x = model.vertex_data.norm_x[face->idx_c[i]];
-            object->properties[i].normal_c.y = model.vertex_data.norm_y[face->idx_c[i]];
-            object->properties[i].normal_c.z = model.vertex_data.norm_z[face->idx_c[i]];
-            object->properties[i].texcoord_a.x = model.vertex_data.tex_u[face->idx_a[i]];
-            object->properties[i].texcoord_a.y = model.vertex_data.tex_v[face->idx_a[i]];
-            object->properties[i].texcoord_b.x = model.vertex_data.tex_u[face->idx_b[i]];
-            object->properties[i].texcoord_b.y = model.vertex_data.tex_v[face->idx_b[i]];
-            object->properties[i].texcoord_c.x = model.vertex_data.tex_u[face->idx_c[i]];
-            object->properties[i].texcoord_c.y = model.vertex_data.tex_v[face->idx_c[i]];
+            const ApolloMeshFaceData* face = &_apollo_model->meshes[m].face_data;
+            const ApolloModelVertexData* vertex_data = &_apollo_model->vertex_data;
+            object->triangles[i].a.x = vertex_data->pos_x[face->idx_a[i]];
+            object->triangles[i].a.y = vertex_data->pos_y[face->idx_a[i]];
+            object->triangles[i].a.z = vertex_data->pos_z[face->idx_a[i]];
+            object->triangles[i].b.x = vertex_data->pos_x[face->idx_b[i]];
+            object->triangles[i].b.y = vertex_data->pos_y[face->idx_b[i]];
+            object->triangles[i].b.z = vertex_data->pos_z[face->idx_b[i]];
+            object->triangles[i].c.x = vertex_data->pos_x[face->idx_c[i]];
+            object->triangles[i].c.y = vertex_data->pos_y[face->idx_c[i]];
+            object->triangles[i].c.z = vertex_data->pos_z[face->idx_c[i]];
+            object->properties[i].normal_a.x = vertex_data->norm_x[face->idx_a[i]];
+            object->properties[i].normal_a.y = vertex_data->norm_y[face->idx_a[i]];
+            object->properties[i].normal_a.z = vertex_data->norm_z[face->idx_a[i]];
+            object->properties[i].normal_b.x = vertex_data->norm_x[face->idx_b[i]];
+            object->properties[i].normal_b.y = vertex_data->norm_y[face->idx_b[i]];
+            object->properties[i].normal_b.z = vertex_data->norm_z[face->idx_b[i]];
+            object->properties[i].normal_c.x = vertex_data->norm_x[face->idx_c[i]];
+            object->properties[i].normal_c.y = vertex_data->norm_y[face->idx_c[i]];
+            object->properties[i].normal_c.z = vertex_data->norm_z[face->idx_c[i]];
+            object->properties[i].texcoord_a.x = vertex_data->tex_u[face->idx_a[i]];
+            object->properties[i].texcoord_a.y = vertex_data->tex_v[face->idx_a[i]];
+            object->properties[i].texcoord_b.x = vertex_data->tex_u[face->idx_b[i]];
+            object->properties[i].texcoord_b.y = vertex_data->tex_v[face->idx_b[i]];
+            object->properties[i].texcoord_c.x = vertex_data->tex_u[face->idx_c[i]];
+            object->properties[i].texcoord_c.y = vertex_data->tex_v[face->idx_c[i]];
         }
 
         //
         // Reading materials
         //
-        const int material_idx = model.meshes[m].material_id;
-        const ApolloMaterial& material = materials[material_idx];
+        const int material_idx = _apollo_model->meshes[m].material_id;
+        const ApolloMaterial& material = _apollo_materials[material_idx];
         object->material.ior = 1.5;
         // TODO
         object->material.enable_bump_map_attr = 0;
         object->material.enable_normal_map_attr = 0;
-        READ_ATTR ( object->material.emissive, material.emissive, textures );
+        READ_ATTR ( object->material.emissive, material.emissive, _apollo_textures );
 
         switch ( material.bsdf ) {
             case APOLLO_SPECULAR: {
-                Log::info ( FMT ( "Loading specular material" ) );
+                // Log::info ( FMT ( "Loading specular material" ) );
                 TerraAttribute albedo, specular_color, specular_intensity;
-                READ_ATTR ( albedo, material.diffuse, textures );
-                READ_ATTR ( specular_color, material.specular, textures );
-                READ_ATTR ( specular_intensity, material.specular_exp, textures );
-                object->material.attributes[TERRA_PHONG_ALBEDO]             = albedo;
-                object->material.attributes[TERRA_PHONG_SPECULAR_COLOR]     = specular_color;
+                READ_ATTR ( albedo, material.diffuse, _apollo_textures );
+                READ_ATTR ( specular_color, material.specular, _apollo_textures );
+                READ_ATTR ( specular_intensity, material.specular_exp, _apollo_textures );
+                object->material.attributes[TERRA_PHONG_ALBEDO] = albedo;
+                object->material.attributes[TERRA_PHONG_SPECULAR_COLOR] = specular_color;
                 object->material.attributes[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
-                object->material.attributes_count                           = TERRA_PHONG_END;
+                object->material.attributes_count = TERRA_PHONG_END;
                 terra_bsdf_phong_init ( &object->material.bsdf );
                 break;
             }
 
             default:
             case APOLLO_MIRROR:
-                Log::warning ( FMT ( "Scene(%s) Unsupported mirror material(%s). Defaulting to diffuse." ), name, material.name );
+                Log::warning ( FMT ( "Scene(%s) Unsupported mirror material(%s). Defaulting to diffuse." ), _apollo_model->name, material.name );
 
             case APOLLO_PBR:
-                Log::warning ( FMT ( "Scene(%s) Unsupported pbr material(%s). Defaulting to diffuse" ), name, material.name );
+                Log::warning ( FMT ( "Scene(%s) Unsupported pbr material(%s). Defaulting to diffuse" ), _apollo_model->name, material.name );
 
             case APOLLO_DIFFUSE: {
-                Log::info ( FMT ( "Loading diffuse material" ) );
+                // Log::info ( FMT ( "Loading diffuse material" ) );
                 TerraAttribute albedo;
-                READ_ATTR ( albedo, material.diffuse, textures );
+                READ_ATTR ( albedo, material.diffuse, _apollo_textures );
                 object->material.attributes[TERRA_DIFFUSE_ALBEDO] = albedo;
-                object->material.attributes_count                 = TERRA_DIFFUSE_END;
+                object->material.attributes_count = TERRA_DIFFUSE_END;
                 terra_bsdf_diffuse_init ( &object->material.bsdf );
                 break;
             }
@@ -290,8 +294,90 @@ bool Scene::load ( const char* filename ) {
     // TODO free materials/textures?
     Log::info ( FMT ( "Building acceleration structure for %zu triangles", n_triangles ) );
     terra_scene_commit ( _scene );
-    Log::info ( FMT ( "Finished importing %s. objects(%d) textures(%d)", name, terra_scene_count_objects ( _scene ), _textures.size() ) );
+    // Log::info(FMT("Finished importing %s. objects(%d) textures(%d)", _apollo_model->name, terra_scene_count_objects(_scene), _textures.size()));
+    Log::info ( FMT ( "Finished building %s", _apollo_model->name ) );
+    //
+    _vert_gens.clear();
+    _vert_gens.resize ( _apollo_model->vertex_count, 0 );
+    _gen = 0;
     return true;
+}
+
+bool Scene::load ( const char* filename ) {
+    if ( !_load_scene ( filename ) ) {
+        return false;
+    }
+
+    if ( !_build_scene() ) {
+        return false;
+    }
+
+    return true;
+}
+
+bool Scene::move_mesh ( const char* name, const TerraFloat3* pos ) {
+    ++_gen;
+
+    for ( size_t i = 0; i < _apollo_model->mesh_count; ++i ) {
+        ApolloMesh* m = &_apollo_model->meshes[i];
+
+        if ( strcmp ( name, m->name ) == 0 ) {
+            TerraFloat3 current_pos = terra_f3_set ( m->bounding_sphere[0], m->bounding_sphere[1], m->bounding_sphere[2] );
+            TerraFloat3 delta = terra_subf3 ( pos, &current_pos );
+            const ApolloModelVertexData* data = &_apollo_model->vertex_data;
+            const ApolloMeshFaceData* face = &m->face_data;
+
+            for ( size_t j = 0; j < m->face_count; ++j ) {
+                if ( _vert_gens[face->idx_a[j]] < _gen ) {
+                    data->pos_x[face->idx_a[j]] += delta.x;
+                    data->pos_y[face->idx_a[j]] += delta.y;
+                    data->pos_z[face->idx_a[j]] += delta.z;
+                    _vert_gens[face->idx_a[j]] = _gen;
+                }
+
+                if ( _vert_gens[face->idx_b[j]] < _gen ) {
+                    data->pos_x[face->idx_b[j]] += delta.x;
+                    data->pos_y[face->idx_b[j]] += delta.y;
+                    data->pos_z[face->idx_b[j]] += delta.z;
+                    _vert_gens[face->idx_b[j]] = _gen;
+                }
+
+                if ( _vert_gens[face->idx_c[j]] < _gen ) {
+                    data->pos_x[face->idx_c[j]] += delta.x;
+                    data->pos_y[face->idx_c[j]] += delta.y;
+                    data->pos_z[face->idx_c[j]] += delta.z;
+                    _vert_gens[face->idx_c[j]] = _gen;
+                }
+            }
+
+            m->bounding_sphere[0] += delta.x;
+            m->bounding_sphere[1] += delta.y;
+            m->bounding_sphere[2] += delta.z;
+            m->aabb_min[0] += delta.x;
+            m->aabb_min[1] += delta.y;
+            m->aabb_min[2] += delta.z;
+            m->aabb_max[0] += delta.x;
+            m->aabb_max[1] += delta.y;
+            m->aabb_max[2] += delta.z;
+            _build_scene();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+size_t Scene::get_mesh_states ( ObjectState* states, size_t cap ) {
+    size_t i = 0;
+
+    for ( ; i < _apollo_model->mesh_count && i < cap; ++i ) {
+        states[i].name = _apollo_model->meshes[i].name;
+        states[i].x = _apollo_model->meshes[i].bounding_sphere[0];
+        states[i].y = _apollo_model->meshes[i].bounding_sphere[1];
+        states[i].z = _apollo_model->meshes[i].bounding_sphere[2];
+    }
+
+    return i;
 }
 
 void Scene::clear() {

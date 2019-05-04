@@ -22,7 +22,7 @@ typedef enum {
 #define APOLLO_PATH_LEN 1024
 #define APOLLO_NAME_LEN 256
 
-typedef struct {
+typedef struct ApolloMeshFaceData {
     uint32_t*   idx_a;
     uint32_t*   idx_b;
     uint32_t*   idx_c;
@@ -37,7 +37,7 @@ typedef struct {
     float*      bitangent_z;
 } ApolloMeshFaceData;
 
-typedef struct {
+typedef struct ApolloMesh {
     ApolloMeshFaceData face_data;
     uint32_t    face_count;
     uint32_t    material_id;
@@ -47,7 +47,7 @@ typedef struct {
     char        name[APOLLO_NAME_LEN];
 } ApolloMesh;
 
-typedef struct {
+typedef struct ApolloModelVertexData {
     float* pos_x;
     float* pos_y;
     float* pos_z;
@@ -58,7 +58,7 @@ typedef struct {
     float* tex_v;
 } ApolloModelVertexData;
 
-typedef struct {
+typedef struct ApolloModel {
     ApolloModelVertexData vertex_data;
     uint32_t    vertex_count;
     uint32_t    mesh_count;
@@ -79,11 +79,12 @@ typedef enum {
     APOLLO_DIFFUSE,
     APOLLO_SPECULAR,
     APOLLO_MIRROR,
-    APOLLO_PBR
+    APOLLO_PBR,
+    APOLLO_BSDF_COUNT
 } ApolloBSDF;
 
 // Path-tracer subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
-typedef struct {
+typedef struct ApolloMaterial {
     float       ior;                    // Ni
     float       diffuse[3];             // Kd
     uint32_t    diffuse_texture;        // map_Kd
@@ -106,7 +107,7 @@ typedef struct {
 
 #define APOLLO_TEXTURE_NONE UINT32_MAX
 
-typedef struct {
+typedef struct ApolloTexture {
     char name[APOLLO_NAME_LEN];
 } ApolloTexture;
 
@@ -117,7 +118,7 @@ typedef void ( apollo_free_fun ) ( void* allocator, void* addr, size_t size );
 size_t  apollo_buffer_size ( void* buffer );
 void    apollo_buffer_free ( void* buffer );
 
-typedef struct {
+typedef struct ApolloLoadOptions {
     void* temp_allocator;
     apollo_alloc_fun* temp_alloc;
     apollo_realloc_fun* temp_realloc;
@@ -763,6 +764,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         uint32_t smoothing_group;
         uint32_t material;
         uint32_t indices_offset;
+        const char name[APOLLO_NAME_LEN];
     } ApolloOBJMesh;
     ApolloOBJMesh* meshes = NULL;
     ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
@@ -954,14 +956,17 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 x = fgetc ( file );
 
                 switch ( x ) {
-                    case ' ':
+                    case ' ': {
                         ApolloOBJMesh* m = sb_add ( meshes, 1 );
                         m->indices_offset = sb_count ( m_idx );
+                        fscanf ( file, "%s", m->name );
                         break;
-                }
+                    }
 
-                while ( fgetc ( file ) != '\n' )
-                    ;
+                    default:
+                        while ( fgetc ( file ) != '\n' )
+                            ;
+                }
 
                 break;
 
@@ -1336,6 +1341,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         model->mesh_count = sb_count ( meshes );
 
         for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
+            strcpy ( model->meshes[i].name, meshes[i].name );
             memset ( &model->meshes[i].face_data, 0, sizeof ( ApolloMeshFaceData ) );
             // Faces
             int mesh_index_base = meshes[i].indices_offset;

@@ -8,6 +8,10 @@
 // Terra
 #include <Terra.h>
 
+struct ApolloModel;
+struct ApolloMaterial;
+struct ApolloTexture;
+
 //
 // Handles loading of models and materials (using Apollo).
 // Keeps track of active scene options and exposes read/write access.
@@ -20,6 +24,11 @@
 //
 class Scene {
   public:
+    struct ObjectState {
+        const char* name;
+        float x, y, z;
+    };
+
     static TerraTonemappingOperator to_terra_tonemap ( std::string& str );
     static TerraAccelerator         to_terra_accelerator ( std::string& str );
     static TerraSamplingMethod      to_terra_sampling ( std::string& str );
@@ -67,9 +76,20 @@ class Scene {
     // Currently it stops at the first one (TODO)
     TerraCamera default_camera();
 
+    // This invalidates the current scene! Need to call construct_terra_scene() again
+    bool move_mesh ( const char* name, const TerraFloat3* new_pos );
+
+    size_t get_mesh_states ( ObjectState* states, size_t cap );
+
   private:
     bool          _set_opt_safe ( int opt, const void* data );
     TerraTexture* _allocate_texture ( const char* texture );
+    bool          _load_scene ( const char* filename );
+    bool          _build_scene();
+
+    ApolloModel* _apollo_model = NULL;
+    ApolloMaterial* _apollo_materials = NULL;
+    ApolloTexture* _apollo_textures = NULL;
 
     std::string       _name;
     TerraCamera       _default_camera;
@@ -79,4 +99,7 @@ class Scene {
 
     // Hopefully temporary
     std::vector<std::unique_ptr<TerraTexture>> _textures;
+    // Move gen (because mesh move is idx driven)
+    std::vector<uint32_t> _vert_gens;
+    uint32_t _gen = 0;
 };

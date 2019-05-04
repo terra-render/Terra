@@ -93,7 +93,7 @@ class TerraRenderer {
     bool         _opt_job_change;
     bool         _paused;
     bool         _iterative;
-    bool         _clear_framebuffer;
+    bool         _clear_framebuffer = true;
     int          _iterations;
     Event        _on_step_end;   // Also called at the end of every loop iteration
     TileEvent    _on_tile_begin;

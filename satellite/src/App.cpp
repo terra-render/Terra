@@ -43,6 +43,9 @@ using namespace std;
 #define CMD_RESIZE_NAME "resize"
 #define CMD_HIDE_NAME "hide"
 #define CMD_STATS_NAME "stats"
+#define CMD_MESH_NAME "mesh"
+#define CMD_MESH_LIST_NAME "list"
+#define CMD_MESH_MOVE_NAME "move"
 
 #define DEFAULT_UI_FONT "Inconsolata.ttf"
 
@@ -513,6 +516,44 @@ success:
 #endif
         return 0;
     };
+    auto cmd_mesh = [this] ( const CommandArgs & args ) {
+        string usage = MULTILINE ( R"(
+            list                    - List all meshes
+            move <name> <x> <y> <z> - Move mesh (position refers to mesh center)" );
+
+        if ( args.size() < 1 ) {
+            Log::console ( usage.c_str() );
+            return 1;
+        }
+
+        if ( args[0].compare ( CMD_MESH_LIST_NAME ) == 0 ) {
+            Scene::ObjectState meshes[64];
+            size_t count = _scene.get_mesh_states ( meshes, 64 );
+
+            for ( size_t i = 0; i < count; ++i ) {
+                Log::console ( "%s %f %f %f", meshes[i].name, meshes[i].x, meshes[i].y, meshes[i].z );
+            }
+        } else if ( args[0].compare ( CMD_MESH_MOVE_NAME ) == 0 ) {
+            if ( args.size() < 5 ) {
+                Log::error ( STR ( "mesh move <name> <x> <y> <z>" ) );
+                return 1;
+            }
+
+            float x = strtof ( args[2].c_str(), nullptr );
+            float y = strtof ( args[3].c_str(), nullptr );
+            float z = strtof ( args[4].c_str(), nullptr );
+            TerraFloat3 pos = terra_f3_set ( x, y, z );
+
+            if ( !_scene.move_mesh ( args[1].c_str(), &pos ) ) {
+                Log::error ( STR ( "Invalid mesh name." ) );
+                return 1;
+            }
+
+            _clear();
+        }
+
+        return 0;
+    };
     //
     _c_map[CMD_CLEAR_NAME] = cmd_clear;
     _c_map[CMD_HELP_NAME] = cmd_help;
@@ -526,6 +567,7 @@ success:
     _c_map[CMD_RESIZE_NAME] = cmd_resize;
     _c_map[CMD_HIDE_NAME] = cmd_hide;
     _c_map[CMD_STATS_NAME] = cmd_stats;
+    _c_map[CMD_MESH_NAME] = cmd_mesh;
 }
 
 void App::_boot() {
