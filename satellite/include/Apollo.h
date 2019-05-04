@@ -131,6 +131,12 @@ typedef struct {
     bool flip_z;
     bool flip_texcoord_v;
     bool flip_faces;
+    bool recompute_vertex_normals;
+    bool compute_face_normals;
+    bool remove_vertex_duplicates;
+    bool compute_tangents;
+    bool compute_bitangents;
+    bool compute_bounds;
 } ApolloLoadOptions;
 
 // The provided allocator is not required to strictly follow the alignment requirements. A malloc-based allocator is fine.
@@ -677,6 +683,10 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             }
         } else if ( strcmp ( key, "#" ) == 0 ) {
             while ( getc ( file ) != '\n' );
+        } else if ( strcmp ( key, "map_d" ) == 0 ) {
+            while ( getc ( file ) != '\n' );
+        } else if ( strcmp ( key, "map_Ka" ) == 0 ) {
+            while ( getc ( file ) != '\n' );
         } else {
             APOLLO_LOG_ERR ( "Unexpected field name %s in materials file %s\n", key, filename );
             goto error;
@@ -740,9 +750,9 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     // that means that for a model that takes up x memory, roughly 4x that memory amount is used.
     //
     // Temporary tables
-    ApolloVertexTable vtable;
-    ApolloAdjacencyTable atable;
-    ApolloIndexTable itable;
+    ApolloVertexTable vtable = {};
+    ApolloAdjacencyTable atable = {};
+    ApolloIndexTable itable = {};
     // Temporary buffers
     ApolloMaterial* materials = *_materials;
     ApolloTexture* textures = *_textures;
@@ -765,10 +775,17 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         ApolloFloat2 tex;
     } ApolloOBJVertex;
     ApolloOBJVertex* m_vert = NULL;
+
     // Prealloc memory
-    apollo_vertex_table_create ( &vtable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
-    apollo_adjacency_table_create ( &atable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
-    apollo_index_table_create ( &itable, 2 * APOLLO_PREALLOC_INDEX_COUNT );
+    if ( options->remove_vertex_duplicates ) {
+        apollo_vertex_table_create ( &vtable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
+    }
+
+    if ( options->recompute_vertex_normals ) {
+        apollo_adjacency_table_create ( &atable, 2 * APOLLO_PREALLOC_VERTEX_COUNT );
+        apollo_index_table_create ( &itable, 2 * APOLLO_PREALLOC_INDEX_COUNT );
+    }
+
     sb_prealloc ( f_pos, APOLLO_PREALLOC_VERTEX_COUNT );
     sb_prealloc ( f_tex, APOLLO_PREALLOC_VERTEX_COUNT );
     sb_prealloc ( f_norm, APOLLO_PREALLOC_VERTEX_COUNT );
@@ -784,6 +801,12 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
     while ( ( x = fgetc ( file ) ) != EOF ) {
         switch ( x ) {
+            case '\n':
+                break;
+
+            case '\b':
+                break;
+
             case '#': // Comment. Skip the line.
                 while ( fgetc ( file ) != '\n' )
                     ;
@@ -1034,15 +1057,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                                         // A new data piece has been extraced, we store it.
                                         switch ( data_piece_index ) {
                                             case 0:
-                                                pos_index = data - 1;
+                                                pos_index = data > 0 ? data - 1 : sb_count ( f_pos ) + data;
                                                 break;
 
                                             case 1:
-                                                tex_index = data - 1;
+                                                tex_index = data > 0 ? data - 1 : sb_count ( f_tex ) + data;
                                                 break;
 
                                             case 2:
-                                                norm_index = data - 1;
+                                                norm_index = data > 0 ? data - 1 : sb_count ( f_norm ) + data;
                                                 break;
                                         }
 
@@ -1068,7 +1091,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         // Finalize the vertex, testing for overlaps if the mesh is smooth and updating the first/last face vertex indices
                         bool duplicate = false;
 
-                        if ( sb_last ( meshes ).smoothing_group == 1 ) {
+                        if ( options->remove_vertex_duplicates &&  sb_last ( meshes ).smoothing_group == 1 ) {
                             ApolloVertexTableItem* lookup = apollo_vertex_table_lookup ( &vtable, &f_pos[pos_index] );
 
                             if ( lookup != NULL ) {
@@ -1084,18 +1107,23 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             vertex->tex = tex_index != -1 ? f_tex[tex_index] : ApolloFloat2{ 0, 0 };
                             vertex->norm = norm_index != -1 ? f_norm[norm_index] : ApolloFloat3{ 0, 0, 0 };
                             *index = sb_count ( m_vert ) - 1;
-                            ApolloVertexTableItem item = { vertex->pos, *index };
-                            apollo_vertex_table_insert ( &vtable, &item );
+
+                            if ( options->remove_vertex_duplicates ) {
+                                ApolloVertexTableItem item = { vertex->pos, *index };
+                                apollo_vertex_table_insert ( &vtable, &item );
+                            }
                         }
 
                         // Store the index into the adjacency table
-                        ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, *index );
+                        if ( options->recompute_vertex_normals ) {
+                            ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, *index );
 
-                        if ( adj_lookup == NULL ) {
-                            adj_lookup = apollo_adjacency_table_insert ( &atable, *index );
+                            if ( adj_lookup == NULL ) {
+                                adj_lookup = apollo_adjacency_table_insert ( &atable, *index );
+                            }
+
+                            apollo_adjacency_item_add_unique ( adj_lookup, face_count );
                         }
-
-                        apollo_adjacency_item_add_unique ( adj_lookup, face_count );
 
                         // Store the first and last vertex index for later
                         if ( first_vertex_index == -1 && face_vertex_count == 0 ) {
@@ -1132,127 +1160,147 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     // The unnnecessary scoping is just so that it is possible to call goto error.
     {
         ApolloFloat3* face_normals = NULL;
-        sb_add ( face_normals, face_count );
         ApolloFloat3* face_tangents = NULL;
-        sb_add ( face_tangents, face_count );
         ApolloFloat3* face_bitangents = NULL;
-        sb_add ( face_bitangents, face_count );
+
+        if ( options->compute_face_normals ) {
+            sb_add ( face_normals, face_count );
+        }
+
+        if ( options->compute_tangents ) {
+            sb_add ( face_tangents, face_count );
+        }
+
+        if ( options->compute_bitangents ) {
+            sb_add ( face_bitangents, face_count );
+        }
 
         // Compute face normals
-        for ( size_t i = 0; i < face_count; ++i ) {
-            ApolloFloat3 v0 = m_vert[m_idx[i * 3 + 0]].pos;
-            ApolloFloat3 v1 = m_vert[m_idx[i * 3 + 1]].pos;
-            ApolloFloat3 v2 = m_vert[m_idx[i * 3 + 2]].pos;
-            // Compute two edges of the triangle in order to be able to compute the normal as the cross prod of the edges.
-            ApolloFloat3 e01;
-            e01.x = v1.x - v0.x;
-            e01.y = v1.y - v0.y;
-            e01.z = v1.z - v0.z;
-            ApolloFloat3 e02;
-            e02.x = v2.x - v0.x;
-            e02.y = v2.y - v0.y;
-            e02.z = v2.z - v0.z;
-            // x prod
-            face_normals[i].x = e01.y * e02.z - e01.z * e02.y;
-            face_normals[i].y = e01.z * e02.x - e01.x * e02.z;
-            face_normals[i].z = e01.x * e02.y - e01.y * e02.x;
-            // normalize
-            float len = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
-            face_normals[i].x /= len;
-            face_normals[i].y /= len;
-            face_normals[i].z /= len;
+        if ( options->compute_face_normals ) {
+            for ( size_t i = 0; i < face_count; ++i ) {
+                ApolloFloat3 v0 = m_vert[m_idx[i * 3 + 0]].pos;
+                ApolloFloat3 v1 = m_vert[m_idx[i * 3 + 1]].pos;
+                ApolloFloat3 v2 = m_vert[m_idx[i * 3 + 2]].pos;
+                // Compute two edges of the triangle in order to be able to compute the normal as the cross prod of the edges.
+                ApolloFloat3 e01;
+                e01.x = v1.x - v0.x;
+                e01.y = v1.y - v0.y;
+                e01.z = v1.z - v0.z;
+                ApolloFloat3 e02;
+                e02.x = v2.x - v0.x;
+                e02.y = v2.y - v0.y;
+                e02.z = v2.z - v0.z;
+                // x prod
+                face_normals[i].x = e01.y * e02.z - e01.z * e02.y;
+                face_normals[i].y = e01.z * e02.x - e01.x * e02.z;
+                face_normals[i].z = e01.x * e02.y - e01.y * e02.x;
+                // normalize
+                float len = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
+                face_normals[i].x /= len;
+                face_normals[i].y /= len;
+                face_normals[i].z /= len;
+            }
         }
 
         // Recompute the vertex normals for smooth meshes
-        for ( size_t m = 0; m < sb_count ( meshes ); ++m ) {
-            size_t mesh_index_base = meshes[m].indices_offset;
-            size_t mesh_index_count = m < sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : sb_count ( m_idx ) - mesh_index_base;
-            size_t mesh_face_count = mesh_index_count / 3;
+        if ( options->recompute_vertex_normals ) {
+            for ( size_t m = 0; m < sb_count ( meshes ); ++m ) {
+                size_t mesh_index_base = meshes[m].indices_offset;
+                size_t mesh_index_count = m < sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : sb_count ( m_idx ) - mesh_index_base;
+                size_t mesh_face_count = mesh_index_count / 3;
 
-            if ( mesh_index_count % 3 != 0 ) {
-                APOLLO_LOG_ERR ( "Malformed .obj file @ %s", filename );
-                result = APOLLO_INVALID_FORMAT;
-                goto error;
-            }
-
-            // If the mesh isn't smooth, skip it
-            if ( meshes[m].smoothing_group == 0 ) {
-                for ( size_t i = 0; i < mesh_face_count; ++i ) {
-                    m_vert[m_idx[mesh_index_base + i * 3 + 0]].norm = face_normals[mesh_index_base / 3 + i];
-                    m_vert[m_idx[mesh_index_base + i * 3 + 1]].norm = face_normals[mesh_index_base / 3 + i];
-                    m_vert[m_idx[mesh_index_base + i * 3 + 2]].norm = face_normals[mesh_index_base / 3 + i];
+                if ( mesh_index_count % 3 != 0 ) {
+                    APOLLO_LOG_ERR ( "Malformed .obj file @ %s", filename );
+                    result = APOLLO_INVALID_FORMAT;
+                    goto error;
                 }
 
-                continue;
-            }
+                // If the mesh isn't smooth, skip it
+                if ( meshes[m].smoothing_group == 0 ) {
+                    for ( size_t i = 0; i < mesh_face_count; ++i ) {
+                        m_vert[m_idx[mesh_index_base + i * 3 + 0]].norm = face_normals[mesh_index_base / 3 + i];
+                        m_vert[m_idx[mesh_index_base + i * 3 + 1]].norm = face_normals[mesh_index_base / 3 + i];
+                        m_vert[m_idx[mesh_index_base + i * 3 + 2]].norm = face_normals[mesh_index_base / 3 + i];
+                    }
 
-            // Vertex normals
-            for ( size_t i = 0; i < mesh_index_count; ++i ) {
-                ApolloFloat3 norm_sum;
-                norm_sum.x = norm_sum.y = norm_sum.z = 0;
-                // skip the index if the corresponding vertex has already been processed
-                bool already_computed_vertex = apollo_index_table_lookup ( &itable, m_idx[mesh_index_base + i] );
-
-                if ( already_computed_vertex ) {
                     continue;
-                } else {
-                    apollo_index_table_insert ( &itable, m_idx[mesh_index_base + i] );
                 }
 
-                ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, m_idx[mesh_index_base + i] );
+                // Vertex normals
+                for ( size_t i = 0; i < mesh_index_count; ++i ) {
+                    ApolloFloat3 norm_sum;
+                    norm_sum.x = norm_sum.y = norm_sum.z = 0;
+                    // skip the index if the corresponding vertex has already been processed
+                    bool already_computed_vertex = apollo_index_table_lookup ( &itable, m_idx[mesh_index_base + i] );
 
-                for ( size_t j = 0; j < adj_lookup->count; ++j ) {
-                    uint32_t k = adj_lookup->values[j];
-                    norm_sum.x += face_normals[k].x;
-                    norm_sum.y += face_normals[k].y;
-                    norm_sum.z += face_normals[k].z;
-                }
+                    if ( already_computed_vertex ) {
+                        continue;
+                    } else {
+                        apollo_index_table_insert ( &itable, m_idx[mesh_index_base + i] );
+                    }
 
-                ApolloAdjacencyTableExtension* ext = adj_lookup->next;
+                    ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, m_idx[mesh_index_base + i] );
 
-                while ( ext != NULL ) {
-                    for ( size_t j = 0; j < ext->count; ++j ) {
-                        uint32_t k = ext->values[j];
+                    for ( size_t j = 0; j < adj_lookup->count; ++j ) {
+                        uint32_t k = adj_lookup->values[j];
                         norm_sum.x += face_normals[k].x;
                         norm_sum.y += face_normals[k].y;
                         norm_sum.z += face_normals[k].z;
                     }
 
-                    ext = ext->next;
+                    ApolloAdjacencyTableExtension* ext = adj_lookup->next;
+
+                    while ( ext != NULL ) {
+                        for ( size_t j = 0; j < ext->count; ++j ) {
+                            uint32_t k = ext->values[j];
+                            norm_sum.x += face_normals[k].x;
+                            norm_sum.y += face_normals[k].y;
+                            norm_sum.z += face_normals[k].z;
+                        }
+
+                        ext = ext->next;
+                    }
+
+                    ApolloFloat3 normal;
+                    normal.x = norm_sum.x;// / face_count;
+                    normal.y = norm_sum.y;// / face_count;
+                    normal.z = norm_sum.z;// / face_count;
+                    float len = sqrtf ( normal.x * normal.x + normal.y * normal.y + normal.z * normal.z );
+                    normal.x /= len;
+                    normal.y /= len;
+                    normal.z /= len;
+                    m_vert[m_idx[mesh_index_base + i]].norm = normal;
                 }
 
-                ApolloFloat3 normal;
-                normal.x = norm_sum.x;// / face_count;
-                normal.y = norm_sum.y;// / face_count;
-                normal.z = norm_sum.z;// / face_count;
-                float len = sqrtf ( normal.x * normal.x + normal.y * normal.y + normal.z * normal.z );
-                normal.x /= len;
-                normal.y /= len;
-                normal.z /= len;
-                m_vert[m_idx[mesh_index_base + i]].norm = normal;
+                apollo_index_table_clear ( &itable );
             }
-
-            apollo_index_table_clear ( &itable );
         }
 
-        // Compute tangents and bitangents
-        for ( size_t i = 0; i < face_count; ++i ) {
-            if ( face_normals[i].x * face_normals[i].x > face_normals[i].y * face_normals[i].y ) {
-                float f = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].z * face_normals[i].z );
-                face_tangents[i].x = face_normals[i].z * f;
-                face_tangents[i].y = 0;
-                face_tangents[i].z = -face_normals[i].x * f;
-            } else {
-                float f = sqrtf ( face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
-                face_tangents[i].x = 0;
-                face_tangents[i].y = -face_normals[i].z * f;
-                face_tangents[i].z = face_normals[i].y * f;
+        // Compute tangents
+        if ( options->compute_tangents ) {
+            for ( size_t i = 0; i < face_count; ++i ) {
+                if ( face_normals[i].x * face_normals[i].x > face_normals[i].y * face_normals[i].y ) {
+                    float f = sqrtf ( face_normals[i].x * face_normals[i].x + face_normals[i].z * face_normals[i].z );
+                    face_tangents[i].x = face_normals[i].z * f;
+                    face_tangents[i].y = 0;
+                    face_tangents[i].z = -face_normals[i].x * f;
+                } else {
+                    float f = sqrtf ( face_normals[i].y * face_normals[i].y + face_normals[i].z * face_normals[i].z );
+                    face_tangents[i].x = 0;
+                    face_tangents[i].y = -face_normals[i].z * f;
+                    face_tangents[i].z = face_normals[i].y * f;
+                }
             }
+        }
 
-            // x prod
-            face_bitangents[i].x = face_normals[i].y * face_tangents[i].z - face_normals[i].z * face_tangents[i].y;
-            face_bitangents[i].y = face_normals[i].z * face_tangents[i].x - face_normals[i].x * face_tangents[i].z;
-            face_bitangents[i].z = face_normals[i].x * face_tangents[i].y - face_normals[i].y * face_tangents[i].x;
+        // Compute bitangents
+        if ( options->compute_bitangents ) {
+            for ( size_t i = 0; i < face_count; ++i ) {
+                // x prod
+                face_bitangents[i].x = face_normals[i].y * face_tangents[i].z - face_normals[i].z * face_tangents[i].y;
+                face_bitangents[i].y = face_normals[i].z * face_tangents[i].x - face_normals[i].x * face_tangents[i].z;
+                face_bitangents[i].z = face_normals[i].x * face_tangents[i].y - face_normals[i].y * face_tangents[i].x;
+            }
         }
 
         // Update ApolloMaterials
@@ -1289,6 +1337,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         model->mesh_count = sb_count ( meshes );
 
         for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
+            memset ( &model->meshes[i].face_data, 0, sizeof ( ApolloMeshFaceData ) );
             // Faces
             int mesh_index_base = meshes[i].indices_offset;
             size_t mesh_index_count = i < sb_count ( meshes ) - 1 ? meshes[i + 1].indices_offset - mesh_index_base : sb_count ( m_idx ) - mesh_index_base;
@@ -1303,100 +1352,129 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
             model->meshes[i].face_data.idx_a = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
             model->meshes[i].face_data.idx_b = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
             model->meshes[i].face_data.idx_c = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
-            model->meshes[i].face_data.normal_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.normal_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.normal_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.tangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.tangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.tangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.bitangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.bitangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-            model->meshes[i].face_data.bitangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+
+            if ( options->compute_face_normals ) {
+                model->meshes[i].face_data.normal_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.normal_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.normal_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            }
+
+            if ( options->compute_tangents ) {
+                model->meshes[i].face_data.tangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.tangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.tangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            }
+
+            if ( options->compute_bitangents ) {
+                model->meshes[i].face_data.bitangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.bitangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.bitangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+            }
+
             model->meshes[i].face_count = mesh_face_count;
 
             for ( size_t j = 0; j < mesh_face_count; ++j ) {
                 model->meshes[i].face_data.idx_a[j] = m_idx[mesh_index_base + j * 3 + 0];
                 model->meshes[i].face_data.idx_b[j] = m_idx[mesh_index_base + j * 3 + 1];
                 model->meshes[i].face_data.idx_c[j] = m_idx[mesh_index_base + j * 3 + 2];
-                model->meshes[i].face_data.normal_x[j] = face_normals[mesh_index_base / 3 + j].x;
-                model->meshes[i].face_data.normal_y[j] = face_normals[mesh_index_base / 3 + j].y;
-                model->meshes[i].face_data.normal_z[j] = face_normals[mesh_index_base / 3 + j].z;
-                model->meshes[i].face_data.tangent_x[j] = face_tangents[mesh_index_base / 3 + j].x;
-                model->meshes[i].face_data.tangent_y[j] = face_tangents[mesh_index_base / 3 + j].y;
-                model->meshes[i].face_data.tangent_z[j] = face_tangents[mesh_index_base / 3 + j].z;
-                model->meshes[i].face_data.bitangent_x[j] = face_bitangents[mesh_index_base / 3 + j].x;
-                model->meshes[i].face_data.bitangent_y[j] = face_bitangents[mesh_index_base / 3 + j].y;
-                model->meshes[i].face_data.bitangent_z[j] = face_bitangents[mesh_index_base / 3 + j].z;
+            }
+
+            if ( options->compute_face_normals ) {
+                for ( size_t j = 0; j < mesh_face_count; ++j ) {
+                    model->meshes[i].face_data.normal_x[j] = face_normals[mesh_index_base / 3 + j].x;
+                    model->meshes[i].face_data.normal_y[j] = face_normals[mesh_index_base / 3 + j].y;
+                    model->meshes[i].face_data.normal_z[j] = face_normals[mesh_index_base / 3 + j].z;
+                }
+            }
+
+            if ( options->compute_tangents ) {
+                for ( size_t j = 0; j < mesh_face_count; ++j ) {
+                    model->meshes[i].face_data.tangent_x[j] = face_tangents[mesh_index_base / 3 + j].x;
+                    model->meshes[i].face_data.tangent_y[j] = face_tangents[mesh_index_base / 3 + j].y;
+                    model->meshes[i].face_data.tangent_z[j] = face_tangents[mesh_index_base / 3 + j].z;
+                }
+            }
+
+            if ( options->compute_bitangents ) {
+                for ( size_t j = 0; j < mesh_face_count; ++j ) {
+                    model->meshes[i].face_data.bitangent_x[j] = face_bitangents[mesh_index_base / 3 + j].x;
+                    model->meshes[i].face_data.bitangent_y[j] = face_bitangents[mesh_index_base / 3 + j].y;
+                    model->meshes[i].face_data.bitangent_z[j] = face_bitangents[mesh_index_base / 3 + j].z;
+                }
             }
 
             // Material
             model->meshes[i].material_id = meshes[i].material;
+
             // AABB
-            ApolloFloat3 min = m_vert[m_idx[mesh_index_base]].pos;
-            ApolloFloat3 max = m_vert[m_idx[mesh_index_base]].pos;
+            if ( options->compute_bounds ) {
+                ApolloFloat3 min = m_vert[m_idx[mesh_index_base]].pos;
+                ApolloFloat3 max = m_vert[m_idx[mesh_index_base]].pos;
 
-            for ( int j = 1; j < mesh_index_count; ++j ) {
-                ApolloFloat3 pos = m_vert[m_idx[mesh_index_base + j]].pos;
+                for ( int j = 1; j < mesh_index_count; ++j ) {
+                    ApolloFloat3 pos = m_vert[m_idx[mesh_index_base + j]].pos;
 
-                if ( pos.x < min.x ) {
-                    min.x = pos.x;
+                    if ( pos.x < min.x ) {
+                        min.x = pos.x;
+                    }
+
+                    if ( pos.y < min.y ) {
+                        min.y = pos.y;
+                    }
+
+                    if ( pos.z < min.z ) {
+                        min.z = pos.z;
+                    }
+
+                    if ( pos.x > max.x ) {
+                        max.x = pos.x;
+                    }
+
+                    if ( pos.y > max.y ) {
+                        max.y = pos.y;
+                    }
+
+                    if ( pos.z > max.z ) {
+                        max.z = pos.z;
+                    }
                 }
 
-                if ( pos.y < min.y ) {
-                    min.y = pos.y;
+                model->meshes[i].aabb_min[0] = min.x;
+                model->meshes[i].aabb_min[1] = min.y;
+                model->meshes[i].aabb_min[2] = min.z;
+                model->meshes[i].aabb_max[0] = max.x;
+                model->meshes[i].aabb_max[1] = max.y;
+                model->meshes[i].aabb_max[2] = max.z;
+                // Sphere
+                ApolloFloat3 center;
+                center.x = ( max.x + min.x ) / 2.f;
+                center.y = ( max.y + min.y ) / 2.f;
+                center.z = ( max.z + min.z ) / 2.f;
+                float max_dist = 0;
+
+                for ( size_t j = 1; j < mesh_index_count; ++j ) {
+                    ApolloFloat3 pos = m_vert[m_idx[mesh_index_base + j]].pos;
+                    ApolloFloat3 center_to_pos;
+                    center_to_pos.x = pos.x - center.x;
+                    center_to_pos.y = pos.y - center.y;
+                    center_to_pos.z = pos.z - center.z;
+                    float dist = sqrtf ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
+
+                    if ( dist > max_dist ) {
+                        max_dist = dist;
+                    }
                 }
 
-                if ( pos.z < min.z ) {
-                    min.z = pos.z;
-                }
-
-                if ( pos.x > max.x ) {
-                    max.x = pos.x;
-                }
-
-                if ( pos.y > max.y ) {
-                    max.y = pos.y;
-                }
-
-                if ( pos.z > max.z ) {
-                    max.z = pos.z;
-                }
+                model->meshes[i].bounding_sphere[0] = center.x;
+                model->meshes[i].bounding_sphere[1] = center.y;
+                model->meshes[i].bounding_sphere[2] = center.z;
+                model->meshes[i].bounding_sphere[3] = max_dist;
             }
-
-            model->meshes[i].aabb_min[0] = min.x;
-            model->meshes[i].aabb_min[1] = min.y;
-            model->meshes[i].aabb_min[2] = min.z;
-            model->meshes[i].aabb_max[0] = max.x;
-            model->meshes[i].aabb_max[1] = max.y;
-            model->meshes[i].aabb_max[2] = max.z;
-            // Sphere
-            ApolloFloat3 center;
-            center.x = ( max.x + min.x ) / 2.f;
-            center.y = ( max.y + min.y ) / 2.f;
-            center.z = ( max.z + min.z ) / 2.f;
-            float max_dist = 0;
-
-            for ( size_t j = 1; j < mesh_index_count; ++j ) {
-                ApolloFloat3 pos = m_vert[m_idx[mesh_index_base + j]].pos;
-                ApolloFloat3 center_to_pos;
-                center_to_pos.x = pos.x - center.x;
-                center_to_pos.y = pos.y - center.y;
-                center_to_pos.z = pos.z - center.z;
-                float dist = sqrtf ( center_to_pos.x * center_to_pos.x + center_to_pos.y * center_to_pos.y + center_to_pos.z * center_to_pos.z );
-
-                if ( dist > max_dist ) {
-                    max_dist = dist;
-                }
-            }
-
-            model->meshes[i].bounding_sphere[0] = center.x;
-            model->meshes[i].bounding_sphere[1] = center.y;
-            model->meshes[i].bounding_sphere[2] = center.z;
-            model->meshes[i].bounding_sphere[3] = max_dist;
         }
     }
+
     // AABB & Sphere
-    {
+    if ( options->compute_bounds ) {
         ApolloFloat3 min = m_vert[0].pos;
         ApolloFloat3 max = m_vert[0].pos;
 
@@ -1441,6 +1519,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         model->bounding_sphere[2] = center.z;
         model->bounding_sphere[3] = max_dist;
     }
+
     fclose ( file );
 
     for ( size_t i = 0; i < sb_count ( material_libs ); ++i ) {

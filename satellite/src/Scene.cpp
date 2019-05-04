@@ -140,14 +140,13 @@ Scene::Scene() {
 Scene::~Scene() {
 }
 
+// Just use malloc for everything
 void* apollo_alloc ( void* _, size_t size, size_t align ) {
     return malloc ( size );
 }
-
 void* apollo_realloc ( void* _, void* p, size_t old_size, size_t new_size, size_t align ) {
     return realloc ( p, new_size );
 }
-
 void apollo_free ( void* _, void* p, size_t size ) {
     free ( p );
 }
@@ -168,6 +167,15 @@ bool Scene::load ( const char* filename ) {
     ApolloTexture* textures = NULL;
     ApolloModel model;
     ApolloLoadOptions options = { 0 };
+    options.compute_tangents = true;
+    options.compute_bitangents = true;
+    options.compute_bounds = true;
+    options.compute_face_normals = true;
+    options.recompute_vertex_normals = true;
+    options.remove_vertex_duplicates = true;
+    options.flip_faces = false;
+    options.flip_texcoord_v = false;
+    options.flip_z = false;
     options.temp_alloc = &apollo_alloc;
     options.temp_realloc = &apollo_realloc;
     options.temp_free = &apollo_free;
