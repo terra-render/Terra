@@ -7,6 +7,7 @@
 
 // Satellite
 #include <Logging.hpp>
+#include <Config.hpp>
 
 // Imgui
 #include <imgui.h>
@@ -115,7 +116,7 @@ void Visualizer::init ( GFXLayer* gfx ) {
     terra_clock_init();
 }
 
-void Visualizer::create_texture ( int width, int height, int gl_format, void* data ) {
+void Visualizer::_create_texture ( int width, int height, int gl_format, void* data ) {
     glGenTextures ( 1, &_gl_texture );
     glBindTexture ( GL_TEXTURE_2D, _gl_texture );
     // When the window is resized and the old texture is still being shown, use nearest filter
@@ -127,6 +128,25 @@ void Visualizer::create_texture ( int width, int height, int gl_format, void* da
         Log::error ( STR ( "Failed to create OpenGL texture, check debug messages." ) );
     }
 }
+
+void Visualizer::_read_config() {
+    _info.sampling = Config::read_s ( Config::RENDER_SAMPLING );
+    _sampling = Config::to_terra_sampling ( _info.sampling );
+    _info.accelerator = Config::read_s ( Config::RENDER_ACCELERATOR );
+    _accelerator - Config::to_terra_accelerator ( _info.accelerator );
+    _info.spp = Config::read_i ( Config::RENDER_SAMPLES );
+    // /_info.name gets updated directly by the app load cmd
+}
+
+void Visualizer::update_config() {
+    if ( _sampling != Config::to_terra_sampling ( Config::read_s ( Config::RENDER_SAMPLING ) )
+            || _accelerator != Config::to_terra_accelerator ( Config::read_s ( Config::RENDER_ACCELERATOR ) )
+            || _info.spp != Config::read_i ( Config::RENDER_SAMPLES )
+       ) {
+        _read_config();
+    }
+}
+
 
 void Visualizer::set_texture_data ( const TextureData& texture ) {
     static_assert ( is_same<remove_pointer<decltype ( TextureData::data ) >::type, float>::value, "Code needs to be updated for non-floating point textures." );
@@ -163,7 +183,7 @@ void Visualizer::set_texture_data ( const TextureData& texture ) {
 
     // Creating OpenGL texture, which will contain the render results
     if ( create_gl_texture ) {
-        create_texture ( texture.width, texture.height, gl_format, texture.data );
+        _create_texture ( texture.width, texture.height, gl_format, texture.data );
     }
     // If the current texture is valid, just uploading the new data
     else {
@@ -226,7 +246,7 @@ void Visualizer::update_tile ( const TextureData& texture, size_t x, size_t y, s
 
     // Creating OpenGL texture, which will contain the render results
     if ( create_gl_texture ) {
-        create_texture ( texture.width, texture.height, gl_format, texture.data );
+        _create_texture ( texture.width, texture.height, gl_format, texture.data );
     }
 
     vector<float> buffer ( w * h * texture.components, 0 );

@@ -67,6 +67,7 @@ typedef struct ApolloModel {
     float       bounding_sphere[4];   // <x y z r>
     ApolloMesh* meshes;
     char        name[APOLLO_NAME_LEN];
+    char        dir[APOLLO_NAME_LEN];
 } ApolloModel;
 
 // ------------------------------------------------------------------------------------------------------
@@ -114,9 +115,6 @@ typedef struct ApolloTexture {
 typedef void* ( apollo_alloc_fun ) ( void* allocator, size_t size, size_t alignment );
 typedef void* ( apollo_realloc_fun ) ( void* allocator, void* addr, size_t old_size, size_t new_size, size_t new_alignment );
 typedef void ( apollo_free_fun ) ( void* allocator, void* addr, size_t size );
-
-size_t  apollo_buffer_size ( void* buffer );
-void    apollo_buffer_free ( void* buffer );
 
 typedef struct ApolloLoadOptions {
     void* temp_allocator;
@@ -644,9 +642,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
         } else if ( strcmp ( key, "d" ) == 0 || strcmp ( key, "Tr" ) == 0 || strcmp ( key, "Tf" ) == 0 || strcmp ( key, "Ka" ) == 0 ) {
+            // We ignore all of these, only use a subset of the material spec.
             while ( getc ( file ) != '\n' );
-
-            // ...
         } else if ( strcmp ( key, "illum" ) == 0 ) {
             if ( sb_last ( materials ).bsdf == APOLLO_PBR ) {
                 APOLLO_LOG_WARN ( "Skipping illum field; PBR BSDF has already been assumed." );
@@ -730,7 +727,13 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         ++dir_end;
     }
 
-    strncpy ( model->name, dir_end, APOLLO_NAME_LEN );
+    const char* name_end = dir_end;
+
+    while ( ++name_end != '\0' && *name_end != '.' )
+        ;
+
+    strncpy ( model->name, dir_end, name_end - dir_end );
+    model->name[name_end - dir_end] = '\0';
     // Extract mesh file dir path
     assert ( filename_len < APOLLO_PATH_LEN );
     char base_dir[APOLLO_PATH_LEN];
@@ -742,6 +745,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         strncpy ( base_dir, filename, base_dir_len );
     }
 
+    strncpy ( model->dir, base_dir, base_dir_len );
+    model->dir[base_dir_len] = '\0';
     // Allocated memory:
     //  speedup tables
     //  sparse pos/norm/tex data

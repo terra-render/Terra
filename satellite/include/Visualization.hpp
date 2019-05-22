@@ -11,6 +11,7 @@
 #include <Console.hpp>
 
 // Terra
+#include <Terra.h>
 #include <TerraProfile.h>
 
 //
@@ -57,13 +58,16 @@ class Visualizer {
     void remove_all_stats_trackers();
     void update_stats();
 
+    void update_config();
+
     void draw();
 
     Info&               info();
     std::vector<Stats>& stats();
 
   private:
-    void create_texture ( int width, int height, int gl_format, void* data );
+    void _create_texture ( int width, int height, int gl_format, void* data );
+    void _read_config();
 
     GFXLayer*    _gfx;
 
@@ -71,6 +75,9 @@ class Visualizer {
     TextureData  _texture;
     int          _gl_format;
     unsigned int _gl_texture;
+
+    TerraAccelerator _accelerator;
+    TerraSamplingMethod _sampling;
 
     bool         _hide_info;
 

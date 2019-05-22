@@ -3,9 +3,13 @@
 // C++ STL
 #include <string>
 
+// Terra
+#include <Terra.h>
+
 // Render options that can be set from the terminal through `option set <name> <value>`
-#define RENDER_OPT_WORKERS_DESC     "Number of worker threads"
-#define RENDER_OPT_WORKERS_NAME     "workers"
+#define RENDER_OPT_WORKERS_DESC "Number of worker threads"
+#define RENDER_OPT_WORKERS_NAME "workers"
+#define RENDER_OPT_WORKERS_DEFAULT ( ( int ) thread::hardware_concurrency() )
 
 #define RENDER_OPT_TILE_SIZE_DESC "Side length in pixels of a rendering job"
 #define RENDER_OPT_TILE_SIZE_NAME "tile-size"
@@ -21,13 +25,12 @@
 
 #define RENDER_OPT_GAMMA_DESC "Output display gamma for final color correction"
 #define RENDER_OPT_GAMMA_NAME "gamma"
-#define RENDER_OPT_GAMMA_DEFAULT ((float)(2.2))
+#define RENDER_OPT_GAMMA_DEFAULT 2.2f
 
 #define RENDER_OPT_EXPOSURE_DESC "Manual camera exposure"
 #define RENDER_OPT_EXPOSURE_NAME "exposure"
-#define RENDER_OPT_EXPOSURE_DEFAULT ((float)1.)
+#define RENDER_OPT_EXPOSURE_DEFAULT 1.f
 
-// See kTerraTonemappingOperator
 #define RENDER_OPT_TONEMAP_DESC "Tonemapping operator [none|linear|filmic|reinhard|uncharted]"
 #define RENDER_OPT_TONEMAP_NAME "tonemap"
 #define RENDER_OPT_TONEMAP_NONE "none"
@@ -85,6 +88,17 @@
 #define RENDER_OPT_ENVMAP_COLOR_NAME "envmap"
 #define RENDER_OPT_ENVMAP_COLOR_DEFAULT { 0.4f, 0.52f, 1.f }
 
+#define RENDER_OPT_JITTER_DESC "Subpixel jitter"
+#define RENDER_OPT_JITTER_NAME "jitter"
+#define RENDER_OPT_JITTER_DEFAULT 0.f
+
+#define RENDER_OPT_INTEGRATOR_DESC "Integrator"
+#define RENDER_OPT_INTEGRATOR_NAME "integrator"
+#define RENDER_OPT_INTEGRATOR_UNI "uni"
+#define RENDER_OPT_INTEGRATOR_UNI_DIRECT "direct"
+#define RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS "mis"
+#define RENDER_OPT_INTEGRATOR_DEFAULT RENDER_OPT_INTEGRATOR_UNI_DIRECT
+
 //
 // Config wraps any configurable bit of the app.
 // Can be safely read/written from anywhere, although writing should probably
@@ -92,22 +106,37 @@
 //
 // It loads the options with default values and also reading from a text file
 // called `satellite.config` (CONFIG_PATH) in the current directory, or parent or data/
-//
-// Options are conceptually separated in:
-//  - (CMD_)    Parses command line arguments for commands to execute at App::_boot().
-//  - (RENDER_) Handles Terra rendering options. (Although not aware of Terra types)
-//  - (K_)      Handles any other app constant.
-// It also resolves string => options mappings (console) and types.
-// There is no need for this to be dynamic, all options are know at compile time.
+// each line is parsed as <name>=<value>, lines starting with # are ignored
 //
 #define CONFIG_PATH "satellite.config"
 
 namespace Config {
+
+    TerraTonemappingOperator to_terra_tonemap ( std::string& str );
+    TerraTonemappingOperator to_terra_tonemap ( std::string&& str );
+    TerraAccelerator         to_terra_accelerator ( std::string& str );
+    TerraAccelerator         to_terra_accelerator ( std::string&& str );
+    TerraSamplingMethod      to_terra_sampling ( std::string& str );
+    TerraSamplingMethod      to_terra_sampling ( std::string&& str );
+    TerraIntegrator          to_terra_integrator ( std::string& str );
+    TerraIntegrator          to_terra_integrator ( std::string&& str );
+    const char*              from_terra_tonemap ( TerraTonemappingOperator v );
+    const char*              from_terra_accelerator ( TerraAccelerator v );
+    const char*              from_terra_sampling ( TerraSamplingMethod v );
+    const char*              from_terra_integrator ( TerraIntegrator v );
+
+    // Possible effects caused by changing a config options.
+    enum Effect {
+        EFFECT_NOOP = 0,
+        EFFECT_CLEAR = 1 << 0,
+    };
+
     enum Opts {
         OPTS_NONE = -1,
 
         JOB_N_WORKERS = 0,
         JOB_TILE_SIZE,
+
 
         RENDER_MAX_BOUNCES,
         RENDER_SAMPLES,
@@ -116,6 +145,8 @@ namespace Config {
         RENDER_TONEMAP,
         RENDER_ACCELERATOR,
         RENDER_SAMPLING,
+        RENDER_JITTER,
+        RENDER_INTEGRATOR,
         RENDER_WIDTH,
         RENDER_HEIGHT,
         RENDER_SCENE_PATH,
@@ -124,6 +155,9 @@ namespace Config {
         RENDER_CAMERA_UP,
         RENDER_CAMERA_VFOV_DEG,
         RENDER_ENVMAP_COLOR,
+
+        RENDER_BEGIN = RENDER_MAX_BOUNCES,
+        RENDER_END = RENDER_ENVMAP_COLOR,
 
         VISUALIZER_PROGRESSIVE,
 
@@ -157,7 +191,7 @@ namespace Config {
 
     int         read_i ( int opt );
     float       read_f ( int opt );
-    bool        read_f3 ( int opt, float* f3 );
+    TerraFloat3 read_f3 ( int opt );
     std::string read_s ( int opt );
 
     void write ( int opt, const std::string& val );

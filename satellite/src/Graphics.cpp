@@ -7,6 +7,7 @@
 
 // Satellite
 #include <Logging.hpp>
+#include <Config.hpp>
 
 // imgui
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
@@ -85,7 +86,7 @@ bool GFXLayer::init ( int width, int height, const char* title, const OnResizeCa
     return true;
 }
 
-void GFXLayer::force_resize ( int width, int height ) {
+void GFXLayer::_resize ( int width, int height ) {
     glfwSetWindowSize ( _window, width, height );
     _width = width;
     _height = height;
@@ -114,6 +115,15 @@ void GFXLayer::swap_buffers () {
 
 void* GFXLayer::get_window () {
     return _window;
+}
+
+void GFXLayer::update_config() {
+    int width = Config::read_i ( Config::RENDER_WIDTH );
+    int height = Config::read_i ( Config::RENDER_HEIGHT );
+
+    if ( width != _width || height != _height ) {
+        _resize ( width, height );
+    }
 }
 
 #else

@@ -8,6 +8,8 @@
 // Terra
 #include <Terra.h>
 
+#include <Config.hpp>
+
 struct ApolloModel;
 struct ApolloMaterial;
 struct ApolloTexture;
@@ -29,13 +31,6 @@ class Scene {
         float x, y, z;
     };
 
-    static TerraTonemappingOperator to_terra_tonemap ( std::string& str );
-    static TerraAccelerator         to_terra_accelerator ( std::string& str );
-    static TerraSamplingMethod      to_terra_sampling ( std::string& str );
-    static const char*              from_terra_tonemap ( TerraTonemappingOperator v );
-    static const char*              from_terra_accelerator ( TerraAccelerator v );
-    static const char*              from_terra_sampling ( TerraSamplingMethod v );
-
   public:
     Scene();
     ~Scene();
@@ -46,21 +41,8 @@ class Scene {
     // Releases all previously load()ed resources
     void clear();
 
-    // Reset options to default (either default values or loaded from config file).
-    void reset_options();
-
-    // Sets the internal scene values as default (Config::write_*)
-    // Any subsequent call to reset_options will load the last applied values.
-    // **does not** call Config::save()
-    void apply_options_to_config();
-
-    // Sets render options that will be used by Terra.
-    // opt is one of Config::RENDER_ options
-    // Checks integral => floating => string
-    bool set_opt ( int opt, const char* value );
-
-    // Dumps all the current option values in Log::info
-    void dump_opts();
+    // Call this to notify of changes to config
+    void update_config();
 
     // To be called when terra_render() is not executing
     // Returns a TerraScene that can be used for rendering
@@ -69,33 +51,34 @@ class Scene {
     // Somewhat readable scene name
     const char* name() const;
 
-    // Technically it should either be: (in this order)
-    // - default value
-    // - autoplacement
-    // - imported with scene
-    // Currently it stops at the first one (TODO)
-    TerraCamera default_camera();
+    const TerraCamera& get_camera();
 
     // This invalidates the current scene! Need to call construct_terra_scene() again
     bool move_mesh ( const char* name, const TerraFloat3* new_pos );
 
+    bool mesh_exists ( const char* name );
+
     size_t get_mesh_states ( ObjectState* states, size_t cap );
 
+    const TerraSceneOptions& get_options();
+
   private:
-    bool          _set_opt_safe ( int opt, const void* data );
     TerraTexture* _allocate_texture ( const char* texture );
     bool          _load_scene ( const char* filename );
     bool          _build_scene();
+    void          _read_config();
 
     ApolloModel* _apollo_model = NULL;
     ApolloMaterial* _apollo_materials = NULL;
     ApolloTexture* _apollo_textures = NULL;
 
     std::string       _name;
-    TerraCamera       _default_camera;
+    TerraCamera       _camera;
     HTerraScene       _scene;
     TerraSceneOptions _opts;
     bool              _first_load = true;
+
+    TerraFloat3       _envmap_color;
 
     // Hopefully temporary
     std::vector<std::unique_ptr<TerraTexture>> _textures;

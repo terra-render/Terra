@@ -23,15 +23,19 @@ class App {
     int run ();
 
   private:
+    int _boot();
     void _init_ui();
     void _init_cmd_map();
-    void _boot();
-    void _clear ();
 
-    void _opt_set ( int opt, const std::string& value );
-    void _opt_set ( int opt, int value );
-    void _opt_set ( bool clear_check, std::function<void() > setter );
-    void _on_opt_set ( int opt );
+    void _shutdown();
+
+    int _opt_set ( int opt, int value );
+    int _opt_set ( int opt, const std::string& value );
+    int _opt_set ( bool clear, std::function<int() > setter );
+
+    void _clear();
+
+    void _on_config_change ( bool clear );
 
     GFXLayer      _gfx;
     Scene         _scene;
@@ -40,7 +44,6 @@ class App {
     // Presentation
     Console     _console;
     Visualizer  _visualizer;
-    TerraCamera _render_camera;
 
     // Callbacks
     using CommandMap = std::map<std::string, CommandCallback>;

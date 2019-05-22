@@ -14,7 +14,6 @@
 // Terra
 #include <TerraProfile.h>
 #include <TerraPresets.h>
-
 namespace {
     // fnv1a
     constexpr uint64_t fnv_basis = 14695981039346656037ull;
@@ -164,14 +163,14 @@ void TerraRenderer::clear() {
     _clear_framebuffer = true;
 }
 
-bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
+bool TerraRenderer::step ( const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
     if ( !_paused ) {
         Log::error ( STR ( "Rendering is already in progress." ) );
         return false;
     }
 
     _target_scene   = scene;
-    _target_camera  = camera;
+    _target_camera  = &camera;
     _on_step_end    = on_step_end;
     _on_tile_begin  = on_tile_begin;
     _on_tile_end    = on_tile_end;
@@ -179,14 +178,14 @@ bool TerraRenderer::step ( TerraCamera* camera, HTerraScene scene, const Event& 
     return _launch ();
 }
 
-bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
+bool TerraRenderer::loop ( const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end ) {
     if ( !_paused ) {
         Log::error ( STR ( "Rendering is already in progress." ) );
         return false;
     }
 
     _target_scene   = scene;
-    _target_camera  = camera;
+    _target_camera  = &camera;
     _on_step_end    = on_step_end;
     _on_tile_begin  = on_tile_begin;
     _on_tile_end    = on_tile_end;
@@ -196,10 +195,27 @@ bool TerraRenderer::loop ( TerraCamera* camera, HTerraScene scene, const Event& 
 
 void TerraRenderer::pause() {
     if ( !_paused ) {
-        Log::verbose ( STR ( "Renderer will pause at the end of the current step" ) );
+        Log::verbose ( STR ( "Renderer will pause at the end of current step" ) );
         _paused = true;
     } else {
         Log::verbose ( STR ( "Renderer is already paused" ) );
+    }
+}
+
+void TerraRenderer::update_config() {
+    // We defer the actual update until a new rendering step is required
+    if ( _tile_size != Config::read_i ( Config::JOB_TILE_SIZE )
+            || _worker_count != Config::read_f ( Config::JOB_N_WORKERS )
+       ) {
+        // Update the job system, keep the current rendering valid
+        _opt_job_change = true;
+    }
+
+    if ( _width != Config::read_i ( Config::RENDER_WIDTH )
+            || _height != Config::read_i ( Config::RENDER_HEIGHT )
+       ) {
+        // Restart the rendering
+        _opt_render_change = true;
     }
 }
 
@@ -212,17 +228,9 @@ const TextureData& TerraRenderer::framebuffer() {
     return _framebuffer_data;
 }
 
-const TerraSceneOptions& TerraRenderer::options() const {
-    return _options;
-}
-
 bool TerraRenderer::is_framebuffer_clear() const {
     return _clear_framebuffer;
 }
-
-/*void TerraRenderer::set_dirty_config() {
-    _dirty_config = true;
-}*/
 
 int TerraRenderer::iterations() const {
     return _iterations;
@@ -382,12 +390,6 @@ bool TerraRenderer::_launch () {
         // Creating workers and jobs (required on framebuffer size change)
         _setup_threads ();
         // Update camera
-        Config::read_f3 ( Config::RENDER_CAMERA_POS, &_target_camera->position.x );
-        Config::read_f3 ( Config::RENDER_CAMERA_DIR, &_target_camera->direction.x );
-        _target_camera->direction = terra_normf3 ( &_target_camera->direction );
-        Config::read_f3 ( Config::RENDER_CAMERA_UP, &_target_camera->up.x );
-        _target_camera->up = terra_normf3 ( &_target_camera->up );
-        _target_camera->fov = Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG );
     } else if ( _opt_job_change ) {
         _setup_threads ();
     }
@@ -398,7 +400,6 @@ bool TerraRenderer::_launch () {
     _paused             = false;
     _iterations         = 0;
     _clear_framebuffer  = false;
-    _options = *terra_scene_get_options ( _target_scene );
     // Push jobs
     _push_jobs();
     return true;
@@ -406,66 +407,4 @@ bool TerraRenderer::_launch () {
 
 void TerraRenderer::_process_messages() {
     cloto_thread_process_messages ( _this_thread );
-}
-
-TerraRenderer::ConfigChangeResult TerraRenderer::on_config_change ( int opt ) {
-    switch ( opt ) {
-        case Config::RENDER_WIDTH:
-        case Config::RENDER_HEIGHT:
-        case Config::RENDER_MAX_BOUNCES:
-        case Config::RENDER_SAMPLES:
-        case Config::RENDER_GAMMA:
-        case Config::RENDER_EXPOSURE:
-        case Config::RENDER_TONEMAP:
-        case Config::RENDER_ACCELERATOR:
-        case Config::RENDER_SAMPLING:
-        case Config::RENDER_SCENE_PATH:
-        case Config::RENDER_CAMERA_POS:
-        case Config::RENDER_CAMERA_DIR:
-        case Config::RENDER_CAMERA_UP:
-        case Config::RENDER_CAMERA_VFOV_DEG:
-        case Config::RENDER_ENVMAP_COLOR:
-            _opt_render_change = true;
-            return ConfigChangeResult::CONFIG_CHANGE_CLEAR;
-
-        case Config::JOB_TILE_SIZE:
-        case Config::JOB_N_WORKERS:
-            _opt_job_change = true;
-            return ConfigChangeResult::CONFIG_CHANGE_OK;
-
-        case Config::VISUALIZER_PROGRESSIVE:
-            return ConfigChangeResult::CONFIG_CHANGE_OK;
-
-        default:
-            return ConfigChangeResult::CONFIG_CHANGE_ERROR;
-    }
-}
-
-TerraRenderer::ConfigChangeResult TerraRenderer::config_change_result ( int opt ) {
-    switch ( opt ) {
-        case Config::RENDER_MAX_BOUNCES:
-        case Config::RENDER_SAMPLES:
-        case Config::RENDER_GAMMA:
-        case Config::RENDER_EXPOSURE:
-        case Config::RENDER_TONEMAP:
-        case Config::RENDER_ACCELERATOR:
-        case Config::RENDER_SAMPLING:
-        case Config::RENDER_WIDTH:
-        case Config::RENDER_HEIGHT:
-        case Config::RENDER_SCENE_PATH:
-        case Config::RENDER_CAMERA_POS:
-        case Config::RENDER_CAMERA_DIR:
-        case Config::RENDER_CAMERA_UP:
-        case Config::RENDER_CAMERA_VFOV_DEG:
-        case Config::RENDER_ENVMAP_COLOR:
-            return ConfigChangeResult::CONFIG_CHANGE_CLEAR;
-
-        case Config::JOB_TILE_SIZE:
-        case Config::JOB_N_WORKERS:
-        case Config::VISUALIZER_PROGRESSIVE:
-            return ConfigChangeResult::CONFIG_CHANGE_OK;
-
-        default:
-            return ConfigChangeResult::CONFIG_CHANGE_ERROR;
-    }
 }

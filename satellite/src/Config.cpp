@@ -168,12 +168,17 @@ namespace Config {
         }
 
         bool next_line ( ifstream& fs, string& name, string& value ) {
-            if ( !fs.good() ) {
-                return false;
-            }
-
             string line;
-            getline ( fs, line );
+
+            // Skip blank lines and comments
+            do {
+                if ( !fs.good() ) {
+                    return false;
+                }
+
+                getline ( fs, line );
+            } while ( line == "" || line.data() [0] == '#' );
+
             const char* p = line.data();
 
             // Finding separator
@@ -223,6 +228,133 @@ namespace Config {
         }
     }
 
+    //
+    // Terra string => enum mappings
+    // they take string& since Config::read_s returns a copy
+    // -1 for invalid
+    //
+#define TRY_COMPARE_S(s, v, ret) if (strcmp((s), (v)) == 0) { return ret; }
+    TerraTonemappingOperator to_terra_tonemap ( string& str ) {
+        return to_terra_tonemap ( std::move ( str ) );
+    }
+
+    TerraTonemappingOperator to_terra_tonemap ( string&& str ) {
+        transform ( str.begin(), str.end(), str.begin(), ::tolower );
+        const char* s = str.data();
+        TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_NONE, kTerraTonemappingOperatorNone );
+        TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_LINEAR, kTerraTonemappingOperatorLinear );
+        TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_REINHARD, kTerraTonemappingOperatorReinhard );
+        TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_FILMIC, kTerraTonemappingOperatorFilmic );
+        TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_UNCHARTED2, kTerraTonemappingOperatorUncharted2 );
+        return ( TerraTonemappingOperator ) - 1;
+    }
+
+    TerraAccelerator to_terra_accelerator ( string& str ) {
+        return to_terra_accelerator ( std::move ( str ) );
+    }
+
+    TerraAccelerator to_terra_accelerator ( string&& str ) {
+        transform ( str.begin(), str.end(), str.begin(), ::tolower );
+        const char* s = str.data();
+        TRY_COMPARE_S ( s, RENDER_OPT_ACCELERATOR_BVH, kTerraAcceleratorBVH );
+        return ( TerraAccelerator ) - 1;
+    }
+
+    TerraSamplingMethod to_terra_sampling ( string& str ) {
+        return to_terra_sampling ( std::move ( str ) );
+    }
+
+    TerraSamplingMethod to_terra_sampling ( string&& str ) {
+        transform ( str.begin(), str.end(), str.begin(), ::tolower );
+        const char* s = str.data();
+        TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_RANDOM, kTerraSamplingMethodRandom );
+        TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_STRATIFIED, kTerraSamplingMethodStratified );
+        TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_HALTON, kTerraSamplingMethodHalton );
+        return ( TerraSamplingMethod ) - 1;
+    }
+
+    TerraIntegrator to_terra_integrator ( std::string& str ) {
+        return to_terra_integrator ( std::move ( str ) );
+    }
+
+    TerraIntegrator to_terra_integrator ( std::string&& str ) {
+        transform ( str.begin(), str.end(), str.begin(), ::tolower );
+        const char* s = str.data();
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI, kTerraIntegratorUni );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI_DIRECT, kTerraIntegratorUniDirect );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS, kTerraIntegratorUniDirectMis );
+        return ( TerraIntegrator ) - 1;
+    }
+
+    const char* from_terra_tonemap ( TerraTonemappingOperator v ) {
+        switch ( v ) {
+            case kTerraTonemappingOperatorNone:
+                return RENDER_OPT_TONEMAP_NONE;
+
+            case kTerraTonemappingOperatorLinear:
+                return RENDER_OPT_TONEMAP_LINEAR;
+
+            case kTerraTonemappingOperatorReinhard:
+                return RENDER_OPT_TONEMAP_REINHARD;
+
+            case kTerraTonemappingOperatorFilmic:
+                return RENDER_OPT_TONEMAP_FILMIC;
+
+            case kTerraTonemappingOperatorUncharted2:
+                return RENDER_OPT_TONEMAP_UNCHARTED2;
+        }
+
+        return nullptr;
+    }
+
+    const char* from_terra_accelerator ( TerraAccelerator v ) {
+        switch ( v ) {
+            case kTerraAcceleratorBVH:
+                return RENDER_OPT_ACCELERATOR_BVH;
+        }
+
+        return nullptr;
+    }
+
+    const char* from_terra_sampling ( TerraSamplingMethod v ) {
+        switch ( v ) {
+            case kTerraSamplingMethodRandom:
+                return RENDER_OPT_SAMPLER_RANDOM;
+
+            case kTerraSamplingMethodStratified:
+                return RENDER_OPT_SAMPLER_STRATIFIED;
+
+            case kTerraSamplingMethodHalton:
+                return RENDER_OPT_SAMPLER_HALTON;
+        }
+
+        return nullptr;
+    }
+
+    const char* from_terra_integrator ( TerraIntegrator v ) {
+        switch ( v ) {
+            case kTerraIntegratorUni:
+                return RENDER_OPT_INTEGRATOR_UNI;
+
+            case kTerraIntegratorUniDirect:
+                return RENDER_OPT_INTEGRATOR_UNI_DIRECT;
+
+            case kTerraIntegratorUniDirectMis:
+                return RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS;
+        }
+
+        return nullptr;
+    }
+
+
+    Effect query_change_effect ( int opt ) {
+        if ( opt > RENDER_BEGIN && opt < RENDER_END ) {
+            return Config::EFFECT_CLEAR;
+        }
+
+        return Config::EFFECT_NOOP;
+    }
+
     void _load ( ifstream& fs ) {
         string name, value;
 
@@ -237,18 +369,19 @@ namespace Config {
             write ( opt_idx, value );
         }
 
-        dump();
+        //dump();
     }
 
     bool init ( ) {
+        // Lock and allocate opts
         unique_lock<shared_mutex> ( opts_lock );
         opts = unique_ptr<Opt[]> ( new Opt[OPTS_COUNT] );
-        int n_threads = ( int ) thread::hardware_concurrency();
+        // Fill opts
         float campos[] = RENDER_OPT_CAMERA_POS_DEFAULT;
         float camdir[] = RENDER_OPT_CAMERA_DIR_DEFAULT;
         float camup[] = RENDER_OPT_CAMERA_UP_DEFAULT;
         float envmap[] = RENDER_OPT_ENVMAP_COLOR_DEFAULT;
-        add_opt ( JOB_N_WORKERS,            n_threads,                              RENDER_OPT_WORKERS_NAME,            RENDER_OPT_WORKERS_DESC );
+        add_opt ( JOB_N_WORKERS,            RENDER_OPT_WORKERS_DEFAULT,             RENDER_OPT_WORKERS_NAME,            RENDER_OPT_WORKERS_DESC );
         add_opt ( JOB_TILE_SIZE,            RENDER_OPT_TILE_SIZE_DEFAULT,           RENDER_OPT_TILE_SIZE_NAME,          RENDER_OPT_TILE_SIZE_DESC );
         add_opt ( RENDER_MAX_BOUNCES,       RENDER_OPT_BOUNCES_DEFAULT,             RENDER_OPT_BOUNCES_NAME,            RENDER_OPT_BOUNCES_DESC );
         add_opt ( RENDER_SAMPLES,           RENDER_OPT_SAMPLES_DEFAULT,             RENDER_OPT_SAMPLES_NAME,            RENDER_OPT_SAMPLES_DESC );
@@ -266,18 +399,12 @@ namespace Config {
         add_opt ( RENDER_CAMERA_VFOV_DEG,   RENDER_OPT_CAMERA_VFOV_DEG_DEFAULT,     RENDER_OPT_CAMERA_VFOV_DEG_NAME,    RENDER_OPT_CAMERA_VFOV_DEG_DESC );
         add_opt ( RENDER_SCENE_PATH,        RENDER_OPT_SCENE_PATH_DEFAULT,          RENDER_OPT_SCENE_PATH_NAME,         RENDER_OPT_SCENE_PATH_DESC );
         add_opt ( RENDER_ENVMAP_COLOR,      envmap,                                 RENDER_OPT_ENVMAP_COLOR_NAME,       RENDER_OPT_ENVMAP_COLOR_DESC );
-        //
-        // Configuration file
-        // each line is split at the first = into <name>=<value>
-        // ignore line with #
-        // warning are generated if no = is present
-        //
-
-        if ( !load () ) {
+        add_opt ( RENDER_JITTER,            RENDER_OPT_JITTER_DEFAULT,              RENDER_OPT_JITTER_NAME,             RENDER_OPT_JITTER_DESC );
+        add_opt ( RENDER_INTEGRATOR,        RENDER_OPT_INTEGRATOR_DEFAULT,          RENDER_OPT_INTEGRATOR_NAME,         RENDER_OPT_INTEGRATOR_DESC );
+        /*if ( !load () ) {
             Log::info ( STR ( "No configuration file loaded." ) );
             return true;
-        }
-
+        }*/
         return true;
     }
 
@@ -356,7 +483,7 @@ namespace Config {
                     break;
             }
 
-            Log::info ( FMT ( "%-30s : %s", buffer, opts[i].desc ) );
+            Log::console ( "%-30s : %s", buffer, opts[i].desc );
         }
     }
 
@@ -384,6 +511,8 @@ namespace Config {
         write_f ( RENDER_CAMERA_VFOV_DEG, RENDER_OPT_CAMERA_VFOV_DEG_DEFAULT );
         write_s ( RENDER_SCENE_PATH, RENDER_OPT_SCENE_PATH_DEFAULT );
         write_f3 ( RENDER_ENVMAP_COLOR, envmap );
+        write_f ( RENDER_JITTER, RENDER_OPT_JITTER_DEFAULT );
+        write_s ( RENDER_INTEGRATOR, RENDER_OPT_INTEGRATOR_DEFAULT );
     }
 
     bool load ( const char* path ) {
@@ -473,15 +602,14 @@ namespace Config {
         return opts[opt].v.r;
     }
 
-    bool read_f3 ( int opt, float* f3 ) {
+    TerraFloat3 read_f3 ( int opt ) {
         shared_lock<shared_mutex> ( opts_lock );
 
         if ( invalid_type ( opt, Type::Real3 ) ) {
-            return false;
+            return terra_f3_set1 ( numeric_limits<float>::quiet_NaN() );
         }
 
-        memcpy ( f3, opts[opt].v.r3, sizeof ( float ) * 3 );
-        return true;
+        return terra_f3_set ( opts[opt].v.r3[0], opts[opt].v.r3[1], opts[opt].v.r3[2] );
     }
 
     string read_s ( int opt ) {
@@ -527,7 +655,7 @@ namespace Config {
     void write_s ( int opt, const char* val ) {
         unique_lock<shared_mutex> ( opts_lock );
 
-        if ( invalid_type ( opt, Type::Real ) ) {
+        if ( invalid_type ( opt, Type::Str ) ) {
             return;
         }
 

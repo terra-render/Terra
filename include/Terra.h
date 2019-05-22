@@ -140,13 +140,19 @@ typedef enum {
     kTerraSamplingMethodHalton
 } TerraSamplingMethod;
 
+typedef enum {
+    kTerraIntegratorUni,
+    kTerraIntegratorUniDirect,
+    kTerraIntegratorUniDirectMis,
+    kTerraIntegratorDebug,
+} TerraIntegrator;
+
 typedef struct {
     TerraAttribute              environment_map;
     TerraTonemappingOperator    tonemapping_operator;
     TerraAccelerator            accelerator;
     TerraSamplingMethod         sampling_method;
-
-    bool    direct_sampling;
+    TerraIntegrator             integrator;
 
     float   subpixel_jitter;
     size_t  samples_per_pixel;

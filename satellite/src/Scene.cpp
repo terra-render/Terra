@@ -20,13 +20,6 @@
 using namespace std;
 
 namespace {
-    constexpr float       CAMERA_FOV = 45.f;
-    constexpr TerraFloat3 CAMERA_POS = { 0.f, 0.9f, 2.3f };
-    constexpr TerraFloat3 CAMERA_DIR = { 0.f, 0.f, 1.f };
-    constexpr TerraFloat3 CAMERA_UP  = { 0.f, 1.f, 0.f };
-
-    constexpr TerraFloat3 ENVMAP_COLOR = { 0.4f, 0.52f, 1.f };
-
     // Making life easier, more readability, less errors (hpf)
 #define READ_ATTR(attr, apollo_attr, textures )\
     {\
@@ -54,92 +47,13 @@ namespace {
     }
 }
 
-//
-// Terra string => enum mappings
-// they take string& since Config::read_s returns a copy
-// -1 for invalid
-//
-#define TRY_COMPARE_S(s, v, ret) if (strcmp((s), (v)) == 0) { return ret; }
-TerraTonemappingOperator Scene::to_terra_tonemap ( string& str ) {
-    transform ( str.begin(), str.end(), str.begin(), ::tolower );
-    const char* s = str.data();
-    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_NONE, kTerraTonemappingOperatorNone );
-    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_LINEAR, kTerraTonemappingOperatorLinear );
-    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_REINHARD, kTerraTonemappingOperatorReinhard );
-    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_FILMIC, kTerraTonemappingOperatorFilmic );
-    TRY_COMPARE_S ( s, RENDER_OPT_TONEMAP_UNCHARTED2, kTerraTonemappingOperatorUncharted2 );
-    return ( TerraTonemappingOperator ) - 1;
-}
-
-TerraAccelerator Scene::to_terra_accelerator ( string& str ) {
-    transform ( str.begin(), str.end(), str.begin(), ::tolower );
-    const char* s = str.data();
-    TRY_COMPARE_S ( s, "bvh", kTerraAcceleratorBVH );
-    return ( TerraAccelerator ) - 1;
-}
-
-TerraSamplingMethod Scene::to_terra_sampling ( string& str ) {
-    transform ( str.begin(), str.end(), str.begin(), ::tolower );
-    const char* s = str.data();
-    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_RANDOM, kTerraSamplingMethodRandom );
-    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_STRATIFIED, kTerraSamplingMethodStratified );
-    TRY_COMPARE_S ( s, RENDER_OPT_SAMPLER_HALTON, kTerraSamplingMethodHalton );
-    return ( TerraSamplingMethod ) - 1;
-}
-
-const char* Scene::from_terra_tonemap ( TerraTonemappingOperator v ) {
-    const char* names[] = {
-        "none",
-        "linear",
-        "reinhard",
-        "filmic",
-        "uncharted2"
-    };
-    int idx = ( int ) v - ( int ) kTerraTonemappingOperatorNone;
-
-    if ( idx >= 0 && idx < 5 ) {
-        return names[idx];
-    }
-
-    return nullptr;
-}
-
-const char* Scene::from_terra_accelerator ( TerraAccelerator v ) {
-    const char* names[] = {
-        "bvh",
-        "kdtree"
-    };
-    int idx = ( int ) v - ( int ) kTerraAcceleratorBVH;
-
-    if ( idx >= 0 && idx < 2 ) {
-        return names[idx];
-    }
-
-    return nullptr;
-}
-
-const char* Scene::from_terra_sampling ( TerraSamplingMethod v ) {
-    const char* names[] = {
-        "random",
-        "stratified",
-        "halton"
-    };
-    int idx = ( int ) v - ( int ) kTerraSamplingMethodRandom;
-
-    if ( idx >= 0 && idx < 3 ) {
-        return names[idx];
-    }
-
-    return nullptr;
-}
-
 Scene::Scene() {
     memset ( &_scene, 0, sizeof ( HTerraScene ) );
 }
 
 Scene::~Scene() {
 }
-
+#include <Windows.h>
 // Just use malloc for everything
 void* apollo_alloc ( void* _, size_t size, size_t align ) {
     return malloc ( size );
@@ -176,9 +90,12 @@ bool Scene::_load_scene ( const char* filename ) {
     options.prealloc_index_count = 1 << 18;
     options.prealloc_mesh_count = 16;
     Log::info ( FMT ( "Importing model file %s", filename ) );
+    char dir[256];
+    GetCurrentDirectory ( 256, dir );
+    Log::info ( FMT ( "Working dir: %s", dir ) );
 
     if ( apollo_import_model_obj ( filename, _apollo_model, &_apollo_materials, &_apollo_textures, &options ) != APOLLO_SUCCESS ) {
-        Log::error ( "Failed to import %s", filename );
+        Log::error ( FMT ( "Failed to import %s", filename ) );
         return false;
     }
 
@@ -189,16 +106,26 @@ bool Scene::_load_scene ( const char* filename ) {
         bsdf_count[_apollo_materials[i].bsdf] += 1;
     }
 
+    _name = std::string ( _apollo_model->name );
     Log::info ( FMT ( "Finished importing %s.", filename ) );
     Log::info ( FMT ( "Meshes(%d) [ pbr(%d) diffuse(%d) specular(%d) mirror(%d) ], textures(%d)",
                       _apollo_model->mesh_count, bsdf_count[APOLLO_PBR], bsdf_count[APOLLO_DIFFUSE], bsdf_count[APOLLO_SPECULAR], bsdf_count[APOLLO_MIRROR], _textures.size() ) );
+    // Try loading a config
+    std::string config_path ( _apollo_model->dir );
+    config_path += _apollo_model->name;
+    config_path += ".config";
+
+    if ( Config::load ( config_path.c_str() ) ) {
+        Log::info ( FMT ( "%s config loaded.", _apollo_model->name ) );
+    }
+
     return true;
 }
 
 bool Scene::_build_scene() {
-    // TODO move this into Scene constructor?
     if ( _first_load ) {
-        reset_options();
+        _first_load = false;
+        _read_config();
     }
 
     clear(); // release current scene
@@ -315,6 +242,18 @@ bool Scene::load ( const char* filename ) {
     return true;
 }
 
+bool Scene::mesh_exists ( const char* name ) {
+    for ( size_t i = 0; i < _apollo_model->mesh_count; ++i ) {
+        ApolloMesh* m = &_apollo_model->meshes[i];
+
+        if ( strcmp ( name, m->name ) == 0 ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool Scene::move_mesh ( const char* name, const TerraFloat3* pos ) {
     ++_gen;
 
@@ -389,13 +328,15 @@ void Scene::clear() {
     memset ( &_scene, 0, sizeof ( HTerraScene ) );
 }
 
-void Scene::reset_options() {
+void Scene::_read_config() {
     string tonemap_str     = Config::read_s ( Config::RENDER_TONEMAP );
     string accelerator_str = Config::read_s ( Config::RENDER_ACCELERATOR );
     string sampling_str    = Config::read_s ( Config::RENDER_SAMPLING );
-    TerraTonemappingOperator tonemap = Scene::to_terra_tonemap ( tonemap_str );
-    TerraAccelerator accelerator     = Scene::to_terra_accelerator ( accelerator_str );
-    TerraSamplingMethod sampling     = Scene::to_terra_sampling ( sampling_str );
+    string integrator_str = Config::read_s ( Config::RENDER_INTEGRATOR );
+    TerraTonemappingOperator tonemap = Config::to_terra_tonemap ( tonemap_str );
+    TerraAccelerator accelerator     = Config::to_terra_accelerator ( accelerator_str );
+    TerraSamplingMethod sampling     = Config::to_terra_sampling ( sampling_str );
+    TerraIntegrator integrator       = Config::to_terra_integrator ( integrator_str );
 
     if ( tonemap == -1 ) {
         Log::error ( FMT ( "Invalid configuration RENDER_TONEMAP value %s. Defaulting to none.", tonemap_str.c_str() ) );
@@ -412,10 +353,16 @@ void Scene::reset_options() {
         sampling = kTerraSamplingMethodRandom;
     }
 
+    if ( integrator == -1 ) {
+        Log::error ( FMT ( "Invalid configuration RENDER_INTEGRATOR value %s. Defaulting to unidirectional.", integrator_str.c_str() ) );
+        integrator = kTerraIntegratorUni;
+    }
+
     int bounces = Config::read_i ( Config::RENDER_MAX_BOUNCES );
     int samples = Config::read_i ( Config::RENDER_SAMPLES );
     float exposure = Config::read_f ( Config::RENDER_EXPOSURE );
     float gamma = Config::read_f ( Config::RENDER_GAMMA );
+    float jitter = Config::read_f ( Config::RENDER_JITTER );
 
     if ( bounces < 0 ) {
         Log::error ( FMT ( "Invalid configuration RENDER_MAX_BOUNCES (%d < 0). Defaulting to 64.", bounces ) );
@@ -437,68 +384,47 @@ void Scene::reset_options() {
         gamma = 2.2f;
     }
 
+    if ( jitter < 0 ) {
+        Log::error ( FMT ( "Invalid configuration RENDER_JITTER (%f < 0) Defaulting to 0.", jitter ) );
+        jitter = 0;
+    }
+
     _opts.bounces              = bounces;
     _opts.samples_per_pixel    = samples;
-    _opts.subpixel_jitter      = 0.f; // Please remove this option and implement proper antialiasing
+    _opts.subpixel_jitter      = jitter;
     _opts.tonemapping_operator = tonemap;
     _opts.manual_exposure      = exposure;
     _opts.gamma                = gamma;
     _opts.accelerator          = accelerator;
-    _opts.direct_sampling      = false;
     _opts.strata               = 4;
     _opts.sampling_method      = sampling;
-    terra_attribute_init_constant ( &_opts.environment_map, &ENVMAP_COLOR );
-    _default_camera.fov       = CAMERA_FOV;
-    _default_camera.position  = CAMERA_POS;
-    _default_camera.direction = CAMERA_DIR;
-    _default_camera.up        = CAMERA_UP;
+    _opts.integrator           = integrator;
+    _envmap_color     = Config::read_f3 ( Config::RENDER_ENVMAP_COLOR );
+    terra_attribute_init_constant ( &_opts.environment_map, &_envmap_color );
+    _camera.fov       = Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG );
+    _camera.position  = Config::read_f3 ( Config::RENDER_CAMERA_POS );
+    _camera.direction = Config::read_f3 ( Config::RENDER_CAMERA_DIR );
+    _camera.up        = Config::read_f3 ( Config::RENDER_CAMERA_UP );
 }
 
-void Scene::apply_options_to_config() {
-    Config::write_i ( Config::RENDER_MAX_BOUNCES, _opts.bounces );
-    Config::write_i ( Config::RENDER_SAMPLES, _opts.samples_per_pixel );
-    Config::write_s ( Config::RENDER_TONEMAP, from_terra_tonemap ( _opts.tonemapping_operator ) );
-    Config::write_f ( Config::RENDER_EXPOSURE, _opts.manual_exposure );
-    Config::write_f ( Config::RENDER_GAMMA, _opts.gamma );
-    Config::write_s ( Config::RENDER_ACCELERATOR, from_terra_accelerator ( _opts.accelerator ) );
-    Config::write_s ( Config::RENDER_SAMPLING, from_terra_sampling ( _opts.sampling_method ) );
-}
-
-bool Scene::set_opt ( int opt, const char* value ) {
-    Config::Type type = Config::type ( opt );
-
-    if ( type == Config::Type::Int ) {
-        int i;
-
-        if ( Config::parse_i ( value, i ) ) {
-            return _set_opt_safe ( opt, &i );
-        } else {
-            Log::error ( FMT ( "Value %s cannot be converted to int for option %d", value, opt ) );
-        }
-    } else if ( type == Config::Type::Real ) {
-        float f;
-
-        if ( Config::parse_f ( value, f ) ) {
-            return _set_opt_safe ( opt, &f );
-        } else {
-            Log::error ( FMT ( "Value %s cannot be converted to int for option %d", value, opt ) );
-        }
-    } else if ( type == Config::Type::Str ) {
-        return _set_opt_safe ( opt, value );
+void Scene::update_config() {
+    if ( _opts.bounces != Config::read_i ( Config::RENDER_MAX_BOUNCES )
+            || _opts.samples_per_pixel != Config::read_i ( Config::RENDER_SAMPLES )
+            || _opts.gamma != Config::read_f ( Config::RENDER_GAMMA )
+            || _opts.manual_exposure != Config::read_f ( Config::RENDER_EXPOSURE )
+            || _opts.subpixel_jitter != Config::read_f ( Config::RENDER_JITTER )
+            || _opts.tonemapping_operator != Config::to_terra_tonemap ( Config::read_s ( Config::RENDER_TONEMAP ) )
+            || _opts.accelerator != Config::to_terra_accelerator ( Config::read_s ( Config::RENDER_ACCELERATOR ) )
+            || _opts.sampling_method != Config::to_terra_sampling ( Config::read_s ( Config::RENDER_SAMPLING ) )
+            || _opts.integrator != Config::to_terra_integrator ( Config::read_s ( Config::RENDER_INTEGRATOR ) )
+            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_ENVMAP_COLOR ), &_envmap_color )
+            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_POS ), &_camera.position )
+            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_DIR ), &_camera.direction )
+            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_UP ), &_camera.up )
+            || _camera.fov != Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG )
+       ) {
+        _read_config();
     }
-
-    return false;
-}
-
-void Scene::dump_opts() {
-    Log::info ( FMT ( "Samples per pixel = %d (", _opts.samples_per_pixel ) );
-    Log::info ( FMT ( "Accelerator       = %s", Scene::from_terra_accelerator ( _opts.accelerator ) ) );
-    Log::info ( FMT ( "Sampling          = %s", Scene::from_terra_sampling ( _opts.sampling_method ) ) );
-    Log::info ( FMT ( "Bounces           = %d", _opts.bounces ) );
-    Log::info ( FMT ( "Subpixel jitter   = %f", _opts.subpixel_jitter ) );
-    Log::info ( FMT ( "Screen gamma      = %f", _opts.gamma ) );
-    Log::info ( FMT ( "Exposure          = %f", _opts.manual_exposure ) );
-    Log::info ( FMT ( "Tonemap           = %s", Scene::from_terra_tonemap ( _opts.tonemapping_operator ) ) );
 }
 
 HTerraScene Scene::construct_terra_scene() {
@@ -508,81 +434,16 @@ HTerraScene Scene::construct_terra_scene() {
     return _scene;
 }
 
+const TerraCamera& Scene::get_camera() {
+    return _camera;
+}
+
+const TerraSceneOptions& Scene::get_options() {
+    return _opts;
+}
+
 const char* Scene::name() const {
     return _name.c_str();
-}
-
-TerraCamera Scene::default_camera() {
-    return _default_camera;
-}
-
-bool Scene::_set_opt_safe ( int opt, const void* data ) {
-    assert ( data != nullptr );
-
-    switch ( opt ) {
-        case Config::RENDER_MAX_BOUNCES:
-            _opts.bounces = * ( int* ) data;
-            break;
-
-        case Config::RENDER_SAMPLES:
-            _opts.samples_per_pixel = * ( int* ) data;
-            break;
-
-        case Config::RENDER_GAMMA:
-            _opts.gamma = * ( float* ) data;
-            break;
-
-        case Config::RENDER_EXPOSURE:
-            _opts.manual_exposure = * ( float* ) data;
-            break;
-
-        case Config::RENDER_TONEMAP: {
-            string s = ( const char* ) data;
-            TerraTonemappingOperator v = to_terra_tonemap ( s );
-
-            if ( v != -1 ) {
-                _opts.tonemapping_operator = v;
-            } else {
-                Log::error ( FMT ( "Invalid value %s for RENDER_TONEMAP", data ) );
-                return false;
-            }
-
-            break;
-        }
-
-        case Config::RENDER_ACCELERATOR: {
-            string s = ( const char* ) data;
-            TerraAccelerator v = to_terra_accelerator ( s );
-
-            if ( v != -1 ) {
-                _opts.accelerator = v;
-            } else {
-                Log::error ( FMT ( "Invalid value %s for RENDER_ACCELERATOR", data ) );
-                return false;
-            }
-
-            break;
-        }
-
-        case Config::RENDER_SAMPLING: {
-            string s = ( const char* ) data;
-            TerraSamplingMethod v = to_terra_sampling ( s );
-
-            if ( v != -1 ) {
-                _opts.sampling_method = v;
-            } else {
-                Log::error ( FMT ( "Invalid value %s for RENDER_SAMPLING", data ) );
-                return false;
-            }
-
-            break;
-        }
-
-        default:
-            return false;
-    }
-
-    return true;
 }
 
 TerraTexture* Scene::_allocate_texture ( const char* path ) {
