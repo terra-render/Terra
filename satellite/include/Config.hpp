@@ -92,7 +92,7 @@
 #define RENDER_OPT_JITTER_NAME "jitter"
 #define RENDER_OPT_JITTER_DEFAULT 0.f
 
-#define RENDER_OPT_INTEGRATOR_DESC "Integrator"
+#define RENDER_OPT_INTEGRATOR_DESC "Integrator [uni|direct|mis]"
 #define RENDER_OPT_INTEGRATOR_NAME "integrator"
 #define RENDER_OPT_INTEGRATOR_UNI "uni"
 #define RENDER_OPT_INTEGRATOR_UNI_DIRECT "direct"

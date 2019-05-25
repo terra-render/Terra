@@ -42,9 +42,6 @@
     <ClInclude Include="..\include\Console.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Events.hpp">
-      <Filter>Satellite Headers</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\Graphics.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>

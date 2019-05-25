@@ -166,7 +166,6 @@
     <ClInclude Include="..\include\Cloto.h" />
     <ClInclude Include="..\include\Config.hpp" />
     <ClInclude Include="..\include\Console.hpp" />
-    <ClInclude Include="..\include\Events.hpp" />
     <ClInclude Include="..\include\Graphics.hpp" />
     <ClInclude Include="..\include\Logging.hpp" />
     <ClInclude Include="..\include\Renderer.hpp" />

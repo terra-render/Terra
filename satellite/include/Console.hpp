@@ -46,7 +46,7 @@ class Console {
     // Internal state
     char                     _input_buf[256];
     std::vector<char*>       _items;
-    bool                     _scroll_to_bottom;
+    bool                     _items_update;
     std::vector<std::string> _history;
     std::string              _cur_cmd;
     int                      _history_pos;    // -1: new line, 0..History.Size-1 browsing history.

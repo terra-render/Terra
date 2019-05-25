@@ -2,7 +2,6 @@
 
 // Satellite
 #include <Visualization.hpp>
-#include <Events.hpp>
 #include <Renderer.hpp>
 #include <Graphics.hpp>
 #include <Scene.hpp>

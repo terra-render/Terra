@@ -49,7 +49,7 @@ void Console::vprintf ( const char* fmt, va_list args ) {
     vsnprintf ( buf, buf_len, fmt, args );
     buf[buf_len] = '\0';
     _items.push_back ( strdup ( buf ) );
-    _scroll_to_bottom = true;
+    _items_update = true;
 }
 
 void Console::clear() {
@@ -58,7 +58,7 @@ void Console::clear() {
     }
 
     _items.clear();
-    _scroll_to_bottom = true;
+    _items_update = true;
 }
 
 int Console::_text_edit_callback_stub ( ImGuiTextEditCallbackData* data ) {
@@ -129,11 +129,11 @@ void Console::draw ( int wnd_width, int wnd_height ) {
     PopTextWrapPos();
     TextUnformatted ( "" );
 
-    if ( _scroll_to_bottom ) {
+    if ( _items_update && GetScrollY() == GetScrollMaxY() ) {
         SetScrollHere();
     }
 
-    _scroll_to_bottom = false;
+    _items_update = false;
     PopStyleVar();
     EndChild();
     Separator();
