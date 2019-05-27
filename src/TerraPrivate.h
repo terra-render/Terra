@@ -110,7 +110,7 @@ typedef struct TerraRay {
     TerraFloat3 inv_direction;
 } TerraRay;
 
-// Ray state information
+// Ray state information // TODO ??? remove/integrate with TerraRay/hide this
 typedef struct TerraRayState {
     // ray/triangle intersection transformations (depends on algorithm, see TerraGeometry.c)
     TerraFloat4 ray_transform_f4;

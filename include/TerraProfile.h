@@ -20,6 +20,14 @@ double              terra_clock_to_us ( TerraClockTime delta_time );
 
 #ifdef TERRA_PROFILE
 
+// TODO
+// an alternative to the current api could be something like
+// TERRA_PROFILE_BEGIN
+// ...
+// TERRA_PROFILE_END(session, target)
+// where begin and end mark an actual c scope and a bunch of private hidden variables inside that scope are used
+// to store terra_clock (and maybe session and target too? so that they can be declared at the beginning) 
+
 // Max sessions/targets supported
 #define TERRA_PROFILE_SESSIONS             8
 #define TERRA_PROFILE_TARGETS_PER_SESSION  128

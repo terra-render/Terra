@@ -1017,10 +1017,25 @@ float terra_luminance ( const TerraFloat3* color ) {
     return ( float ) ( 0.212671 * color->x + 0.715160 * color->y + 0.072169 * color->z );
 }
 
+typedef struct {
+    TerraScene*         scene;
+    TerraRay            ray;
+    TerraObject*        hit_object;
+    TerraShadingSurface hit_surface;
+    TerraFloat3         hit_point;
+    TerraFloat3         hit_wo;
+    TerraFloat3         throughput;
+    size_t              bounce;
+} TerraTraceContext;
+
 TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
     TerraFloat3 Lo = terra_f3_zero;
-    TerraFloat3 throughput = terra_f3_one;
-    TerraRay ray = *primary_ray;
+    TerraTraceContext context;
+    context.scene = scene;
+    context.ray = *primary_ray;
+    context.throughput = terra_f3_one;
+    context->bounce = 0;
+
     TerraRayState ray_state;
 
     for ( size_t bounce = 0; bounce <= scene->opts.bounces; ++bounce ) {
@@ -1068,6 +1083,8 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
         f_brdf = terra_mulf3 ( &f_brdf, 1.f / pdf );
         throughput = terra_pointf3 ( &throughput, &f_brdf );
         // Russian roulette
+        // TODO use luminance
+        // TODO make this an option
         {
             float p = terra_maxf ( throughput.x, terra_maxf ( throughput.y, throughput.z ) );
             float e3 = 0.5f;
