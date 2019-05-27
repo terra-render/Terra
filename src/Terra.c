@@ -1235,7 +1235,6 @@ TerraFloat3 terra_integrate_uni_direct_mis (
 
     TerraFloat3 Ld = terra_f3_zero;
     TerraLight* light;
-    int light_missed = 0;
     // Sample light
     {
         // Sample and compute pdf
