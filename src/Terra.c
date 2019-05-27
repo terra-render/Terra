@@ -70,6 +70,8 @@ TerraFloat3 terra_integrate_uni_direct_mis (
     size_t bounce
 );
 
+TerraFloat3 terra_integrate_debug_depth (const TerraRay* ray, size_t bounce);
+
 float           terra_luminance ( const TerraFloat3* color );
 
 TerraRay        terra_ray ( const TerraFloat3* origin, const TerraFloat3* direction );
@@ -1361,6 +1363,18 @@ exit:
     Ld = terra_pointf3 ( &Ld, throughput );
     Lo = terra_addf3 ( &Lo, &Ld );
     return Lo;
+}
+
+TerraFloat3 terra_integrate_debug_depth (const TerraRay* ray, const TerraFloat3* ray_point, size_t bounce) {
+    if ( bounce != 0 ) {
+        return terra_f3_zero;
+    }
+
+    const float far_plane = 1000.f;
+
+    float depth = terra_distf3 ( &ray->origin, &ray_point ) / far_plane;
+
+    return terra_f3_set1(depth);
 }
 
 //--------------------------------------------------------------------------------------------------
