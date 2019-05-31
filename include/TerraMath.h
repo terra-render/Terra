@@ -45,8 +45,6 @@ typedef struct TerraFloat4x4 {
 #define terra_f2_zero terra_f2_set(0.f, 0.f)
 #define terra_f3_zero terra_f3_set1(0.f)
 #define terra_f3_one terra_f3_set1(1.f)
-#define terra_f3_max terra_f3_set1(FLT_MAX)
-#define terra_f3_min terra_f3_set1(-FLT_MAX)
 
 //--------------------------------------------------------------------------------------------------
 // Math functions
