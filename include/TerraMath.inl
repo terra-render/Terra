@@ -210,7 +210,6 @@ inline float terra_xorf ( float _lhs, float _rhs ) {
 inline void terra_swap_xorf ( float* _a, float* _b ) {
     uint32_t* a = ( uint32_t* ) _a;
     uint32_t* b = ( uint32_t* ) _b;
-
     *a ^= *b;
     *b ^= *a;
     *a ^= *b;
@@ -262,4 +261,15 @@ inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* normal ) {
     xform.rows[2] = terra_f4_set ( normalt.z, normal->z, normalbt.z, 0.f );
     xform.rows[3] = terra_f4_set ( 0.f, 0.f, 0.f, 1.f );
     return xform;
+}
+
+inline TerraFloat3 terra_clampf3 ( const TerraFloat3* f3, const TerraFloat3* min, const TerraFloat3* max ) {
+    TerraFloat3 res;
+    res.x = f3->x > min->x ? f3->x : min->x;
+    res.y = f3->y > min->y ? f3->y : min->y;
+    res.z = f3->z > min->z ? f3->z : min->z;
+    res.x = res.x < max->x ? res.x : max->x;
+    res.y = res.y < max->y ? res.y : max->y;
+    res.z = res.z < max->z ? res.z : max->z;
+    return res;
 }

@@ -45,12 +45,21 @@ typedef struct {
 #define TERRA_SCENE_PREALLOCATED_LIGHTS     16
 
 TerraFloat3     terra_trace     ( TerraScene* scene, const TerraRay* primary_ray );
-TerraFloat3     terra_integrate ( const TerraScene* scene, const TerraObject* object, const TerraShadingSurface* surface, const TerraFloat3* point, const TerraFloat3* wo,
-                                  const TerraFloat3* throughput, size_t bounce );
 
-TerraFloat3 terra_integrate_uni ( const TerraFloat3* throughput, const TerraShadingSurface* surface );
+TerraFloat3     terra_integrate (
+    const TerraScene* scene,
+    const TerraRay* ray,
+    const TerraObject* object,
+    const TerraShadingSurface* surface,
+    const TerraFloat3* point,
+    const TerraFloat3* wo,
+    const TerraFloat3* throughput,
+    size_t bounce
+);
 
-TerraFloat3 terra_integrate_uni_direct (
+TerraFloat3 terra_integrate_simple ( const TerraFloat3* throughput, const TerraShadingSurface* surface );
+
+TerraFloat3 terra_integrate_direct (
     const TerraScene* scene,
     const TerraObject* ray_object,
     const TerraShadingSurface* ray_surface,
@@ -60,7 +69,7 @@ TerraFloat3 terra_integrate_uni_direct (
     size_t bounce
 );
 
-TerraFloat3 terra_integrate_uni_direct_mis (
+TerraFloat3 terra_integrate_direct_mis (
     const TerraScene* scene,
     const TerraObject* ray_object,
     const TerraShadingSurface* ray_surface,
@@ -69,6 +78,10 @@ TerraFloat3 terra_integrate_uni_direct_mis (
     const TerraFloat3* throughput,
     size_t bounce
 );
+
+TerraFloat3 terra_integrate_debug_mono ( size_t bounce );
+TerraFloat3 terra_integrate_debug_depth ( const TerraRay* ray, const TerraFloat3* point, size_t bounce );
+TerraFloat3 terra_integrate_debug_normals ( const TerraShadingSurface* surface, size_t bounce );
 
 float           terra_luminance ( const TerraFloat3* color );
 
@@ -390,7 +403,7 @@ TerraFloat3 terra_texture_sample ( void* _texture, const void* _uv, const void* 
     TerraFloat2* uv = ( TerraFloat2* ) _uv;
     size_t ix = ( size_t ) uv->x;
     size_t iy = ( size_t ) uv->y;
-    TerraFloat3 sample;
+    TerraFloat3 sample = terra_f3_zero;
 
     switch ( texture->filter ) {
         case kTerraFilterPoint:
@@ -464,7 +477,7 @@ void terra_texture_finalize ( void* _texture ) {
     TerraTexture* texture = ( TerraTexture* ) _texture;
 
     if ( texture != NULL && texture->pixels != NULL ) {
-        size_t size = texture->width * texture->height * texture->components;
+        size_t size = ( size_t ) texture->width * texture->height * texture->components;
 
         if ( texture->depth == 1 ) {
             for ( size_t i = 0; i < size; ++i ) {
@@ -573,7 +586,6 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
 
                 // Approx
                 case kTerraTonemappingOperatorFilmic: {
-                    // TODO: Better code pls
                     TerraFloat3 x;
                     x.x = terra_maxf ( 0.f, color.x - 0.004f );
                     x.y = terra_maxf ( 0.f, color.y - 0.004f );
@@ -874,20 +886,20 @@ bool terra_ray_triangle_intersection ( const TerraRay* ray, const TerraTriangle*
     s = terra_subf3 ( &ray->origin, &tri->a );
     u = f * ( terra_dotf3 ( &s, &h ) );
 
-    if ( u < 0.0 || u > 1.0 ) {
+    if ( u < 0.f || u > 1.f ) {
         return false;
     }
 
     q = terra_crossf3 ( &s, &e1 );
     v = f * terra_dotf3 ( &ray->direction, &q );
 
-    if ( v < 0.0 || u + v > 1.0 ) {
+    if ( v < 0.f || u + v > 1.f ) {
         return false;
     }
 
     t = f * terra_dotf3 ( &e2, &q );
 
-    if ( t > 0.00001 ) {
+    if ( t > 0.00001f ) {
         TerraFloat3 offset = terra_mulf3 ( &ray->direction, t );
         *point_out = terra_addf3 ( &offset, &ray->origin );
 
@@ -1049,7 +1061,7 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
 
 #endif
         // Integrate radiance
-        TerraFloat3 integrator_result = terra_integrate ( scene, object, &surface, &intersection_point, &wo, &throughput, bounce );
+        TerraFloat3 integrator_result = terra_integrate ( scene, &ray, object, &surface, &intersection_point, &wo, &throughput, bounce );
         Lo = terra_addf3 ( &Lo, &integrator_result );
         // Continue path
         TerraFloat3 wi;
@@ -1086,6 +1098,7 @@ TerraFloat3 terra_trace ( TerraScene* scene, const TerraRay* primary_ray ) {
 
 TerraFloat3 terra_integrate (
     const TerraScene* scene,
+    const TerraRay* ray,
     const TerraObject* object,
     const TerraShadingSurface* surface,
     const TerraFloat3* point,
@@ -1094,14 +1107,25 @@ TerraFloat3 terra_integrate (
     size_t bounce
 ) {
     switch ( scene->opts.integrator ) {
-        case kTerraIntegratorUni:
-            return terra_integrate_uni ( throughput, surface );
+        case kTerraIntegratorSimple:
+            return terra_integrate_simple ( throughput, surface );
 
-        case kTerraIntegratorUniDirect:
-            return terra_integrate_uni_direct ( scene, object, surface, point, wo, throughput, bounce );
+        case kTerraIntegratorDirect:
+            return terra_integrate_direct ( scene, object, surface, point, wo, throughput, bounce );
 
-        case kTerraIntegratorUniDirectMis:
-            return terra_integrate_uni_direct_mis ( scene, object, surface, point, wo, throughput, bounce );
+        case kTerraIntegratorDirectMis:
+            return terra_integrate_direct_mis ( scene, object, surface, point, wo, throughput, bounce );
+
+        // Debug integrators
+
+        case kTerraIntegratorDebugMono:
+            return terra_integrate_debug_mono ( bounce );
+
+        case kTerraIntegratorDebugDepth:
+            return terra_integrate_debug_depth ( ray, point, bounce );
+
+        case kTerraIntegratorDebugNormals:
+            return terra_integrate_debug_normals ( surface, bounce );
 
         default:
             assert ( false );
@@ -1110,13 +1134,72 @@ TerraFloat3 terra_integrate (
     return terra_f3_zero;
 }
 
-TerraFloat3 terra_integrate_uni ( const TerraFloat3* throughput, const TerraShadingSurface* surface ) {
+TerraFloat3 terra_integrate_debug_mono ( size_t bounce ) {
+    if ( bounce != 0 ) {
+        return terra_f3_zero;
+    }
+
+    return terra_f3_one;
+}
+
+TerraFloat3 terra_integrate_debug_depth ( const TerraRay* ray, const TerraFloat3* point, size_t bounce ) {
+    if ( bounce != 0 ) {
+        return terra_f3_zero;
+    }
+
+    // Linear depth
+    const float far_plane = 500.f;
+    float d = terra_distf3 ( &ray->origin, point ) / far_plane;
+    return terra_f3_set1 ( d );
+}
+
+TerraFloat3 terra_integrate_debug_normals ( const TerraShadingSurface* surface, size_t bounce ) {
+    // Colors. px is positive x, ny is negative y, ...
+    const TerraFloat3 px = terra_f3_set ( 1, 0, 0 );    // red
+    const TerraFloat3 py = terra_f3_set ( 0, 1, 0 );    // green
+    const TerraFloat3 pz = terra_f3_set ( 0, 0, 1 );    // blue
+    const TerraFloat3 nx = terra_f3_set ( 0, 1, 1 );    // magenta
+    const TerraFloat3 ny = terra_f3_set ( 1, 0, 1 );    // yellow
+    const TerraFloat3 nz = terra_f3_set ( 1, 1, 0 );    // cyan
+
+    // Skip if not primary ray
+    if ( bounce != 0 ) {
+        return terra_f3_zero;
+    }
+
+    // Isolate positive and negative normal components
+    TerraFloat3 zero = terra_f3_zero;
+    TerraFloat3 min = terra_f3_set1 ( -1 );
+    TerraFloat3 max = terra_f3_set1 ( +1 );
+    TerraFloat3 p = terra_clampf3 ( &surface->normal, &zero, &max );
+    TerraFloat3 n = terra_clampf3 ( &surface->normal, &min, &zero );
+    n = terra_mulf3 ( &n, -1.f );
+    //
+    TerraFloat3 cpx = terra_mulf3 ( &px, p.x );
+    TerraFloat3 cpy = terra_mulf3 ( &py, p.y );
+    TerraFloat3 cpz = terra_mulf3 ( &pz, p.z );
+    TerraFloat3 cnx = terra_mulf3 ( &nx, n.x );
+    TerraFloat3 cny = terra_mulf3 ( &ny, n.y );
+    TerraFloat3 cnz = terra_mulf3 ( &nz, n.z );
+    //
+    TerraFloat3 color = terra_f3_zero;
+    color = terra_addf3 ( &color, &cpx );
+    color = terra_addf3 ( &color, &cpy );
+    color = terra_addf3 ( &color, &cpz );
+    color = terra_addf3 ( &color, &cnx );
+    color = terra_addf3 ( &color, &cny );
+    color = terra_addf3 ( &color, &cnz );
+    //
+    return color;
+}
+
+TerraFloat3 terra_integrate_simple ( const TerraFloat3* throughput, const TerraShadingSurface* surface ) {
     TerraFloat3 emissive = surface->emissive;
     emissive = terra_pointf3 ( throughput, &emissive );
     return emissive;
 }
 
-TerraFloat3 terra_integrate_uni_direct (
+TerraFloat3 terra_integrate_direct (
     const TerraScene* scene,
     const TerraObject* ray_object,
     const TerraShadingSurface* ray_surface,
@@ -1196,7 +1279,7 @@ exit:
     return Lo;
 }
 
-TerraFloat3 terra_integrate_uni_direct_mis (
+TerraFloat3 terra_integrate_direct_mis (
     const TerraScene* scene,
     const TerraObject* ray_object,
     const TerraShadingSurface* ray_surface,
@@ -1392,7 +1475,7 @@ TerraLight* terra_scene_pick_light ( TerraScene* scene, float e, float* pdf ) {
     return &scene->lights[light_idx];*/
     // TODO
     assert ( scene->lights_pop > 0 );
-    size_t i = ( size_t ) ( e * scene->lights_pop );
+    size_t i = ( size_t ) ( e * ( double ) scene->lights_pop );
     *pdf = 1.f / scene->lights_pop;
     return &scene->lights[i];
 }

@@ -141,10 +141,12 @@ typedef enum {
 } TerraSamplingMethod;
 
 typedef enum {
-    kTerraIntegratorUni,
-    kTerraIntegratorUniDirect,
-    kTerraIntegratorUniDirectMis,
-    kTerraIntegratorDebug,
+    kTerraIntegratorSimple,
+    kTerraIntegratorDirect,
+    kTerraIntegratorDirectMis,
+    kTerraIntegratorDebugMono,
+    kTerraIntegratorDebugDepth,
+    kTerraIntegratorDebugNormals,
 } TerraIntegrator;
 
 typedef struct {

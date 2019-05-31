@@ -354,8 +354,8 @@ void Scene::_read_config() {
     }
 
     if ( integrator == -1 ) {
-        Log::error ( FMT ( "Invalid configuration RENDER_INTEGRATOR value %s. Defaulting to unidirectional.", integrator_str.c_str() ) );
-        integrator = kTerraIntegratorUni;
+        Log::error ( FMT ( "Invalid configuration RENDER_INTEGRATOR value %s. Defaulting to simple.", integrator_str.c_str() ) );
+        integrator = kTerraIntegratorSimple;
     }
 
     int bounces = Config::read_i ( Config::RENDER_MAX_BOUNCES );

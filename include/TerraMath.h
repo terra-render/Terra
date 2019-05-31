@@ -45,6 +45,8 @@ typedef struct TerraFloat4x4 {
 #define terra_f2_zero terra_f2_set(0.f, 0.f)
 #define terra_f3_zero terra_f3_set1(0.f)
 #define terra_f3_one terra_f3_set1(1.f)
+#define terra_f3_max terra_f3_set1(FLT_MAX)
+#define terra_f3_min terra_f3_set1(-FLT_MAX)
 
 //--------------------------------------------------------------------------------------------------
 // Math functions
@@ -89,6 +91,7 @@ static inline bool          terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float         terra_lerp ( float a, float b, float t );
 static inline TerraFloat3   terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, float t );
 static inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* y_axis );
+static inline TerraFloat3   terra_clampf3 ( const TerraFloat3* f3, const TerraFloat3* min, const TerraFloat3* max );
 
 #include "TerraMath.inl"
 

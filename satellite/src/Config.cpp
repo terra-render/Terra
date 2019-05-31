@@ -280,9 +280,12 @@ namespace Config {
     TerraIntegrator to_terra_integrator ( std::string&& str ) {
         transform ( str.begin(), str.end(), str.begin(), ::tolower );
         const char* s = str.data();
-        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI, kTerraIntegratorUni );
-        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI_DIRECT, kTerraIntegratorUniDirect );
-        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS, kTerraIntegratorUniDirectMis );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_BASIC, kTerraIntegratorSimple );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DIRECT, kTerraIntegratorDirect );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DIRECT_MIS, kTerraIntegratorDirectMis );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_MONO, kTerraIntegratorDebugMono );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_DEPTH, kTerraIntegratorDebugDepth );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_NORMALS, kTerraIntegratorDebugNormals );
         return ( TerraIntegrator ) - 1;
     }
 
@@ -333,14 +336,23 @@ namespace Config {
 
     const char* from_terra_integrator ( TerraIntegrator v ) {
         switch ( v ) {
-            case kTerraIntegratorUni:
-                return RENDER_OPT_INTEGRATOR_UNI;
+            case kTerraIntegratorSimple:
+                return RENDER_OPT_INTEGRATOR_BASIC;
 
-            case kTerraIntegratorUniDirect:
-                return RENDER_OPT_INTEGRATOR_UNI_DIRECT;
+            case kTerraIntegratorDirect:
+                return RENDER_OPT_INTEGRATOR_DIRECT;
 
-            case kTerraIntegratorUniDirectMis:
-                return RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS;
+            case kTerraIntegratorDirectMis:
+                return RENDER_OPT_INTEGRATOR_DIRECT_MIS;
+
+            case kTerraIntegratorDebugMono:
+                return RENDER_OPT_INTEGRATOR_DEBUG_MONO;
+
+            case kTerraIntegratorDebugDepth:
+                return RENDER_OPT_INTEGRATOR_DEBUG_DEPTH;
+
+            case kTerraIntegratorDebugNormals:
+                return RENDER_OPT_INTEGRATOR_DEBUG_NORMALS;
         }
 
         return nullptr;

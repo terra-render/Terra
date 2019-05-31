@@ -395,7 +395,7 @@ void App::_init_cmd_map() {
             // Validate opt
             int opt = Config::find ( args[1].c_str() );
 
-            if ( !opt ) {
+            if ( opt == -1 ) {
                 Log::error ( FMT ( "Failed to find any matching option for %s", args[1].c_str() ) );
                 return 1;
             }
@@ -630,22 +630,22 @@ int App::_opt_set ( bool clear, std::function< int() > setter ) {
 
         _on_config_change ( clear );
     } else {
-        Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
-        _console.set_one_time_callback ( [this, setter, clear] ( const CommandArgs & args ) -> int {
-            if ( args.size() == 0 ) {
-                return 1;
-            }
-            if ( args[0].compare ( "y" ) == 0 ) {
-                bool result = setter();
+        //Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
+        //_console.set_one_time_callback ( [this, setter, clear] ( const CommandArgs & args ) -> int {
+        //  if ( args.size() == 0 ) {
+        //      return 1;
+        //  }
+        //if ( args[0].compare ( "y" ) == 0 ) {
+        bool result = setter();
 
-                if ( result != 0 ) {
-                    return result;
-                }
+        if ( result != 0 ) {
+            return result;
+        }
 
-                _on_config_change ( clear );
-            }
-            return 0;
-        } );
+        _on_config_change ( clear );
+        //}
+        return 0;
+        //} );
     }
 
     return 0;

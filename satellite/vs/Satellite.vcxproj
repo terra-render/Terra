@@ -141,7 +141,6 @@
     <ClInclude Include="..\..\include\TerraMath.h" />
     <ClInclude Include="..\..\include\TerraPresets.h" />
     <ClInclude Include="..\..\include\TerraProfile.h" />
-    <ClInclude Include="..\..\include\terra_next.h" />
     <ClInclude Include="..\..\src\TerraBVH.h" />
     <ClInclude Include="..\..\src\TerraPrivate.h" />
     <ClInclude Include="..\dependencies\gl3w\include\GL\gl3w.h" />

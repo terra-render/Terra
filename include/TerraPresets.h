@@ -27,7 +27,7 @@ void terra_bsdf_phong_init ( TerraBSDF* bsdf );
 #define TERRA_PROFILE_TARGET_TRACE      1
 #define TERRA_PROFILE_TARGET_RAY        2
 #define TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION 3
-#define TERRA_PROFILE_TARGET_COUNT 4
+#define TERRA_PROFILE_TARGET_COUNT      4
 
 #ifdef __cplusplus
 }

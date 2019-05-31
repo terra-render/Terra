@@ -92,12 +92,15 @@
 #define RENDER_OPT_JITTER_NAME "jitter"
 #define RENDER_OPT_JITTER_DEFAULT 0.f
 
-#define RENDER_OPT_INTEGRATOR_DESC "Integrator [uni|direct|mis]"
+#define RENDER_OPT_INTEGRATOR_DESC "Integrator [simple|direct|mis|debug-mono|debug-depth|debug-normals]"
 #define RENDER_OPT_INTEGRATOR_NAME "integrator"
-#define RENDER_OPT_INTEGRATOR_UNI "uni"
-#define RENDER_OPT_INTEGRATOR_UNI_DIRECT "direct"
-#define RENDER_OPT_INTEGRATOR_UNI_DIRECT_MIS "mis"
-#define RENDER_OPT_INTEGRATOR_DEFAULT RENDER_OPT_INTEGRATOR_UNI_DIRECT
+#define RENDER_OPT_INTEGRATOR_BASIC "simple"
+#define RENDER_OPT_INTEGRATOR_DIRECT "direct"
+#define RENDER_OPT_INTEGRATOR_DIRECT_MIS "mis"
+#define RENDER_OPT_INTEGRATOR_DEBUG_MONO "debug-mono"
+#define RENDER_OPT_INTEGRATOR_DEBUG_DEPTH "debug-depth"
+#define RENDER_OPT_INTEGRATOR_DEBUG_NORMALS "debug-normals"
+#define RENDER_OPT_INTEGRATOR_DEFAULT RENDER_OPT_INTEGRATOR_DIRECT
 
 //
 // Config wraps any configurable bit of the app.
