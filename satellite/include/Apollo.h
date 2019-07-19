@@ -140,6 +140,8 @@ typedef struct ApolloLoadOptions {
 // The provided allocator is not required to strictly follow the alignment requirements. A malloc-based allocator is fine.
 // If it does, the output data arrays are guaranteed to be 16-byte aligned.
 ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** materials, ApolloTexture** textures, const ApolloLoadOptions* options );
+// Very basic model dump to obj. .obj and .mtl files named after the model name will be created in base_path folder.
+void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* materials, const ApolloTexture* textures, const char* base_path );
 
 #ifdef __cplusplus
 }
@@ -646,6 +648,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             while ( getc ( file ) != '\n' );
         } else if ( strcmp ( key, "illum" ) == 0 ) {
             if ( sb_last ( materials ).bsdf == APOLLO_PBR ) {
+                // TODO remove this and ignore pbr params
                 APOLLO_LOG_WARN ( "Skipping illum field; PBR BSDF has already been assumed." );
 
                 while ( getc ( file ) != '\n' );
@@ -653,30 +656,22 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 continue;
             }
 
-            int illum;
+            char illum[256];
 
-            if ( fscanf ( file, "%d", &illum ) != 1 ) {
+            if ( fscanf ( file, "%s", &illum ) != 1 ) {
                 APOLLO_LOG_ERR ( "Failed to read illum on file %s", filename );
                 goto error;
             }
 
             // Apollo pbr is handled at the end
-            switch ( illum ) {
-                case 1:
-                    sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
-                    break;
-
-                case 2:
-                    sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
-                    break;
-
-                case 5:
-                    sb_last ( materials ).bsdf = APOLLO_MIRROR;
-                    break;
-
-                default:
-                    sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
-                    break;
+            if ( strcmp ( illum, "diffuse" ) == 0 ) {
+                sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
+            } else if ( strcmp ( illum, "specular" ) == 0 ) {
+                sb_last ( materials ).bsdf = APOLLO_SPECULAR;
+            } else if ( strcmp ( illum, "mirror" ) == 0 ) {
+                sb_last ( materials ).bsdf = APOLLO_MIRROR;
+            } else if ( strcmp ( illum, "pbr" ) == 0 ) {
+                sb_last ( materials ).bsdf = APOLLO_PBR;
             }
         } else if ( strcmp ( key, "#" ) == 0 ) {
             while ( getc ( file ) != '\n' );
@@ -1572,6 +1567,140 @@ error:
     apollo_temp_free_f = NULL;
     return result;
 #undef APOLLO_FINAL_MALLOC
+}
+
+void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* materials, const ApolloTexture* textures, const char* base_path ) {
+    char obj_filename[256];
+    char mat_filename[256];
+    strcpy ( obj_filename, base_path );
+    strcpy ( obj_filename + strlen ( obj_filename ), model->name );
+    strcpy ( obj_filename + strlen ( obj_filename ), ".obj" );
+    strcpy ( mat_filename, base_path );
+    strcpy ( mat_filename + strlen ( mat_filename ), model->name );
+    strcpy ( mat_filename + strlen ( mat_filename ), ".mtl" );
+    FILE* obj_file = fopen ( obj_filename, "w" );
+    fprintf ( obj_file, "#%s\n", model->name );
+    fprintf ( obj_file, "#pos\n" );
+
+    for ( size_t i = 0; i < model->vertex_count; ++i ) {
+        fprintf ( obj_file, "v %f %f %f\n", model->vertex_data.pos_x[i], model->vertex_data.pos_y[i], model->vertex_data.pos_z[i] );
+    }
+
+    fprintf ( obj_file, "\n" );
+    fprintf ( obj_file, "#tex\n" );
+
+    for ( size_t i = 0; i < model->vertex_count; ++i ) {
+        fprintf ( obj_file, "vt %f %f\n", model->vertex_data.tex_u[i], model->vertex_data.tex_v[i] );
+    }
+
+    fprintf ( obj_file, "\n" );
+    fprintf ( obj_file, "#norm\n" );
+
+    for ( size_t i = 0; i < model->vertex_count; ++i ) {
+        fprintf ( obj_file, "vn %f %f %f\n", model->vertex_data.norm_x[i], model->vertex_data.norm_y[i], model->vertex_data.norm_z[i] );
+    }
+
+    fprintf ( obj_file, "\n" );
+
+    for ( size_t i = 0; i < model->mesh_count; ++i ) {
+        ApolloMesh* mesh = &model->meshes[i];
+        ApolloMeshFaceData* data = &mesh->face_data;
+        fprintf ( obj_file, "#o %s\n", mesh->name );
+
+        for ( size_t j = 0; j < mesh->face_count; ++j ) {
+            uint32_t a = data->idx_a[j] + 1;
+            uint32_t b = data->idx_b[j] + 1;
+            uint32_t c = data->idx_c[j] + 1;
+            fprintf ( obj_file, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, a, a, b, b, b, c, c, c );
+        }
+
+        fprintf ( obj_file, "\n" );
+    }
+
+    fclose ( obj_file );
+    // Material
+    /*
+    typedef struct ApolloMaterial {
+    float       ior;                    // Ni
+    float       diffuse[3];             // Kd
+    uint32_t    diffuse_texture;        // map_Kd
+    float       specular[3];            // Ks
+    uint32_t    specular_texture;       // map_Ks
+    float       specular_exp;           // Ns [0 1000]
+    uint32_t    specular_exp_texture;   // map_Ns
+    uint32_t    bump_texture;           // bump
+    uint32_t    displacement_texture;   // disp
+    float       roughness;              // Pr
+    uint32_t    roughness_texture;      // map_Pr
+    float       metallic;               // Pm
+    uint32_t    metallic_texture;       // map_Pm
+    float       emissive[3];            // Ke
+    uint32_t    emissive_texture;       // map_Ke
+    uint32_t    normal_texture;         // norm
+    ApolloBSDF  bsdf;
+    char        name[APOLLO_NAME_LEN];
+    } ApolloMaterial;
+    */
+    FILE* mat_file = fopen ( mat_filename, "w" );
+
+    for ( size_t i = 0; i < model->mesh_count; ++i ) {
+        ApolloMesh* mesh = &model->meshes[i];
+        const ApolloMaterial* mat = &materials[mesh->material_id];
+        fprintf ( mat_file, "newmtl %s\n", mat->name );
+        const char*  illum[] = { "diffuse", "specular", "mirror", "pbr" };
+        fprintf ( mat_file, "illum %s\n", illum[mat->bsdf] );
+        fprintf ( mat_file, "Ni %f\n", mat->ior );
+
+        if ( mat->diffuse_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Kd %s\n", textures[mat->diffuse_texture].name );
+        } else {
+            fprintf ( mat_file, "Kd %f %f %f\n", mat->diffuse[0], mat->diffuse[1], mat->diffuse[2] );
+        }
+
+        if ( mat->specular_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Ks %s\n", textures[mat->specular_texture].name );
+        } else {
+            fprintf ( mat_file, "Ks %f %f %f\n", mat->specular[0], mat->specular[1], mat->specular[2] );
+        }
+
+        if ( mat->specular_exp_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Ns %s\n", textures[mat->specular_exp_texture].name );
+        } else {
+            fprintf ( mat_file, "Ns %f\n", mat->specular_exp );
+        }
+
+        if ( mat->bump_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "bump %s\n", textures[mat->bump_texture].name );
+        }
+
+        if ( mat->displacement_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "disp %s\n", textures[mat->displacement_texture].name );
+        }
+
+        if ( mat->roughness_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Pr %s\n", textures[mat->roughness_texture].name );
+        } else {
+            fprintf ( mat_file, "Pr %f\n", mat->roughness );
+        }
+
+        if ( mat->metallic_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Pm %s\n", textures[mat->metallic_texture].name );
+        } else {
+            fprintf ( mat_file, "Pm %f\n", mat->metallic );
+        }
+
+        if ( mat->emissive_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Ke %s\n", textures[mat->emissive_texture].name );
+        } else {
+            fprintf ( mat_file, "Ke %f %f %f\n", mat->emissive[0], mat->emissive[1], mat->emissive[2] );
+        }
+
+        if ( mat->normal_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "norm %s\n", textures[mat->normal_texture].name );
+        }
+
+        fprintf ( mat_file, "\n" );
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
