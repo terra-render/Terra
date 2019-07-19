@@ -572,14 +572,12 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             }
 
             sb_last ( materials ).roughness = Pr;
-            sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Pr" ) == 0 ) {
             uint32_t idx;
             ApolloResult result = apollo_read_texture ( file, textures, &idx );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).roughness_texture = idx;
-                sb_last ( materials ).bsdf = APOLLO_PBR;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading roughness texture on file %s\n", idx, filename );
                 goto error;
@@ -595,14 +593,12 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             }
 
             sb_last ( materials ).metallic = Pm;
-            sb_last ( materials ).bsdf = APOLLO_PBR;
         } else if ( strcmp ( key, "map_Pm" ) == 0 ) {
             uint32_t idx;
             ApolloResult result = apollo_read_texture ( file, textures, &idx );
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).metallic_texture = idx;
-                sb_last ( materials ).bsdf = APOLLO_PBR;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading metallic texture on file %s\n", idx, filename );
                 goto error;
@@ -638,7 +634,6 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
 
             if ( result == APOLLO_SUCCESS ) {
                 sb_last ( materials ).normal_texture = idx;
-                sb_last ( materials ).bsdf = APOLLO_PBR;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading normal texture on file %s\n", idx, filename );
                 goto error;
@@ -647,15 +642,6 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             // We ignore all of these, only use a subset of the material spec.
             while ( getc ( file ) != '\n' );
         } else if ( strcmp ( key, "illum" ) == 0 ) {
-            if ( sb_last ( materials ).bsdf == APOLLO_PBR ) {
-                // TODO remove this and ignore pbr params
-                APOLLO_LOG_WARN ( "Skipping illum field; PBR BSDF has already been assumed." );
-
-                while ( getc ( file ) != '\n' );
-
-                continue;
-            }
-
             char illum[256];
 
             if ( fscanf ( file, "%s", &illum ) != 1 ) {
