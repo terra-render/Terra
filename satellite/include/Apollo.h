@@ -917,7 +917,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                     if ( idx != -1 ) {
                         sb_push ( used_materials, material_libs[i].materials[idx] );
-                        const int n_meshes = sb_count(meshes);
                         sb_last ( meshes ).material = sb_count ( materials ) + sb_count ( used_materials ) - 1;
                         break;
                     }
