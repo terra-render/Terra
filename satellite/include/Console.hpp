@@ -3,6 +3,7 @@
 // stdlib
 #include <vector>
 #include <functional>
+#include <string>
 
 // Satellite
 #include <Graphics.hpp>
