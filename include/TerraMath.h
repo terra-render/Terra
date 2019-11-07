@@ -15,7 +15,7 @@
 //--------------------------------------------------------------------------------------------------
 #define terra_PI 3.1416926535f
 #define terra_PI2 6.283185307f
-#define terra_Epsilon FLT_EPSILON
+#define terra_Epsilon 1e-4
 
 typedef struct TerraInt4 {
     int x, y, z, w;

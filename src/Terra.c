@@ -1167,6 +1167,7 @@ TerraFloat3 terra_integrate_debug_normals ( const TerraShadingSurface* surface, 
         return terra_f3_zero;
     }
 
+
     // Isolate positive and negative normal components
     TerraFloat3 zero = terra_f3_zero;
     TerraFloat3 min = terra_f3_set1 ( -1 );
@@ -1653,7 +1654,7 @@ TerraFloat3 terra_camera_perspective_sample ( const TerraCamera* camera, const T
     // [-aspect_ratio * tan(fov/2):aspect_ratio * tan(fov/2)]
     float frustum_x = screen_x * aspect_ratio * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
     float frustum_y = screen_y * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
-    TerraFloat3 dir = terra_f3_set ( frustum_x, frustum_y, -1.f );
+    TerraFloat3 dir = terra_f3_set ( frustum_x, frustum_y, 1.f );
     dir = terra_normf3 ( &dir );
     return dir;
 }

@@ -19,6 +19,7 @@ typedef enum {
     APOLLO_ERROR
 } ApolloResult;
 
+#define APOLLO_INVALID_ID ((uint32_t)-1)
 #define APOLLO_PATH_LEN 1024
 #define APOLLO_NAME_LEN 256
 
@@ -176,6 +177,14 @@ extern "C" {
 
 #ifndef APOLLO_LOG_WARN
 #define APOLLO_LOG_WARN(fmt, ...) fprintf(stdout, "Apollo Warning: " fmt "\n", __VA_ARGS__)
+#endif
+
+#ifndef APOLLO_LOG_VERBOSE
+#ifdef APOLLO_LOG_VERBOSE_ENABLE
+#define APOLLO_LOG_VERBOSE(fmt, ...) fprintf(stdout, "Apollo Verbose: " fmt "\n", __VA_ARGS__)
+#else
+#define APOLLO_LOG_VERBOSE(...)
+#endif
 #endif
 
 #include <stdio.h>
@@ -658,6 +667,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 sb_last ( materials ).bsdf = APOLLO_MIRROR;
             } else if ( strcmp ( illum, "pbr" ) == 0 ) {
                 sb_last ( materials ).bsdf = APOLLO_PBR;
+            } else {
+                APOLLO_LOG_ERR("Unsupported material bsdf %s", illum);
             }
         } else if ( strcmp ( key, "#" ) == 0 ) {
             while ( getc ( file ) != '\n' );
@@ -678,6 +689,46 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
 error:
     free ( materials );
     return APOLLO_ERROR;
+}
+
+//--------------------------------------------------------------------------------------------------
+typedef struct {
+    uint32_t smoothing_group;
+    uint32_t material;
+    uint32_t indices_offset;
+    char name[APOLLO_NAME_LEN];
+} ApolloOBJMesh;
+
+void apollo_initialize_mesh_obj(ApolloOBJMesh* mesh) {
+    mesh->smoothing_group = APOLLO_INVALID_ID;
+    mesh->material = APOLLO_INVALID_ID;
+    mesh->indices_offset = 0;
+    mesh->name[0] = '\0';
+}
+
+// Removes submeshes which have invalid materials
+//--------------------------------------------------------------------------------------------------
+void apollo_filter_invalid_models(ApolloModel* model) {
+    APOLLO_LOG_VERBOSE("mesh_count %d\n", model->mesh_count);
+
+    uint32_t i;
+    for (i = 0; i < model->mesh_count;) {
+        ApolloMesh* mesh = model->meshes + i;
+        APOLLO_LOG_VERBOSE("mesh %d", i);
+        APOLLO_LOG_VERBOSE("name %s", mesh->name);
+        APOLLO_LOG_VERBOSE("material_id %u", mesh->material_id);
+        APOLLO_LOG_VERBOSE("face_count %u", mesh->face_count);
+
+        if (mesh->material_id == APOLLO_INVALID_ID) {
+            // This could also be caused by an invalid command order, but we probably don't want to remove invalid meshes
+            assert(mesh->face_count == 0);
+            memcpy(mesh, model->meshes + (model->mesh_count - 1), sizeof(ApolloMesh));
+            --model->mesh_count;
+            APOLLO_LOG_VERBOSE("Removing mesh");
+        } else {
+            ++i;
+        }
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -746,12 +797,6 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     ApolloFloat2* f_tex = NULL;
     ApolloFloat3* f_norm = NULL;
     size_t face_count = 0;
-    typedef struct {
-        uint32_t smoothing_group;
-        uint32_t material;
-        uint32_t indices_offset;
-        const char name[APOLLO_NAME_LEN];
-    } ApolloOBJMesh;
     ApolloOBJMesh* meshes = NULL;
     ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
     ApolloMaterialLib* material_libs = NULL;
@@ -846,9 +891,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 // Chech for mesh
                 if ( sb_count ( meshes ) == 0 ) {
                     ApolloOBJMesh* m = sb_add ( meshes, 1 );
+                    apollo_initialize_mesh_obj(m);
                     m->indices_offset = sb_count ( m_idx );
-                    m->material = -1;
-                    m->smoothing_group = -1;
                 }
 
                 // Lookup the user materials
@@ -936,14 +980,16 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
             }
             break;
 
-            case 'o':
+            // Treating groups and objects the same way
             case 'g':
+            case 'o':
                 // New mesh
                 x = fgetc ( file );
 
                 switch ( x ) {
                     case ' ': {
                         ApolloOBJMesh* m = sb_add ( meshes, 1 );
+                        apollo_initialize_mesh_obj(m);
                         m->indices_offset = sb_count ( m_idx );
                         fscanf ( file, "%s", m->name );
                         break;
@@ -962,9 +1008,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                 if ( sb_count ( meshes ) == 0 ) {
                     ApolloOBJMesh* m = sb_add ( meshes, 1 );
+                    apollo_initialize_mesh_obj(m);
                     m->indices_offset = sb_count ( m_idx );
-                    m->material = -1;
-                    m->smoothing_group = -1;
                 }
 
                 if ( x == '1' ) {
@@ -1073,9 +1118,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         // However it could be that the first mesh was implicitly started (not listed in the file), so we consider that case,
                         if ( sb_count ( meshes ) == 0 ) {
                             ApolloOBJMesh* m = sb_add ( meshes, 1 );
+                            apollo_initialize_mesh_obj(m);
                             m->indices_offset = sb_count ( m_idx ) - 1;
-                            m->material = -1;
-                            m->smoothing_group = -1;
                         }
 
                         // Finalize the vertex, testing for overlaps if the mesh is smooth and updating the first/last face vertex indices
@@ -1339,7 +1383,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 result = APOLLO_INVALID_FORMAT;
                 goto error;
             }
-
+                
             model->meshes[i].face_data.idx_a = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
             model->meshes[i].face_data.idx_b = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
             model->meshes[i].face_data.idx_c = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
@@ -1516,6 +1560,9 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     for ( size_t i = 0; i < sb_count ( material_libs ); ++i ) {
         fclose ( material_libs[i].file );
     }
+
+    //
+    apollo_filter_invalid_models(model);
 
     *_materials = materials;
     *_textures = textures;
