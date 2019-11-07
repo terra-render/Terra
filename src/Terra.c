@@ -1269,9 +1269,9 @@ TerraFloat3 terra_integrate_direct (
             goto exit;
         }
 
-        float pdf = terra_sqlenf3 ( &p_to_light ) / fabsf ( cos * light->triangle_area[light_triangle] ) * light_pdf * tri_pdf * sample_pdf;
+		float pdf = terra_sqlenf3(&p_to_light) / fabsf(cos * light->triangle_area[light_triangle]) * light_pdf;// *tri_pdf* sample_pdf;
         Ld = terra_pointf3 ( &light_surface.emissive, &f );
-        //Ld = terra_mulf3 ( &Ld, 1 / pdf );
+        Ld = terra_mulf3 ( &Ld, 1 / pdf );
     }
     Ld = terra_pointf3 ( &Ld, throughput );
     Lo = terra_addf3 ( &Lo, &Ld );

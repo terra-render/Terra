@@ -99,6 +99,7 @@ bool Scene::_load_scene ( const char* filename ) {
         return false;
     }
 
+    apollo_dump_model_obj ( _apollo_model, _apollo_materials, _apollo_textures, "C:\\code\\_\\" );
     int bsdf_count[APOLLO_BSDF_COUNT];
     memset ( bsdf_count, 0, sizeof ( int ) * APOLLO_BSDF_COUNT );
 
@@ -254,7 +255,7 @@ bool Scene::mesh_exists ( const char* name ) {
     return false;
 }
 
-bool Scene::move_mesh ( const char* name, const TerraFloat3* pos ) {
+bool Scene::move_mesh ( const char* name, const TerraFloat3& pos ) {
     ++_gen;
 
     for ( size_t i = 0; i < _apollo_model->mesh_count; ++i ) {
@@ -262,7 +263,7 @@ bool Scene::move_mesh ( const char* name, const TerraFloat3* pos ) {
 
         if ( strcmp ( name, m->name ) == 0 ) {
             TerraFloat3 current_pos = terra_f3_set ( m->bounding_sphere[0], m->bounding_sphere[1], m->bounding_sphere[2] );
-            TerraFloat3 delta = terra_subf3 ( pos, &current_pos );
+            TerraFloat3 delta = terra_subf3 ( &pos, &current_pos );
             const ApolloModelVertexData* data = &_apollo_model->vertex_data;
             const ApolloMeshFaceData* face = &m->face_data;
 
@@ -306,17 +307,19 @@ bool Scene::move_mesh ( const char* name, const TerraFloat3* pos ) {
     return false;
 }
 
-size_t Scene::get_mesh_states ( ObjectState* states, size_t cap ) {
+void Scene::get_mesh_states ( std::vector<ObjectState>& states ) {
     size_t i = 0;
+    states.clear ();
+    states.reserve ( _apollo_model->mesh_count );
 
-    for ( ; i < _apollo_model->mesh_count && i < cap; ++i ) {
-        states[i].name = _apollo_model->meshes[i].name;
-        states[i].x = _apollo_model->meshes[i].bounding_sphere[0];
-        states[i].y = _apollo_model->meshes[i].bounding_sphere[1];
-        states[i].z = _apollo_model->meshes[i].bounding_sphere[2];
+    for ( ; i < _apollo_model->mesh_count; ++i ) {
+        states.emplace_back();
+        ObjectState& state = states.back();
+        state.name = _apollo_model->meshes[i].name;
+        state.x = _apollo_model->meshes[i].bounding_sphere[0];
+        state.y = _apollo_model->meshes[i].bounding_sphere[1];
+        state.z = _apollo_model->meshes[i].bounding_sphere[2];
     }
-
-    return i;
 }
 
 void Scene::clear() {

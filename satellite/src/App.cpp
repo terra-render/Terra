@@ -518,10 +518,10 @@ success:
         }
 
         if ( args[0].compare ( CMD_MESH_LIST_NAME ) == 0 ) {
-            Scene::ObjectState meshes[64];
-            size_t count = _scene.get_mesh_states ( meshes, 64 );
+            std::vector<Scene::ObjectState> meshes;
+            _scene.get_mesh_states ( meshes );
 
-            for ( size_t i = 0; i < count; ++i ) {
+            for ( size_t i = 0; i < meshes.size(); ++i ) {
                 Log::console ( "%s %f %f %f", meshes[i].name, meshes[i].x, meshes[i].y, meshes[i].z );
             }
         } else if ( args[0].compare ( CMD_MESH_MOVE_NAME ) == 0 ) {
@@ -542,7 +542,7 @@ success:
                 float z = strtof ( args[4].c_str(), nullptr );
                 TerraFloat3 pos = terra_f3_set ( x, y, z );
 
-                if ( !_scene.move_mesh ( args[1].c_str(), &pos ) ) {
+                if ( !_scene.move_mesh ( args[1].c_str(), pos ) ) {
                     return 1;
                 }
 

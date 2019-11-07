@@ -54,11 +54,11 @@ class Scene {
     const TerraCamera& get_camera();
 
     // This invalidates the current scene! Need to call construct_terra_scene() again
-    bool move_mesh ( const char* name, const TerraFloat3* new_pos );
+    bool move_mesh ( const char* name, const TerraFloat3& new_pos );
 
     bool mesh_exists ( const char* name );
 
-    size_t get_mesh_states ( ObjectState* states, size_t cap );
+    void get_mesh_states ( std::vector<ObjectState>& states );
 
     const TerraSceneOptions& get_options();
 
