@@ -132,6 +132,18 @@ App::App ( int argc, char** argv ) {
 App::~App() {
 }
 
+void App::_set_renderer(const string& type) {
+    if (type.compare(RENDER_OPT_RENDERER_WIREFRAME) == 0) {
+
+    }
+    else if (type.compare(RENDER_OPT_RENDERER_TERRA) == 0) {
+
+    }
+    else {
+        abort();
+    }
+}
+
 void App::_clear() {
     if ( !_renderer.is_framebuffer_clear() ) {
         _renderer.clear();
@@ -212,6 +224,7 @@ void App::_init_cmd_map() {
 
         return 0;
     };
+
     // load
     auto cmd_load = [ this ] ( const CommandArgs & args ) -> int {
         char name[256];
@@ -255,6 +268,7 @@ void App::_init_cmd_map() {
 
         return 0;
     };
+
     // step
     auto cmd_step = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.step ( _scene.get_camera(), _scene.construct_terra_scene(),
@@ -279,6 +293,7 @@ void App::_init_cmd_map() {
 
         return 0;
     };
+
     // loop
     auto cmd_loop = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.loop ( _scene.get_camera(), _scene.construct_terra_scene(),
@@ -595,6 +610,9 @@ int App::_boot() {
     _init_cmd_map();
     _c_map[CMD_LOAD_NAME] ( { Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() } );
     _on_config_change ( true );
+
+    const string renderer_type = Config::read_s(Config::RENDERER_TYPE);
+
     return EXIT_SUCCESS;
 }
 

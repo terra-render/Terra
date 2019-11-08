@@ -31,6 +31,12 @@
     <Filter Include="Internal Dependencies\gl3w">
       <UniqueIdentifier>{48a81009-b6a3-4bd5-9cd3-7e140dde2eff}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Satellite Headers\Renderers">
+      <UniqueIdentifier>{e2c4f737-a081-43d9-b3a6-2e665460f703}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Satellite Sources\Renderers">
+      <UniqueIdentifier>{1f425f8f-93b2-479b-aa86-c6428f735287}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App.hpp">
@@ -135,6 +141,12 @@
     <ClInclude Include="..\dependencies\gl3w\include\GL\glcorearb.h">
       <Filter>Internal Dependencies\gl3w</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Renderers\TerraRenderer.hpp">
+      <Filter>Satellite Headers\Renderers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Renderers\WireframeRenderer.hpp">
+      <Filter>Satellite Headers\Renderers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
@@ -238,6 +250,12 @@
     </ClCompile>
     <ClCompile Include="..\..\src\TerraGeometry.c">
       <Filter>Terra\Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Renderers\TerraRenderer.cpp">
+      <Filter>Satellite Sources\Renderers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Renderers\WireframeRenderer.cpp">
+      <Filter>Satellite Sources\Renderers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

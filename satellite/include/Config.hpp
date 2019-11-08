@@ -11,6 +11,12 @@
 #define RENDER_OPT_WORKERS_NAME "workers"
 #define RENDER_OPT_WORKERS_DEFAULT ( ( int ) thread::hardware_concurrency() )
 
+#define RENDER_OPT_RENDERER_DESC "Renderer used at startup"
+#define RENDER_OPT_RENDERER_NAME "renderer"
+#define RENDER_OPT_RENDERER_WIREFRAME "wireframe"
+#define RENDER_OPT_RENDERER_TERRA "terra"
+#define RENDER_OPT_RENDERER_DEFAULT RENDER_OPT_RENDERER_WIREFRAME
+
 #define RENDER_OPT_TILE_SIZE_DESC "Side length in pixels of a rendering job"
 #define RENDER_OPT_TILE_SIZE_NAME "tile-size"
 #define RENDER_OPT_TILE_SIZE_DEFAULT 128
@@ -140,6 +146,7 @@ namespace Config {
         JOB_N_WORKERS = 0,
         JOB_TILE_SIZE,
 
+        RENDERER_TYPE,
 
         RENDER_MAX_BOUNCES,
         RENDER_SAMPLES,

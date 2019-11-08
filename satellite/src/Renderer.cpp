@@ -98,7 +98,8 @@ void terra_render_launcher ( void* _args ) {
     cloto_atomic_fetch_add_u32 ( &args->th->_tile_counter, -1 );
 }
 
-TerraRenderer::TerraRenderer ( ) {
+TerraRenderer::TerraRenderer ( ) :
+    Renderer() {
     cloto_thread_register();
     _this_thread = cloto_thread_get();
     memset ( &_framebuffer, 0, sizeof ( TerraFramebuffer ) );

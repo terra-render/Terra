@@ -25,20 +25,21 @@ class App {
     int _boot();
     void _init_ui();
     void _init_cmd_map();
-
+    
     void _shutdown();
 
     int _opt_set ( int opt, int value );
     int _opt_set ( int opt, const std::string& value );
     int _opt_set ( bool clear, std::function<int() > setter );
 
+    void _set_renderer ( const string& type );
     void _clear();
 
     void _on_config_change ( bool clear );
 
     GFXLayer      _gfx;
     Scene         _scene;
-    TerraRenderer _renderer;
+    std::unique_ptr<Renderer> _renderer;
 
     // Presentation
     Console     _console;

@@ -395,6 +395,7 @@ namespace Config {
         float envmap[] = RENDER_OPT_ENVMAP_COLOR_DEFAULT;
         add_opt ( JOB_N_WORKERS,            RENDER_OPT_WORKERS_DEFAULT,             RENDER_OPT_WORKERS_NAME,            RENDER_OPT_WORKERS_DESC );
         add_opt ( JOB_TILE_SIZE,            RENDER_OPT_TILE_SIZE_DEFAULT,           RENDER_OPT_TILE_SIZE_NAME,          RENDER_OPT_TILE_SIZE_DESC );
+        add_opt ( RENDERER_TYPE,            RENDER_OPT_RENDERER_DEFAULT,            RENDER_OPT_RENDERER_NAME,           RENDER_OPT_RENDERER_DESC );
         add_opt ( RENDER_MAX_BOUNCES,       RENDER_OPT_BOUNCES_DEFAULT,             RENDER_OPT_BOUNCES_NAME,            RENDER_OPT_BOUNCES_DESC );
         add_opt ( RENDER_SAMPLES,           RENDER_OPT_SAMPLES_DEFAULT,             RENDER_OPT_SAMPLES_NAME,            RENDER_OPT_SAMPLES_DESC );
         add_opt ( RENDER_GAMMA,             RENDER_OPT_GAMMA_DEFAULT,               RENDER_OPT_GAMMA_NAME,              RENDER_OPT_GAMMA_DESC );
