@@ -72,8 +72,8 @@ void terra_aabb_fit_aabb ( TerraAABB* aabb, const TerraAABB* other ) {
 }
 
 int terra_bvh_sah_split_volumes ( TerraBVHVolume* volumes, int volumes_count, const TerraAABB* container ) {
-    float* left_area = ( float* ) terra_malloc ( sizeof ( *left_area ) * ( volumes_count - 1 ) );
-    float* right_area = ( float* ) terra_malloc ( sizeof ( *right_area ) * ( volumes_count - 1 ) );
+    float* left_area = ( float* ) terra_malloc ( sizeof ( float ) * ( volumes_count ) );
+    float* right_area = ( float* ) terra_malloc ( sizeof ( float ) * ( volumes_count ) );
     float container_area;
 
     if ( container != NULL ) {
@@ -82,7 +82,7 @@ int terra_bvh_sah_split_volumes ( TerraBVHVolume* volumes, int volumes_count, co
         container_area = FLT_MAX;
     }
 
-    float min_cost = FLT_MAX;//volumes_count;
+    float min_cost = FLT_MAX;
     int min_cost_idx = -1;
     // TODO for other axis
     qsort ( volumes, volumes_count, sizeof ( *volumes ), terra_bvh_volume_compare_x );
@@ -90,7 +90,7 @@ int terra_bvh_sah_split_volumes ( TerraBVHVolume* volumes, int volumes_count, co
     aabb.min = terra_f3_set1 ( FLT_MAX );
     aabb.max = terra_f3_set1 ( -FLT_MAX );
 
-    for ( int i = 0; i < volumes_count - 1; ++i ) {
+    for ( int i = 0; i < volumes_count; ++i ) {
         terra_aabb_fit_aabb ( &aabb, &volumes[i].aabb );
         left_area[i] = terra_aabb_surface_area ( &aabb );
     }
@@ -98,12 +98,12 @@ int terra_bvh_sah_split_volumes ( TerraBVHVolume* volumes, int volumes_count, co
     aabb.min = terra_f3_set1 ( FLT_MAX );
     aabb.max = terra_f3_set1 ( -FLT_MAX );
 
-    for ( int i = volumes_count - 1; i > 0; --i ) {
+    for ( int i = volumes_count - 1; i >= 0; --i ) {
         terra_aabb_fit_aabb ( &aabb, &volumes[i].aabb );
-        right_area[i - 1] = terra_aabb_surface_area ( &aabb );
+        right_area[i] = terra_aabb_surface_area ( &aabb );
     }
 
-    for ( int i = 0; i < volumes_count - 1; ++i ) {
+    for ( int i = 0; i < volumes_count; ++i ) {
         int left_count = i + 1;
         int right_count = volumes_count - left_count;
         // we assume traversal_step_cost is 0 and intersection_test_cost is 1
@@ -132,7 +132,7 @@ void terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_c
         volumes_count += objects[i].triangles_count;
     }
 
-    TerraBVHVolume* volumes = ( TerraBVHVolume* ) terra_malloc ( sizeof ( *volumes ) * volumes_count );
+    TerraBVHVolume* volumes = ( TerraBVHVolume* ) terra_malloc ( sizeof ( TerraBVHVolume ) * volumes_count );
 
     for ( int i = 0; i < volumes_count; ++i ) {
         volumes[i].aabb.min = terra_f3_set1 ( FLT_MAX );
@@ -152,7 +152,7 @@ void terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_c
     }
 
     // build the bvh. we do iterative building using a stack
-    bvh->nodes = ( TerraBVHNode* ) terra_malloc ( sizeof ( *bvh->nodes ) * volumes_count * 2 );
+    bvh->nodes = ( TerraBVHNode* ) terra_malloc ( sizeof ( TerraBVHNode ) * volumes_count * 2 );
     bvh->nodes_count = 1;
     // a stack task holds the idx of the node to be created along with its aabb
     // and the volumes it holds
@@ -162,7 +162,7 @@ void terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_c
         int node_idx;
         TerraAABB* aabb;
     } StackTask;
-    StackTask* stack = ( StackTask* ) malloc ( sizeof ( *stack ) * volumes_count * 2 );
+    StackTask* stack = ( StackTask* ) terra_malloc ( sizeof ( StackTask ) * volumes_count * 2 );
     int stack_idx = 0;
     stack[stack_idx].volumes_start = 0;
     stack[stack_idx].volumes_end = volumes_count;
@@ -234,6 +234,8 @@ void terra_bvh_create ( TerraBVH* bvh, const TerraObject* objects, int objects_c
             ++bvh->nodes_count;
         }
     }
+
+	terra_free( stack );
 }
 
 void terra_bvh_destroy ( TerraBVH* bvh ) {
