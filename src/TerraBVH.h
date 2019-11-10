@@ -10,11 +10,10 @@
 #include <stdint.h>
 
 // Node of the BVH tree. Fits in a 64 byte cache line.
-// TODO why the [2] layout ?
 typedef struct {
-    TerraAABB aabb[2];
-    int32_t index[2];
-    int32_t type[2];
+    TerraAABB aabb[2]; // Left and right AABBs, one for each sub-volume
+    int32_t index[2];  // Index of the BVH node representing each sub-volume, or index of the model/triangle if sub-volume is leaf
+    int32_t type[2];   // -1 if sub-volume is not leaf, 1 if it's leaf and contains a single triangle
 } TerraBVHNode;
 
 typedef struct {
