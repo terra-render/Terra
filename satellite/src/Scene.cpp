@@ -99,7 +99,6 @@ bool Scene::_load_scene ( const char* filename ) {
         return false;
     }
 
-    apollo_dump_model_obj ( _apollo_model, _apollo_materials, _apollo_textures, "C:\\code\\_\\" );
     int bsdf_count[APOLLO_BSDF_COUNT];
     memset ( bsdf_count, 0, sizeof ( int ) * APOLLO_BSDF_COUNT );
 
