@@ -6,8 +6,13 @@
 
 // libc
 #include <assert.h>
+#include <stdio.h>
 
-#include <stdio.h> // todo: remove debug
+typedef struct {
+	TerraAABB aabb;
+	unsigned int index;
+	int type;
+} TerraBVHVolume;
 
 static float       terra_aabb_surface_area ( const TerraAABB* aabb );
 static TerraFloat3 terra_aabb_center ( const TerraAABB* aabb );
@@ -277,14 +282,6 @@ bool terra_bvh_traverse ( TerraBVH* bvh, const TerraObject* objects, const Terra
                 {
                     int model_idx = bvh->nodes[node].index[i] & 0xff;
                     int tri_idx = bvh->nodes[node].index[i] >> 8;
-
-                    if ( model_idx == 0 ) {
-                        //printf ( "moo" );
-                    }
-
-                    if ( model_idx == 1 && tri_idx == 0 ) {
-                        //printf ( "moo" );
-                    }
 
                     iset_query.primitive.triangle = objects[model_idx].triangles + tri_idx;
 

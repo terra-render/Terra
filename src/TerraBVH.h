@@ -17,12 +17,6 @@ typedef struct {
 } TerraBVHNode;
 
 typedef struct {
-    TerraAABB aabb;
-    unsigned int index;
-    int type;
-} TerraBVHVolume;
-
-typedef struct {
     TerraBVHNode* nodes;
     int           nodes_count;
 } TerraBVH;
