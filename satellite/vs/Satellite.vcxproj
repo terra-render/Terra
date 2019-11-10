@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -162,16 +162,20 @@
     <ClInclude Include="..\dependencies\imgui\stb_truetype.h" />
     <ClInclude Include="..\include\Apollo.h" />
     <ClInclude Include="..\include\App.hpp" />
+    <ClInclude Include="..\include\Camera.hpp" />
     <ClInclude Include="..\include\Cloto.h" />
     <ClInclude Include="..\include\Config.hpp" />
     <ClInclude Include="..\include\Console.hpp" />
     <ClInclude Include="..\include\Graphics.hpp" />
     <ClInclude Include="..\include\Logging.hpp" />
+    <ClInclude Include="..\include\Object.hpp" />
+    <ClInclude Include="..\include\OS.hpp" />
     <ClInclude Include="..\include\Renderer.hpp" />
+    <ClInclude Include="..\include\Renderers\ObjectRenderer.hpp" />
     <ClInclude Include="..\include\Renderers\TerraRenderer.hpp" />
-    <ClInclude Include="..\include\Renderers\WireframeRenderer.hpp" />
     <ClInclude Include="..\include\Scene.hpp" />
     <ClInclude Include="..\include\Visualization.hpp" />
+    <ClInclude Include="..\src\Camera.hpp" />
     <ClInclude Include="..\src\stb_image_write.h" />
   </ItemGroup>
   <ItemGroup>
@@ -205,9 +209,11 @@
     <ClCompile Include="..\src\Console.cpp" />
     <ClCompile Include="..\src\Graphics.cpp" />
     <ClCompile Include="..\src\Logging.cpp" />
+    <ClCompile Include="..\src\Object.cpp" />
+    <ClCompile Include="..\src\OS.cpp" />
     <ClCompile Include="..\src\Renderer.cpp" />
+    <ClCompile Include="..\src\Renderers\ObjectRenderer.cpp" />
     <ClCompile Include="..\src\Renderers\TerraRenderer.cpp" />
-    <ClCompile Include="..\src\Renderers\WireframeRenderer.cpp" />
     <ClCompile Include="..\src\Satellite.cpp" />
     <ClCompile Include="..\src\Scene.cpp" />
     <ClCompile Include="..\src\Visualization.cpp" />

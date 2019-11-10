@@ -25,63 +25,6 @@ using namespace std;
 
 namespace Config {
     namespace {
-        struct Opt {
-            Opt ( Type type, const char* name, const char* desc ) :
-                type ( type ), name ( name ), desc ( desc ) {
-                if ( type == Type::Str || type == Type::Real3 ) {
-                    v.s = nullptr;
-                }
-            }
-
-            Opt() {
-                v.s = nullptr;
-            }
-
-            ~Opt() {
-                if ( type == Type::Str || type == Type::Real3 ) {
-                    free ( v.s );
-                    v.s = nullptr;
-                }
-            }
-
-            Opt& operator= ( const Opt& other ) {
-                if ( type == Type::Str || type == Type::Real3 ) {
-                    free ( v.s );
-                    v.s = nullptr;
-                }
-
-                name = other.name;
-                desc = other.desc;
-                type = other.type;
-
-                if ( type == Type::Str ) {
-                    v.s = _strdup ( other.v.s );
-                } else if ( type == Type::Int ) {
-                    v.i = other.v.i;
-                } else if ( type == Type::Real ) {
-                    v.r = other.v.r;
-                } else if ( type == Type::Real3 ) {
-                    if ( other.v.r3 != nullptr ) {
-                        v.r3 = ( float* ) malloc ( sizeof ( float ) * 3 );
-                        memcpy ( v.r3, other.v.r3, sizeof ( float ) * 3 );
-                    }
-                }
-
-                return *this;
-            }
-
-            Type        type = Type::None;
-            const char* name;
-            const char* desc;
-
-            union {
-                int    i;
-                float  r;
-                char*  s;
-                float* r3;
-            } v;
-        };
-
         const char* type_str[ ( size_t ) Type::Count] {
             "Int", "Real", "String", "Exec"
         };

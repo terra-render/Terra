@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <unordered_map>
 #include <mutex>
 
 // Terra
@@ -11,31 +12,47 @@
 
 // Cloto
 #include <Cloto.h>
-
+#include <Config.hpp>
 #include <Graphics.hpp>
 #include <Config.hpp>
+#include <Object.hpp>
+
+class Scene;
+class Camera;
 
 class Renderer {
 public:
     using Event = std::function<void() >;
     using TileEvent = std::function<void(size_t x, size_t y, size_t w, size_t h) >;
+    using Settings = std::unordered_map<std::string, Config::Opt>;
 
 public:
-    Renderer() { };
-    virtual ~Renderer() = 0;
+    Renderer();
+    virtual ~Renderer() = default;
 
     virtual void clear() = 0;
-    virtual void update() = 0;
-    virtual void pause() = 0;
-    virtual bool step(
-        const TerraCamera& camera, 
-        HTerraScene scene, 
-        const Event& on_step_end, 
-        const TileEvent& on_tile_begin, 
-        const TileEvent& on_tile_end
+    
+    virtual void update(
+        const Scene& scene,
+        const Camera& camera
     ) = 0;
 
-    virtual void on_config_updated() = 0;
+    virtual void start();
+    virtual void pause();
+    virtual void update_settings(
+        const Settings& settings
+    );
 
-    virtual const TextureData& framebuffer() = 0;
+    const TextureData& render_target() const { return _render_target; }
+    bool is_camera_locked() const { return _is_camera_locked; }
+    bool is_paused()const { return _is_paused; }
+    void set_selected(const Object::ID& id) { _selected = id; }
+    const Settings& settings() { return _settings; }
+
+protected:
+    Settings    _settings;
+    TextureData _render_target;
+    bool        _is_camera_locked;
+    bool        _is_paused;
+    Object::ID  _selected;
 };

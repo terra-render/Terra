@@ -2,7 +2,6 @@
 #include <Graphics.hpp>
 
 // glew
-#include <GL/gl3w.h>
 #include <GLFW/glfw3.h>
 
 // Satellite
@@ -24,10 +23,12 @@ void GLAPIENTRY opengl_debug_callback ( GLenum source, GLenum type, GLuint id, G
     }
 
     if ( severity == GL_DEBUG_SEVERITY_HIGH ) {
-        Log::error ( "OpenGL Error: %s\n", message );
-    } else {
-        Log::warning ( "OpenGL Warning: %s\n", message );
-    }
+        //Log::error ( "OpenGL Error: %s\n", message );
+        fprintf(stderr, "OpenGL Error: %s\n", message);
+    } else if (severity == GL_DEBUG_SEVERITY_MEDIUM ) {
+        //Log::warning ( "OpenGL Warning: %s\n", message );
+        fprintf(stderr, "OpenGL Warning: %s\n", message);
+    } 
 }
 
 LRESULT CALLBACK window_callback ( HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam ) {
@@ -124,6 +125,108 @@ void GFXLayer::update_config() {
     if ( width != _width || height != _height ) {
         _resize ( width, height );
     }
+}
+
+Pipeline::Pipeline(
+    const char* shader_vert_src,
+    const char* shader_frag_src,
+    const int   width,
+    const int   height
+) {
+    assert(shader_vert_src);
+    assert(shader_frag_src);
+    assert(width);
+    assert(height);
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &rt_color); GL_NO_ERROR;
+    glTextureParameteri(rt_color, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(rt_color, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(rt_color, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureParameteri(rt_color, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureStorage2D(rt_color, 1, GL_RGBA8, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &rt_depth); GL_NO_ERROR;
+    glTextureParameteri(rt_depth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(rt_depth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(rt_depth, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureParameteri(rt_depth, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureStorage2D(rt_depth, 1, GL_DEPTH_COMPONENT32, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
+
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, rt_color, 0); GL_NO_ERROR;
+    glNamedFramebufferTexture(fbo, GL_DEPTH_ATTACHMENT, rt_depth, 0); GL_NO_ERROR;
+
+    shader_vert = _load_shader(GL_VERTEX_SHADER, shader_vert_src);
+    shader_frag = _load_shader(GL_FRAGMENT_SHADER, shader_frag_src);
+    assert(glIsShader(shader_vert));
+    assert(glIsShader(shader_frag));
+
+    program = glCreateProgram(); GL_NO_ERROR;
+    glAttachShader(program, shader_vert); GL_NO_ERROR;
+    glAttachShader(program, shader_frag); GL_NO_ERROR;
+    glLinkProgram(program); GL_NO_ERROR;
+    GLint link_status;
+    glGetProgramiv(program, GL_LINK_STATUS, &link_status); GL_NO_ERROR;
+    if (!link_status) {
+        char linker_message[512];
+        glGetProgramInfoLog(program, sizeof(linker_message), NULL, linker_message); GL_NO_ERROR;
+    }
+}
+
+Pipeline::~Pipeline() {
+    if (glIsShader(shader_vert)) {
+        glDeleteShader(shader_vert);
+        shader_vert = -1;
+    }
+
+    if (glIsShader(shader_frag)) {
+        glDeleteShader(shader_frag);
+        shader_frag = -1;
+    }
+
+    if (glIsProgram(program)) {
+        glDeleteProgram(program);
+        program = -1;
+    }
+
+    if (glIsFramebuffer(fbo)) {
+        glDeleteFramebuffers(1, &fbo);
+        fbo = -1;
+    }
+
+    if (glIsTexture(rt_color)) {
+        glDeleteTextures(1, &rt_color);
+        rt_color = -1;
+    }
+
+    if (glIsTexture(rt_depth)) {
+        glDeleteTextures(1, &rt_depth);
+        rt_depth = -1;
+    }
+}
+
+void Pipeline::bind() {
+    assert(glIsProgram(program));
+    assert(glIsFramebuffer(fbo));
+    
+    glUseProgram(program);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+}
+
+GLuint Pipeline::_load_shader(const GLenum stage, const char* glsl) {
+    GLuint shader = glCreateShader(stage); GL_NO_ERROR;
+    const GLint length = strlen(glsl);
+    glShaderSource(shader, 1, &glsl, &length); GL_NO_ERROR;
+    glCompileShader(shader); GL_NO_ERROR;
+    GLint success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        GLchar compile_message[512];
+        glGetShaderInfoLog(shader, sizeof(compile_message), NULL, compile_message);
+    }
+
+    return shader;
 }
 
 #else

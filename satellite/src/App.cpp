@@ -8,6 +8,8 @@
 // Satellite
 #include <Config.hpp>
 #include <Logging.hpp>
+#include <Renderers/TerraRenderer.hpp>
+#include <Renderers/ObjectRenderer.hpp>
 
 // Terra
 #include <TerraPresets.h>
@@ -133,21 +135,25 @@ App::~App() {
 }
 
 void App::_set_renderer(const string& type) {
-    if (type.compare(RENDER_OPT_RENDERER_WIREFRAME) == 0) {
-
+    if (type.compare(RENDER_OPT_RENDERER_OBJECT) == 0) {
+        _renderer.reset(new ObjectRenderer);
+        _renderer->start();
     }
     else if (type.compare(RENDER_OPT_RENDERER_TERRA) == 0) {
-
+        _renderer.reset(new TerraRenderer);
     }
     else {
-        abort();
+        assert(false);
     }
 }
 
+void App::_set_camera(const string& type) {
+    _camera.reset(new Camera);
+}
+
 void App::_clear() {
-    if ( !_renderer.is_framebuffer_clear() ) {
-        _renderer.clear();
-        _visualizer.set_texture_data ( _renderer.framebuffer() );
+    if (_renderer) {
+        _renderer->clear();
     }
 
     _visualizer.update_stats();
@@ -164,8 +170,16 @@ int App::run () {
     while ( !_gfx.should_quit () ) {
         // i/o
         _gfx.process_events ();
+        
         // update
-        _renderer.update();
+        if (_renderer && !_renderer->is_paused()) {
+            assert(_camera.get());
+            _renderer->update(
+                _scene,
+                *_camera
+            );
+        }
+
         // draw
         ImGui_ImplGlfwGL3_NewFrame();
         glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
@@ -271,56 +285,58 @@ void App::_init_cmd_map() {
 
     // step
     auto cmd_step = [ this ] ( const CommandArgs & args ) -> int {
-        bool ret = _renderer.step ( _scene.get_camera(), _scene.construct_terra_scene(),
-        [ = ]() {
-            _visualizer.update_stats();
+        //bool ret = _renderer->ste( _scene.get_camera(), _scene.construct_terra_scene(),
+        //[ = ]() {
+        //    _visualizer.update_stats();
+        //
+        //    if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
+        //        _visualizer.set_texture_data ( _renderer->render_target() );
+        //    }
+        //},
+        //nullptr,
+        //[ = ] ( size_t x, size_t y, size_t w, size_t h ) {
+        //    if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
+        //        _visualizer.update_tile ( _renderer->render_target(), x, y, w, h );
+        //    }
+        //} );
 
-            if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
-                _visualizer.set_texture_data ( _renderer.framebuffer() );
-            }
-        },
-        nullptr,
-        [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
-            if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
-                _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
-            }
-        } );
-
-        if ( !ret ) {
-            Log::error ( STR ( "Failed to start renderer" ) );
-            return 1;
-        }
+        //if ( !ret ) {
+        //    Log::error ( STR ( "Failed to start renderer" ) );
+        //    return 1;
+        //}
 
         return 0;
     };
 
     // loop
     auto cmd_loop = [ this ] ( const CommandArgs & args ) -> int {
-        bool ret = _renderer.loop ( _scene.get_camera(), _scene.construct_terra_scene(),
-        [ = ]() {
-            _visualizer.update_stats();
-
-            if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
-                _visualizer.set_texture_data ( _renderer.framebuffer() );
-            }
-        },
-        nullptr,
-        [ = ] ( size_t x, size_t y, size_t w, size_t h ) {
-            if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
-                _visualizer.update_tile ( _renderer.framebuffer(), x, y, w, h );
-            }
-        } );
-
-        if ( !ret ) {
-            Log::error ( STR ( "Failed to start renderer" ) );
-            return 1;
-        }
+        //bool ret = _renderer.loop ( _scene.get_camera(), _scene.construct_terra_scene(),
+        //[ = ]() {
+        //    _visualizer.update_stats();
+        //
+        //    if ( !Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
+        //        _visualizer.set_texture_data ( _renderer->render_target() );
+        //    }
+        //},
+        //nullptr,
+        //[ = ] ( size_t x, size_t y, size_t w, size_t h ) {
+        //    if ( Config::read_i ( Config::VISUALIZER_PROGRESSIVE ) ) {
+        //        _visualizer.update_tile ( _renderer->render_target(), x, y, w, h );
+        //    }
+        //} );
+        //
+        //if ( !ret ) {
+        //    Log::error ( STR ( "Failed to start renderer" ) );
+        //    return 1;
+        //}
 
         return 0;
     };
     // pause
     auto cmd_pause = [ this ] ( const CommandArgs & args ) -> int {
-        _renderer.pause();
+        if (_renderer) {
+            _renderer->pause();
+        }
         return 0;
     };
     // save
@@ -611,8 +627,8 @@ int App::_boot() {
     _c_map[CMD_LOAD_NAME] ( { Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() } );
     _on_config_change ( true );
 
-    const string renderer_type = Config::read_s(Config::RENDERER_TYPE);
-
+    _set_renderer(Config::read_s(Config::RENDERER_TYPE));
+    _set_camera("");
     return EXIT_SUCCESS;
 }
 
@@ -639,38 +655,16 @@ int App::_opt_set ( int opt, int value ) {
 }
 
 int App::_opt_set ( bool clear, std::function< int() > setter ) {
-    if ( _renderer.is_framebuffer_clear() || !clear ) {
-        bool result = setter();
+    bool result = setter();
 
-        if ( result != 0 ) {
-            return result;
-        }
-
-        _on_config_change ( clear );
-    } else {
-        //Log::warning ( STR ( "Doing so would require a clear. Do you wish to continue? [y/n]" ) );
-        //_console.set_one_time_callback ( [this, setter, clear] ( const CommandArgs & args ) -> int {
-        //  if ( args.size() == 0 ) {
-        //      return 1;
-        //  }
-        //if ( args[0].compare ( "y" ) == 0 ) {
-        bool result = setter();
-
-        if ( result != 0 ) {
-            return result;
-        }
-
-        _on_config_change ( clear );
-        //}
-        return 0;
-        //} );
+    if ( result != 0 ) {
+        return result;
     }
 
-    return 0;
+    _on_config_change ( clear );
 }
 
 void App::_on_config_change ( bool clear ) {
-    _renderer.update_config();
     _scene.update_config();
     _gfx.update_config();
     _visualizer.update_config();

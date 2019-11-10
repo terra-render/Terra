@@ -1,30 +1,27 @@
+#pragma once
+
 // Satellite
 #include <Renderer.hpp>
 
 //
 // Dispatches terra_render jobs
 //
-class TerraRenderer : Renderer {
+class TerraRenderer : public Renderer {
 public:
     TerraRenderer();
     ~TerraRenderer();
 
     // Call this inside the main loop to progress the rendering, after starting one with step/loop.
-    void update() override;
-
-    // Clears the framebuffer.
+    void update(
+        const Scene& scene,
+        const Camera& camera
+    ) override;
     void clear() override;
+    void start() override;
 
-    // Step the rendering.
-    bool step(const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end) override;
-
-    // Keep stepping until further input (e.g. pause).
+    bool step(const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end);
     bool loop(const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end);
-
-    // Pause the current rendering.
-    void pause();
-    
-    // Call this to notify the renderer of changes to config.
+    void pause() override;
     void update_config();
 
     // Getters

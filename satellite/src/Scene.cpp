@@ -99,7 +99,6 @@ bool Scene::_load_scene ( const char* filename ) {
         return false;
     }
 
-    apollo_dump_model_obj ( _apollo_model, _apollo_materials, _apollo_textures, "C:\\code\\_\\" );
     int bsdf_count[APOLLO_BSDF_COUNT];
     memset ( bsdf_count, 0, sizeof ( int ) * APOLLO_BSDF_COUNT );
 
@@ -120,6 +119,7 @@ bool Scene::_load_scene ( const char* filename ) {
         Log::info ( FMT ( "%s config loaded.", _apollo_model->name ) );
     }
 
+    add_object("test", _apollo_model);
     return true;
 }
 
@@ -253,6 +253,44 @@ bool Scene::mesh_exists ( const char* name ) {
     }
 
     return false;
+}
+
+Object::ID Scene::add_object(
+    const char* name,
+    const ApolloModel* model
+) {
+    assert(name);
+
+    Object obj;
+    obj.name = name;
+    obj.id = (Object::ID)_objects.size();
+    
+    obj.render.x.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.pos_x);
+    obj.render.y.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.pos_y);
+    obj.render.z.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.pos_z);
+    obj.render.nx.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_x);
+    obj.render.ny.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_y);
+    obj.render.nz.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_z);
+
+    obj.render.submeshes.reserve(model->mesh_count);
+    for (uint32_t m = 0; m < model->mesh_count; ++m) {
+        RenderData::Submesh mesh;
+        mesh.material = model->meshes->material_id;
+        mesh.faces.allocate(GL_ELEMENT_ARRAY_BUFFER, 3 * model->meshes[m].face_count, nullptr);
+
+        for (uint32_t f = 0; f < model->meshes[m].face_count; ++f) {
+            mesh.faces.ptr.get()[f * 3 + 0] = model->meshes[m].face_data.idx_a[f];
+            mesh.faces.ptr.get()[f * 3 + 1] = model->meshes[m].face_data.idx_b[f];
+            mesh.faces.ptr.get()[f * 3 + 2] = model->meshes[m].face_data.idx_c[f];
+        }
+
+        mesh.faces.upload();
+        obj.render.submeshes.emplace_back(move(mesh));
+    }
+    obj.render.construct_vertex_layout();
+
+    _objects.emplace_back(move(obj));
+    return _objects.back().id;
 }
 
 bool Scene::move_mesh ( const char* name, const TerraFloat3& pos ) {
@@ -443,6 +481,10 @@ const TerraCamera& Scene::get_camera() {
 
 const TerraSceneOptions& Scene::get_options() {
     return _opts;
+}
+
+const std::vector<Object>& Scene::objects() const {
+    return _objects;
 }
 
 const char* Scene::name() const {

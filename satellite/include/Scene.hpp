@@ -7,8 +7,10 @@
 
 // Terra
 #include <Terra.h>
-
 #include <Config.hpp>
+
+// Satellite
+#include <Object.hpp>
 
 struct ApolloModel;
 struct ApolloMaterial;
@@ -58,9 +60,14 @@ class Scene {
 
     bool mesh_exists ( const char* name );
 
-    void get_mesh_states ( std::vector<ObjectState>& states );
+    Object::ID add_object(
+        const char* name,
+        const ApolloModel* mesh
+    );
 
+    void get_mesh_states ( std::vector<ObjectState>& states );
     const TerraSceneOptions& get_options();
+    const std::vector<Object>& objects() const;
 
   private:
     TerraTexture* _allocate_texture ( const char* texture );
@@ -85,4 +92,6 @@ class Scene {
     // Move gen (because mesh move is idx driven)
     std::vector<uint32_t> _vert_gens;
     uint32_t _gen = 0;
+
+    std::vector<Object> _objects;
 };

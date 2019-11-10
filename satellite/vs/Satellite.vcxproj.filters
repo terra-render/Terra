@@ -144,8 +144,20 @@
     <ClInclude Include="..\include\Renderers\TerraRenderer.hpp">
       <Filter>Satellite Headers\Renderers</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Renderers\WireframeRenderer.hpp">
+    <ClInclude Include="..\include\Renderers\ObjectRenderer.hpp">
       <Filter>Satellite Headers\Renderers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Object.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Camera.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\OS.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\Camera.hpp">
+      <Filter>Satellite Headers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -159,9 +171,6 @@
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Logging.cpp">
-      <Filter>Satellite Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\Renderer.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Scene.cpp">
@@ -254,8 +263,15 @@
     <ClCompile Include="..\src\Renderers\TerraRenderer.cpp">
       <Filter>Satellite Sources\Renderers</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\Renderers\WireframeRenderer.cpp">
+    <ClCompile Include="..\src\Renderers\ObjectRenderer.cpp">
       <Filter>Satellite Sources\Renderers</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Renderer.cpp" />
+    <ClCompile Include="..\src\OS.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Object.cpp">
+      <Filter>Satellite Sources</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

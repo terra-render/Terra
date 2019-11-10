@@ -6,6 +6,7 @@
 #include <Graphics.hpp>
 #include <Scene.hpp>
 #include <Console.hpp>
+#include <Camera.hpp>
 
 // stdlib
 #include <vector>
@@ -32,7 +33,9 @@ class App {
     int _opt_set ( int opt, const std::string& value );
     int _opt_set ( bool clear, std::function<int() > setter );
 
-    void _set_renderer ( const string& type );
+    void _set_renderer ( const std::string& type );
+    void _set_camera   ( const std::string& type );
+
     void _clear();
 
     void _on_config_change ( bool clear );
@@ -40,6 +43,7 @@ class App {
     GFXLayer      _gfx;
     Scene         _scene;
     std::unique_ptr<Renderer> _renderer;
+    std::unique_ptr<Camera>   _camera;
 
     // Presentation
     Console     _console;

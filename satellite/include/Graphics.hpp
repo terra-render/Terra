@@ -4,8 +4,47 @@
 #include <cstdint>
 #include <functional>
 
+// gl3w
+#include <GL/gl3w.h>
+#include <GL/GL.h>
+
 // imgui
 #include <imgui.h>
+
+#define GL_NO_ERROR assert(glGetError() == 0)
+
+#define OPENGL_RESOURCE_COPY_VALID_ID(other_res) assert(res != INVALID_ID); res = other_res;
+#define DEFINE_OPENGL_RESOURCE(name, dtor)\
+struct name {\
+    static const GLuint INVALID_ID = (GLuint)-1;\
+    virtual ~name() {\
+        dtor;\
+    }\
+\
+    name(GLuint res = INVALID_ID) : res(res) { assert(res != INVALID_ID); }\
+\
+    name(name&& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; }\
+    name(name& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; }\
+    name& operator=(name&& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; return *this; }\
+    name& operator=(name& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; return *this; }\
+    name& operator=(GLuint other_res) { OPENGL_RESOURCE_COPY_VALID_ID(other_res) return *this; }\
+\
+    GLuint* operator&() { return &res; }\
+    const GLuint* operator&() const { return &res; }\
+    operator GLuint& () { return res; }\
+    operator const GLuint& () const { return res; }\
+\
+protected:\
+    GLuint res = -1;\
+};
+
+DEFINE_OPENGL_RESOURCE(OpenGLShader, if (glIsShader(res)) glDeleteShader(res); )
+DEFINE_OPENGL_RESOURCE(OpenGLBuffer, if (glIsBuffer(res)) glDeleteBuffers(1, &res); )
+DEFINE_OPENGL_RESOURCE(OpenGLTexture, if (glIsTexture(res)) glDeleteTextures(1, &res); )
+DEFINE_OPENGL_RESOURCE(OpenGLFramebuffer, if (glIsFramebuffer(res)) glDeleteFramebuffers(1, &res); )
+DEFINE_OPENGL_RESOURCE(OpenGLVertexArray, if (glIsVertexArray(res)) glDeleteVertexArrays(1, &res); )
+DEFINE_OPENGL_RESOURCE(OpenGLProgram, if (glIsShader(res)) glDeleteShader(res); )
+
 
 // To avoid having TerraFramebuffers going around
 // and also used by a couple of other classes for convenience
@@ -40,4 +79,27 @@ class GFXLayer {
     InputHandler     _input_handler;
     int              _width;
     int              _height;
+};
+
+struct Pipeline {
+    Pipeline() = default;
+    Pipeline(
+        const char* shader_vert_src,
+        const char* shader_frag_src,
+        const int   width,
+        const int   height
+    );
+    ~Pipeline();
+    void bind();
+
+    OpenGLShader shader_vert;
+    OpenGLShader shader_frag;
+    OpenGLProgram program;
+
+    OpenGLFramebuffer fbo;
+    OpenGLTexture rt_color;
+    OpenGLTexture rt_depth;
+
+private:
+    GLuint _load_shader(const GLenum stage, const char* glsl);
 };
