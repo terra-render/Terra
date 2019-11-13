@@ -11,6 +11,9 @@
 // imgui
 #include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
+// libc++
+#include <memory>
+
 #ifdef _WIN32
 
 // Skipping notification, reporting everything else
@@ -127,7 +130,8 @@ void GFXLayer::update_config() {
     }
 }
 
-Pipeline::Pipeline(
+void Pipeline::reset(
+    GLuint rt_color,
     const char* shader_vert_src,
     const char* shader_frag_src,
     const int   width,
@@ -137,13 +141,7 @@ Pipeline::Pipeline(
     assert(shader_frag_src);
     assert(width);
     assert(height);
-
-    glCreateTextures(GL_TEXTURE_2D, 1, &rt_color); GL_NO_ERROR;
-    glTextureParameteri(rt_color, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(rt_color, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(rt_color, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureParameteri(rt_color, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureStorage2D(rt_color, 1, GL_RGBA8, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
+    assert(glIsTexture(rt_color));
 
     glCreateTextures(GL_TEXTURE_2D, 1, &rt_depth); GL_NO_ERROR;
     glTextureParameteri(rt_depth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
@@ -171,39 +169,12 @@ Pipeline::Pipeline(
     if (!link_status) {
         char linker_message[512];
         glGetProgramInfoLog(program, sizeof(linker_message), NULL, linker_message); GL_NO_ERROR;
-    }
-}
-
-Pipeline::~Pipeline() {
-    if (glIsShader(shader_vert)) {
-        glDeleteShader(shader_vert);
-        shader_vert = -1;
+        fprintf(stderr, "GLSL linker error %s\n", linker_message);
     }
 
-    if (glIsShader(shader_frag)) {
-        glDeleteShader(shader_frag);
-        shader_frag = -1;
-    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    if (glIsProgram(program)) {
-        glDeleteProgram(program);
-        program = -1;
-    }
-
-    if (glIsFramebuffer(fbo)) {
-        glDeleteFramebuffers(1, &fbo);
-        fbo = -1;
-    }
-
-    if (glIsTexture(rt_color)) {
-        glDeleteTextures(1, &rt_color);
-        rt_color = -1;
-    }
-
-    if (glIsTexture(rt_depth)) {
-        glDeleteTextures(1, &rt_depth);
-        rt_depth = -1;
-    }
+    _reflect_program();
 }
 
 void Pipeline::bind() {
@@ -224,9 +195,35 @@ GLuint Pipeline::_load_shader(const GLenum stage, const char* glsl) {
     if (!success) {
         GLchar compile_message[512];
         glGetShaderInfoLog(shader, sizeof(compile_message), NULL, compile_message);
+        fprintf(stderr, "GLSL compiler error %s\n", compile_message);
     }
 
     return shader;
+}
+
+void Pipeline::_reflect_program() {
+    _uniforms.clear();
+    
+    assert(glIsProgram(program));
+    GLint n_uniforms;
+    glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &n_uniforms);
+
+    if (n_uniforms == 0)
+        return;
+
+    GLint uniform_max_length;
+    glGetProgramiv(program, GL_ACTIVE_UNIFORM_MAX_LENGTH, &uniform_max_length);
+    auto uniform_name = std::make_unique<char[]>(uniform_max_length);
+
+    for (GLint u = 0; u < n_uniforms; ++u) {
+        ShaderUniform uniform;
+        GLsizei length;
+        glGetActiveUniform(program, u, uniform_max_length, &length, &uniform.length, &uniform.type, uniform_name.get());
+        uniform.name = uniform_name.get();
+        assert(_uniforms.find(uniform.name) == _uniforms.end()); 
+        fprintf(stderr, "found uniform %s\n", uniform.name.c_str());
+        _uniforms[uniform.name] = uniform;
+    }
 }
 
 #else

@@ -42,10 +42,11 @@ struct RenderData {
     struct Submesh {
         MaterialID material;
         Buffer<uint32_t> faces;
+        GLuint vao;
     };
 
     void construct_vertex_layout();
-    void bind_vertex_input() const;
+    void bind_vertex_input(const int submesh) const;
 
     Buffer<float> x;
     Buffer<float> y;
@@ -53,7 +54,6 @@ struct RenderData {
     Buffer<float> nx;
     Buffer<float> ny;
     Buffer<float> nz;
-    GLuint        vao = -1;
     std::vector<Submesh> submeshes;
 
 private:
@@ -79,9 +79,9 @@ template <typename T>
 void Buffer<T>::free() {
     ptr.reset();
 
-    if (glIsBuffer(buf)) {
-        glDeleteBuffers(1, &buf);
-    }
+//    if (glIsBuffer(buf)) {
+//        glDeleteBuffers(1, &buf);
+//    }
 }
 
 template <typename T>

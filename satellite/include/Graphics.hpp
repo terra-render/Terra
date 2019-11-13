@@ -3,6 +3,8 @@
 // C++ STL
 #include <cstdint>
 #include <functional>
+#include <string>
+#include <unordered_map>
 
 // gl3w
 #include <GL/gl3w.h>
@@ -45,6 +47,7 @@ DEFINE_OPENGL_RESOURCE(OpenGLFramebuffer, if (glIsFramebuffer(res)) glDeleteFram
 DEFINE_OPENGL_RESOURCE(OpenGLVertexArray, if (glIsVertexArray(res)) glDeleteVertexArrays(1, &res); )
 DEFINE_OPENGL_RESOURCE(OpenGLProgram, if (glIsShader(res)) glDeleteShader(res); )
 
+using ImageID = GLuint;
 
 // To avoid having TerraFramebuffers going around
 // and also used by a couple of other classes for convenience
@@ -81,25 +84,35 @@ class GFXLayer {
     int              _height;
 };
 
+struct ShaderUniform {
+    std::string name;
+    GLint       binding;
+    GLsizei     length;
+    GLenum      type;
+};
+
 struct Pipeline {
-    Pipeline() = default;
-    Pipeline(
+    void reset (
+        GLuint rt_color,
         const char* shader_vert_src,
         const char* shader_frag_src,
         const int   width,
         const int   height
     );
-    ~Pipeline();
     void bind();
 
-    OpenGLShader shader_vert;
-    OpenGLShader shader_frag;
-    OpenGLProgram program;
+    GLuint shader_vert;
+    GLuint shader_frag;
+    GLuint program;
 
-    OpenGLFramebuffer fbo;
-    OpenGLTexture rt_color;
-    OpenGLTexture rt_depth;
+    GLuint fbo;
+    GLuint rt_color;
+    GLuint rt_depth;
 
 private:
     GLuint _load_shader(const GLenum stage, const char* glsl);
+    void _reflect_program();
+
+    std::unordered_map<std::string, ShaderUniform> _uniforms;
+  
 };

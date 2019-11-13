@@ -30,6 +30,8 @@ public:
     Renderer();
     virtual ~Renderer() = default;
 
+    void resize(const unsigned int width, const unsigned int height);
+
     virtual void clear() = 0;
     
     virtual void update(
@@ -43,7 +45,7 @@ public:
         const Settings& settings
     );
 
-    const TextureData& render_target() const { return _render_target; }
+    const ImageID& render_target() const { return _render_target; }
     bool is_camera_locked() const { return _is_camera_locked; }
     bool is_paused()const { return _is_paused; }
     void set_selected(const Object::ID& id) { _selected = id; }
@@ -51,7 +53,7 @@ public:
 
 protected:
     Settings    _settings;
-    TextureData _render_target;
+    ImageID     _render_target;
     bool        _is_camera_locked;
     bool        _is_paused;
     Object::ID  _selected;

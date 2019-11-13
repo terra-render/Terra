@@ -14,6 +14,9 @@
 #include <Terra.h>
 #include <TerraProfile.h>
 
+// GL
+#include <GL/GL.h>
+
 //
 // Does not hold any reference to the render targets data
 // Manages every visualization on screen except for the console
@@ -47,6 +50,7 @@ class Visualizer {
   public:
     void init ( GFXLayer* gfx );
 
+    void set_display_image(const ImageID image);
     void set_texture_data ( const TextureData& data );
     void update_tile ( const TextureData& data, size_t x, size_t y, size_t w, size_t h );
 
@@ -82,4 +86,5 @@ class Visualizer {
     bool         _hide_info;
 
     std::vector<Stats> _stats;
+    ImageID _image = 0;
 };
