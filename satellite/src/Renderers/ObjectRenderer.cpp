@@ -11,7 +11,8 @@ Renderer::Renderer() {
     char* shader_vert_text = OS::read_file_to_string("shaders/object.vert.glsl");
     char* shader_frag_text = OS::read_file_to_string("shaders/object.frag.glsl");
 
-    _pipeline.load (
+    _pipeline.reset(
+        _render_target,
         shader_vert_text,
         shader_frag_text,
         100, 100
@@ -35,11 +36,14 @@ void ObjectRenderer::update(
 ) {
     _pipeline.bind();
 
+    glClearColor(1.f, 1.f, 1.f, 1.f);
+    glClearDepth(1.);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     for (const Object& o : scene.objects()) {
-        o.render.bind_vertex_input();
-        
-        for (const RenderData::Submesh& mesh : o.render.submeshes) {
-            glDrawElements(GL_TRIANGLES, mesh.faces.count / 3, GL_UNSIGNED_INT, nullptr); GL_NO_ERROR; 
+        for (size_t i = 0; i < o.render.submeshes.size(); ++i) {
+            o.render.bind_vertex_input(i);
+            glDrawElements(GL_TRIANGLES, o.render.submeshes[i].faces.count / 3, GL_UNSIGNED_INT, nullptr); GL_NO_ERROR; 
         }
     }
 }

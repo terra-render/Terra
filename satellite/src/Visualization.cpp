@@ -147,6 +147,11 @@ void Visualizer::update_config() {
     }
 }
 
+void Visualizer::set_display_image(const ImageID image) {
+    assert(glIsTexture(image));
+
+    _image = image;
+}
 
 void Visualizer::set_texture_data ( const TextureData& texture ) {
     static_assert ( is_same<remove_pointer<decltype ( TextureData::data ) >::type, float>::value, "Code needs to be updated for non-floating point textures." );
@@ -365,6 +370,7 @@ void Visualizer::draw() {
     const float width  = ( float ) _gfx->width();
     const float height = ( float ) _gfx->height();
     using namespace ImGui;
+
     // No window decorations / padding / borders
     int style = ImGuiWindowFlags_NoResize |
                 ImGuiWindowFlags_NoTitleBar |
@@ -377,9 +383,11 @@ void Visualizer::draw() {
     SetNextWindowSize ( screen_size );
     Begin ( "moo", nullptr, style );
 
-    if ( _texture.data != nullptr ) {
-        Image ( ( ImTextureID& ) _gl_texture, screen_size );
-    } else {
+    if (glIsTexture(_image)) {
+        Image((ImTextureID&)_image, screen_size);
+    }
+    //Image ( ( ImTextureID& ) _gl_texture, screen_size );
+    else {
         const char* msg = "          render something!\n"
                           "press ` (backtick) to toggle console\n"
                           "  enter help for a list of commands\n";

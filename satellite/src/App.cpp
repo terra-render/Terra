@@ -170,7 +170,12 @@ int App::run () {
     while ( !_gfx.should_quit () ) {
         // i/o
         _gfx.process_events ();
-        
+
+        // begin frame
+        ImGui_ImplGlfwGL3_NewFrame();
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //glClearColor(0.15f, 0.15f, 0.15f, 1.f);
+
         // update
         if (_renderer && !_renderer->is_paused()) {
             assert(_camera.get());
@@ -178,16 +183,16 @@ int App::run () {
                 _scene,
                 *_camera
             );
+
+            _visualizer.set_display_image(_renderer->render_target());
         }
 
         // draw
-        ImGui_ImplGlfwGL3_NewFrame();
-        glClear ( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-        glClearColor ( 0.15f, 0.15f, 0.15f, 1.0f );
-        _visualizer.draw();
+         _visualizer.draw();
         _console.draw ( _gfx.width(), _gfx.height() );
         ImGui::Render();
         ImGui_ImplGlfwGL3_RenderDrawData ( ImGui::GetDrawData() );
+
         // present
         _gfx.swap_buffers ();
     }
