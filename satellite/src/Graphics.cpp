@@ -127,7 +127,7 @@ void GFXLayer::update_config() {
     }
 }
 
-Pipeline::Pipeline(
+void Pipeline::load (
     const char* shader_vert_src,
     const char* shader_frag_src,
     const int   width,
@@ -171,38 +171,6 @@ Pipeline::Pipeline(
     if (!link_status) {
         char linker_message[512];
         glGetProgramInfoLog(program, sizeof(linker_message), NULL, linker_message); GL_NO_ERROR;
-    }
-}
-
-Pipeline::~Pipeline() {
-    if (glIsShader(shader_vert)) {
-        glDeleteShader(shader_vert);
-        shader_vert = -1;
-    }
-
-    if (glIsShader(shader_frag)) {
-        glDeleteShader(shader_frag);
-        shader_frag = -1;
-    }
-
-    if (glIsProgram(program)) {
-        glDeleteProgram(program);
-        program = -1;
-    }
-
-    if (glIsFramebuffer(fbo)) {
-        glDeleteFramebuffers(1, &fbo);
-        fbo = -1;
-    }
-
-    if (glIsTexture(rt_color)) {
-        glDeleteTextures(1, &rt_color);
-        rt_color = -1;
-    }
-
-    if (glIsTexture(rt_depth)) {
-        glDeleteTextures(1, &rt_depth);
-        rt_depth = -1;
     }
 }
 

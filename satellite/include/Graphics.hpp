@@ -45,7 +45,6 @@ DEFINE_OPENGL_RESOURCE(OpenGLFramebuffer, if (glIsFramebuffer(res)) glDeleteFram
 DEFINE_OPENGL_RESOURCE(OpenGLVertexArray, if (glIsVertexArray(res)) glDeleteVertexArrays(1, &res); )
 DEFINE_OPENGL_RESOURCE(OpenGLProgram, if (glIsShader(res)) glDeleteShader(res); )
 
-
 // To avoid having TerraFramebuffers going around
 // and also used by a couple of other classes for convenience
 struct TextureData {
@@ -62,14 +61,14 @@ class GFXLayer {
     using OnResizeCallback = std::function<void ( int, int ) >;
     using InputHandler = std::function<void ( const ImGuiIO& ) >;
 
-    bool init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler );
-    int width ();
-    int height ();
-    void process_events ();
-    bool should_quit ();
-    void swap_buffers ();
+    bool  init ( int width, int height, const char* title, const OnResizeCallback& on_resize, const InputHandler& input_handler );
+    int   width ();
+    int   height ();
+    void  process_events ();
+    bool  should_quit ();
+    void  swap_buffers ();
     void* get_window ();
-    void update_config();
+    void  update_config();
 
   private:
     void _resize ( int width, int height );
@@ -83,13 +82,14 @@ class GFXLayer {
 
 struct Pipeline {
     Pipeline() = default;
-    Pipeline(
+    ~Pipeline() = default;
+
+    void load (
         const char* shader_vert_src,
         const char* shader_frag_src,
         const int   width,
         const int   height
     );
-    ~Pipeline();
     void bind();
 
     OpenGLShader shader_vert;

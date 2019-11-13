@@ -11,7 +11,7 @@ Renderer::Renderer() {
     char* shader_vert_text = OS::read_file_to_string("shaders/object.vert.glsl");
     char* shader_frag_text = OS::read_file_to_string("shaders/object.frag.glsl");
 
-    _pipeline = Pipeline(
+    _pipeline.load (
         shader_vert_text,
         shader_frag_text,
         100, 100
