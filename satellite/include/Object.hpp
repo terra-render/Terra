@@ -61,12 +61,16 @@ private:
 };
 
 struct Object {
+    Object();
+    
     using ID = uint64_t;
     static const ID ID_NULL = (ID)-1;
 
     ID          id;
     std::string name;
     RenderData  render;
+    float       world_from_object[4][4];
+    float       world_from_object_invT[4][4];
 };
 
 ///

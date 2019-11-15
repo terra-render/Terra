@@ -167,6 +167,7 @@
     <ClInclude Include="..\include\Config.hpp" />
     <ClInclude Include="..\include\Console.hpp" />
     <ClInclude Include="..\include\Graphics.hpp" />
+    <ClInclude Include="..\include\LinearAlgebra.hpp" />
     <ClInclude Include="..\include\Logging.hpp" />
     <ClInclude Include="..\include\Object.hpp" />
     <ClInclude Include="..\include\OS.hpp" />
@@ -175,7 +176,6 @@
     <ClInclude Include="..\include\Renderers\TerraRenderer.hpp" />
     <ClInclude Include="..\include\Scene.hpp" />
     <ClInclude Include="..\include\Visualization.hpp" />
-    <ClInclude Include="..\src\Camera.hpp" />
     <ClInclude Include="..\src\stb_image_write.h" />
   </ItemGroup>
   <ItemGroup>
@@ -205,6 +205,7 @@
     <ClCompile Include="..\dependencies\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\src\App.cpp" />
+    <ClCompile Include="..\src\Camera.cpp" />
     <ClCompile Include="..\src\Config.cpp" />
     <ClCompile Include="..\src\Console.cpp" />
     <ClCompile Include="..\src\Graphics.cpp" />

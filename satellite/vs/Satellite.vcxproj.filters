@@ -156,7 +156,7 @@
     <ClInclude Include="..\include\OS.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\Camera.hpp">
+    <ClInclude Include="..\include\LinearAlgebra.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
   </ItemGroup>
@@ -271,6 +271,9 @@
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Object.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Camera.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
   </ItemGroup>

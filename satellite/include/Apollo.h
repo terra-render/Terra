@@ -476,9 +476,9 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
     while ( fscanf ( file, "%s", key ) != EOF ) {
         // New material tag
         if ( strcmp ( key, "mat" ) == 0 || strcmp ( key, "newmtl" ) == 0 ) {
-            char mat_name[32];
+            char mat_name[128];
 
-            if ( fscanf ( file, "%s", mat_name ) != 1 ) {
+            if ( fscanf ( file, "%128s", mat_name ) != 1 ) {
                 APOLLO_LOG_ERR ( "Read error on file %s\n", filename );
                 goto error;
             }

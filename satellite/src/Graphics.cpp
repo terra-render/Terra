@@ -130,6 +130,19 @@ void GFXLayer::update_config() {
     }
 }
 
+const char* ShaderUniform::type_to_string(const GLenum type) {
+    switch (type) {
+        case GL_FLOAT: return "float";
+        case GL_FLOAT_VEC2: return "vec2";
+        case GL_FLOAT_VEC3: return "vec3";
+        case GL_FLOAT_VEC4: return "vec4";
+        case GL_FLOAT_MAT2: return "mat2";
+        case GL_FLOAT_MAT3: return "mat3";
+        case GL_FLOAT_MAT4: return "mat4";
+        default: assert(false);
+    }
+}
+
 void Pipeline::reset(
     GLuint rt_color,
     const char* shader_vert_src,
@@ -185,6 +198,12 @@ void Pipeline::bind() {
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 }
 
+const ShaderUniform& Pipeline::uniform(const char* str) {
+    const auto uniform = _uniforms.find(str);
+    assert(uniform != _uniforms.end());
+    return uniform->second;
+}
+
 GLuint Pipeline::_load_shader(const GLenum stage, const char* glsl) {
     GLuint shader = glCreateShader(stage); GL_NO_ERROR;
     const GLint length = strlen(glsl);
@@ -220,8 +239,9 @@ void Pipeline::_reflect_program() {
         GLsizei length;
         glGetActiveUniform(program, u, uniform_max_length, &length, &uniform.length, &uniform.type, uniform_name.get());
         uniform.name = uniform_name.get();
-        assert(_uniforms.find(uniform.name) == _uniforms.end()); 
-        fprintf(stderr, "found uniform %s\n", uniform.name.c_str());
+        assert(_uniforms.find(uniform.name) == _uniforms.end());
+        uniform.binding = glGetUniformLocation(program, uniform_name.get()); GL_NO_ERROR;
+        fprintf(stderr, "found uniform %s length %d type %s binding %d \n", uniform.name.c_str(), uniform.length, ShaderUniform::type_to_string(uniform.type), uniform.binding);
         _uniforms[uniform.name] = uniform;
     }
 }

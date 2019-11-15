@@ -89,6 +89,8 @@ struct ShaderUniform {
     GLint       binding;
     GLsizei     length;
     GLenum      type;
+
+    static const char* type_to_string(const GLenum type);
 };
 
 struct Pipeline {
@@ -103,6 +105,7 @@ struct Pipeline {
         const int   height
     );
     void bind();
+    const ShaderUniform& uniform(const char* str);
 
     GLuint shader_vert;
     GLuint shader_frag;
@@ -117,5 +120,4 @@ private:
     void _reflect_program();
 
     std::unordered_map<std::string, ShaderUniform> _uniforms;
-  
 };

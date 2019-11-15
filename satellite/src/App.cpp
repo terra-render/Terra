@@ -132,6 +132,7 @@ App::App ( int argc, char** argv ) {
 }
 
 App::~App() {
+
 }
 
 void App::_set_renderer(const string& type) {
@@ -148,7 +149,11 @@ void App::_set_renderer(const string& type) {
 }
 
 void App::_set_camera(const string& type) {
-    _camera.reset(new Camera);
+    OrthographicCamera* camera = new OrthographicCamera;
+    camera->resize(_gfx.width(), _gfx.height());
+    camera->set_position(10.f, 10.f, 10.f);
+    camera->set_lookat(0.f, 0.f, 0.f);
+    _camera.reset(camera);
 }
 
 void App::_clear() {
@@ -173,10 +178,13 @@ int App::run () {
 
         // begin frame
         ImGui_ImplGlfwGL3_NewFrame();
-        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        //glClearColor(0.15f, 0.15f, 0.15f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClearColor(0.15f, 0.15f, 0.15f, 1.f);
 
-        // update
+        // update camera
+        assert(_camera.get());
+        _camera->update_transformations();
+
         if (_renderer && !_renderer->is_paused()) {
             assert(_camera.get());
             _renderer->update(
@@ -188,6 +196,8 @@ int App::run () {
         }
 
         // draw
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glUseProgram(0);
          _visualizer.draw();
         _console.draw ( _gfx.width(), _gfx.height() );
         ImGui::Render();
