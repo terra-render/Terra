@@ -11,14 +11,9 @@ out gl_PerVertex {
 	vec4 gl_Position;
 };
 
-uniform PerView {
-	mat4 u_clip_from_world;
-};
-
-uniform PerObject {
-	mat4 u_world_from_object;
-	mat3 u_world_from_object_invT;
-};
+uniform mat4 u_clip_from_world;
+uniform mat4 u_world_from_object;
+uniform mat3 u_world_from_object_invT;
 
 layout(location = 0) out vec3 normal_view;
 

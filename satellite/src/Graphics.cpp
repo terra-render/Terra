@@ -240,7 +240,8 @@ void Pipeline::_reflect_program() {
         glGetActiveUniform(program, u, uniform_max_length, &length, &uniform.length, &uniform.type, uniform_name.get());
         uniform.name = uniform_name.get();
         assert(_uniforms.find(uniform.name) == _uniforms.end());
-        uniform.binding = glGetUniformLocation(program, uniform_name.get()); GL_NO_ERROR;
+        uniform.binding = glGetUniformLocation(program, uniform.name.c_str()); GL_NO_ERROR;
+
         fprintf(stderr, "found uniform %s length %d type %s binding %d \n", uniform.name.c_str(), uniform.length, ShaderUniform::type_to_string(uniform.type), uniform.binding);
         _uniforms[uniform.name] = uniform;
     }

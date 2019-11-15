@@ -16,7 +16,7 @@ Renderer::Renderer() {
         _render_target,
         shader_vert_text,
         shader_frag_text,
-        100, 100
+        1280, 720
     );
 
     OS::free(shader_vert_text);
@@ -44,7 +44,7 @@ void ObjectRenderer::update(
     const ShaderUniform& u_world_from_object_invT = _pipeline.uniform("u_world_from_object_invT");
     assert(u_world_from_object_invT.type == GL_FLOAT_MAT3);
 
-    glClearColor(1.f, 0.f, 1.f, 1.f); GL_NO_ERROR;
+    glClearColor(0.15f, 0.15f, 0.15f, 1.f); GL_NO_ERROR;
     glClearDepth(1.); GL_NO_ERROR;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); GL_NO_ERROR;
 
@@ -54,7 +54,7 @@ void ObjectRenderer::update(
     glUniformMatrix4fv(u_clip_from_world.binding, 1, GL_FALSE, (const GLfloat*)clip_from_world); GL_NO_ERROR;
     for (const Object& o : scene.objects()) {
         glUniformMatrix4fv(u_world_from_object.binding, 1, GL_FALSE, (const GLfloat*)o.world_from_object); GL_NO_ERROR;
-        glUniformMatrix4fv(u_world_from_object_invT.binding, 1, GL_FALSE, (const GLfloat*)o.world_from_object_invT); GL_NO_ERROR;
+        glUniformMatrix3fv(u_world_from_object_invT.binding, 1, GL_FALSE, (const GLfloat*)o.world_from_object_invT); GL_NO_ERROR;
         for (size_t i = 0; i < o.render.submeshes.size(); ++i) {
             o.render.bind_vertex_input(i);
             glDrawElements(GL_TRIANGLES, o.render.submeshes[i].faces.count / 3, GL_UNSIGNED_INT, nullptr); GL_NO_ERROR;

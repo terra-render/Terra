@@ -10,6 +10,7 @@
 // satellite
 #include <OS.hpp>
 #include <Graphics.hpp>
+#include <LinearAlgebra.hpp>
 
 // gl3w
 #include <GL/gl3w.h>
@@ -69,8 +70,8 @@ struct Object {
     ID          id;
     std::string name;
     RenderData  render;
-    float       world_from_object[4][4];
-    float       world_from_object_invT[4][4];
+    mat4 world_from_object;
+    mat3 world_from_object_invT;
 };
 
 ///

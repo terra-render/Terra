@@ -10,7 +10,7 @@
 
 Object::Object() {
     mat4_identity(world_from_object);
-    mat4_identity(world_from_object_invT);
+    mat3_identity(world_from_object_invT);
 }
 
 RenderData::~RenderData() {
