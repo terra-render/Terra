@@ -9,8 +9,7 @@ Renderer::Renderer() :
     _is_paused(true),
     _selected(Object::ID_NULL) {
 
-    resize(500, 500);
-
+    resize(1280, 720);
 }
 
 void Renderer::resize (

@@ -1,11 +1,11 @@
 #version 450 core
 
-in float in_x;
-in float in_y;
-in float in_z;
-in float in_nx;
-in float in_ny;
-in float in_nz;
+layout(location = 0) in float in_x;
+layout(location = 1) in float in_y;
+layout(location = 2) in float in_z;
+layout(location = 3) in float in_nx;
+layout(location = 4) in float in_ny;
+layout(location = 5) in float in_nz;
 
 out gl_PerVertex {
 	vec4 gl_Position;

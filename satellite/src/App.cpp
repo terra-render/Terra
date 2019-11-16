@@ -151,7 +151,7 @@ void App::_set_renderer(const string& type) {
 void App::_set_camera(const string& type) {
     OrthographicCamera* camera = new OrthographicCamera;
     camera->resize(_gfx.width(), _gfx.height());
-    camera->set_position(10.f, 10.f, 10.f);
+    camera->set_position(4.f, 4.f, 4.f);
     camera->set_lookat(0.f, 0.f, 0.f);
     _camera.reset(camera);
 }
@@ -187,19 +187,15 @@ int App::run () {
 
         if (_renderer && !_renderer->is_paused()) {
             assert(_camera.get());
-            _renderer->update(
-                _scene,
-                *_camera
-            );
-
+            _renderer->update(_scene, *_camera);
             _visualizer.set_display_image(_renderer->render_target());
         }
 
         // draw
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glUseProgram(0);
-         _visualizer.draw();
-        _console.draw ( _gfx.width(), _gfx.height() );
+        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glUseProgram(0);
+        // _visualizer.draw();
+        //_console.draw ( _gfx.width(), _gfx.height() );
         ImGui::Render();
         ImGui_ImplGlfwGL3_RenderDrawData ( ImGui::GetDrawData() );
 

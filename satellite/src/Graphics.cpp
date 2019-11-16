@@ -188,6 +188,8 @@ void Pipeline::reset(
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     _reflect_program();
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
 
 void Pipeline::bind() {
@@ -195,7 +197,10 @@ void Pipeline::bind() {
     assert(glIsFramebuffer(fbo));
     
     glUseProgram(program);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    //glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_DEPTH_TEST);
+    glViewport(0, 0, 800, 800);
 }
 
 const ShaderUniform& Pipeline::uniform(const char* str) {
