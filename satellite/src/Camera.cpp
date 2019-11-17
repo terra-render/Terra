@@ -39,7 +39,7 @@ void OrthographicCamera::update_transformations() {
     const float fov_y = M_PI_4;
     mat4_perspective(_clip_from_view, fov_y, (float)_width / _height, 1e-4, 1000.f);
 
-#if 1
+#if 0
     printf("view_from_world\n");
     printf("%f %f %f %f\n", _view_from_world[0][0], _view_from_world[0][1], _view_from_world[0][2], _view_from_world[0][3]);
     printf("%f %f %f %f\n", _view_from_world[1][0], _view_from_world[1][1], _view_from_world[1][2], _view_from_world[1][3]);

@@ -151,7 +151,7 @@ void App::_set_renderer(const string& type) {
 void App::_set_camera(const string& type) {
     OrthographicCamera* camera = new OrthographicCamera;
     camera->resize(_gfx.width(), _gfx.height());
-    camera->set_position(4.f, 4.f, 4.f);
+    camera->set_position(4.f, 10.f, 6.f);
     camera->set_lookat(0.f, 0.f, 0.f);
     _camera.reset(camera);
 }

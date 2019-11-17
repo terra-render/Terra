@@ -32,7 +32,7 @@ void RenderData::construct_vertex_layout() {
         for (int i = 0; i < 6; ++i) {
             glVertexArrayVertexBuffer(vao, i, vertex_streams[i].buf, 0, vertex_streams[i].stride()); GL_NO_ERROR;
             glEnableVertexArrayAttrib(vao, i); GL_NO_ERROR;
-            glVertexArrayAttribFormat(vao, i, vertex_streams[i].stride(), GL_FLOAT, GL_FALSE, 0); GL_NO_ERROR;
+            glVertexArrayAttribFormat(vao, i, 1, GL_FLOAT, GL_FALSE, 0); GL_NO_ERROR;
             glVertexArrayAttribBinding(vao, i, i); GL_NO_ERROR;
         }
 

@@ -118,5 +118,6 @@ void Buffer<T>::upload() {
     assert(usage != GL_INVALID_ENUM);
 
     glBindBuffer(usage, buf);
-    glBufferData(usage, sizeof(T) * count, ptr.get(), GL_STATIC_DRAW);
+    const size_t byte_size = sizeof(T) * count;
+    glBufferData(usage, byte_size, ptr.get(), GL_STATIC_DRAW);
 }

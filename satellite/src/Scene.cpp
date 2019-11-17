@@ -77,7 +77,7 @@ bool Scene::_load_scene ( const char* filename ) {
     options.compute_bitangents = true;
     options.compute_bounds = true;
     options.compute_face_normals = true;
-    options.recompute_vertex_normals = true;
+    options.recompute_vertex_normals = false;
     options.remove_vertex_duplicates = true;
     options.flip_faces = false;
     options.flip_texcoord_v = false;
@@ -271,8 +271,17 @@ Object::ID Scene::add_object(
     obj.render.nx.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_x);
     obj.render.ny.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_y);
     obj.render.nz.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_z);
-
     obj.render.submeshes.reserve(model->mesh_count);
+
+#if 1
+    printf("vertex count %d\n", model->vertex_count);
+    for (uint32_t i = 0; i < model->vertex_count; ++i) {
+        printf("pos %f %f %f normal %f %f %f\n",
+            model->vertex_data.pos_x[i], model->vertex_data.pos_y[i], model->vertex_data.pos_z[i],
+            model->vertex_data.norm_x[i], model->vertex_data.norm_y[i], model->vertex_data.norm_z[i]);
+    }
+#endif
+
     for (uint32_t m = 0; m < model->mesh_count; ++m) {
         RenderData::Submesh mesh;
         mesh.material = model->meshes->material_id;
@@ -283,6 +292,12 @@ Object::ID Scene::add_object(
             mesh.faces.ptr.get()[f * 3 + 1] = model->meshes[m].face_data.idx_b[f];
             mesh.faces.ptr.get()[f * 3 + 2] = model->meshes[m].face_data.idx_c[f];
         }
+
+#if 1
+        for (uint32_t f = 0; f < mesh.faces.count; f += 3) {
+            printf("face %d vertices %d %d %d\n", f, mesh.faces.ptr.get()[f + 0], mesh.faces.ptr.get()[f + 1], mesh.faces.ptr.get()[f + 2]);
+        }
+#endif
 
         mesh.faces.upload();
         obj.render.submeshes.emplace_back(move(mesh));

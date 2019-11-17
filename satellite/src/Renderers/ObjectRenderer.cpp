@@ -9,7 +9,7 @@
 
 ObjectRenderer::ObjectRenderer() : 
 Renderer::Renderer() {
-    char* shader_vert_text = OS::read_file_to_string("shaders/object.vert.glsl");
+    char* shader_vert_text = OS::read_file_to_string("shaders/object.vert.glsl"); 
     char* shader_frag_text = OS::read_file_to_string("shaders/object.frag.glsl");
 
     _pipeline.reset(
