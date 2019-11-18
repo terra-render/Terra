@@ -73,6 +73,7 @@ class GFXLayer {
     void  swap_buffers ();
     void* get_window ();
     void  update_config();
+    GLFWwindow* window_handle();
 
   private:
     void _resize ( int width, int height );

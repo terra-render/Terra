@@ -37,15 +37,18 @@
     <Filter Include="Satellite Sources\Renderers">
       <UniqueIdentifier>{1f425f8f-93b2-479b-aa86-c6428f735287}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Satellite Headers\Panels">
+      <UniqueIdentifier>{d20b10d5-3c2a-48a5-b921-19bdbd3f9332}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Satellite Sources\Panels">
+      <UniqueIdentifier>{cfc7f863-e777-4a3d-94fa-c4549ae15e10}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\App.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Cloto.h">
-      <Filter>Satellite Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\Console.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Graphics.hpp">
@@ -58,9 +61,6 @@
       <Filter>Satellite Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Scene.hpp">
-      <Filter>Satellite Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\Visualization.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\include\Apollo.h">
@@ -159,12 +159,21 @@
     <ClInclude Include="..\include\LinearAlgebra.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\UI.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Panels\Console.hpp">
+      <Filter>Satellite Headers\Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Panels\Visualizer.hpp">
+      <Filter>Satellite Headers\Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\CameraControls.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
-      <Filter>Satellite Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\Console.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Graphics.cpp">
@@ -174,9 +183,6 @@
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Scene.cpp">
-      <Filter>Satellite Sources</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\Visualization.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Config.cpp">
@@ -274,6 +280,18 @@
       <Filter>Satellite Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Camera.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\UI.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Panels\Console.cpp">
+      <Filter>Satellite Sources\Panels</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Panels\Visualizer.cpp">
+      <Filter>Satellite Sources\Panels</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\CameraControls.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
   </ItemGroup>

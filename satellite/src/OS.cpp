@@ -4,17 +4,22 @@
 // libc
 #include <cstdio>
 #include <cassert>
+#include <fstream>
 
 // win32
 #include <Windows.h>
 
 namespace OS {
-    void* allocate(size_t bytes) {
+    void* allocate(
+        const size_t bytes
+    ) {
         return malloc(bytes);
         //return _aligned_malloc(bytes, 16);
     }
 
-    void free(void* ptr) {
+    void free(
+        void* ptr
+    ) {
         ::free(ptr);
         //_aligned_free(ptr);
     }
@@ -43,5 +48,9 @@ namespace OS {
 exit:
         fclose(fp);
         return buf;
+    }
+
+    bool file_exists(const char* filename) {
+        return std::ifstream(filename).good();
     }
 }

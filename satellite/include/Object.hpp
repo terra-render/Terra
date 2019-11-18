@@ -35,6 +35,14 @@ struct Buffer {
     constexpr size_t stride() { return sizeof(T); }
 };
 
+enum RenderFlags {
+    RENDER_FLAG_NONE = 0x0,
+    RENDER_FLAG_ACTIVE = 1 << 1,
+    RENDER_FLAG_HIDE = 1 << 2,
+    RENDER_FLAG_DOUBLE_SIDED = 1 << 3
+};
+using RenderFlagBits = int;
+
 struct RenderData {
     ~RenderData();
 
@@ -56,6 +64,7 @@ struct RenderData {
     Buffer<float> ny;
     Buffer<float> nz;
     std::vector<Submesh> submeshes;
+    RenderFlagBits flags = RENDER_FLAG_NONE;
 
 private:
     void _delete_vertex_layout();

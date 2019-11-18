@@ -273,7 +273,7 @@ Object::ID Scene::add_object(
     obj.render.nz.allocate(GL_ARRAY_BUFFER, model->vertex_count, model->vertex_data.norm_z);
     obj.render.submeshes.reserve(model->mesh_count);
 
-#if 1
+#if 0
     printf("vertex count %d\n", model->vertex_count);
     for (uint32_t i = 0; i < model->vertex_count; ++i) {
         printf("pos %f %f %f normal %f %f %f\n",
@@ -293,7 +293,7 @@ Object::ID Scene::add_object(
             mesh.faces.ptr.get()[f * 3 + 2] = model->meshes[m].face_data.idx_c[f];
         }
 
-#if 1
+#if 0
         for (uint32_t f = 0; f < mesh.faces.count; f += 3) {
             printf("face %d vertices %d %d %d\n", f, mesh.faces.ptr.get()[f + 0], mesh.faces.ptr.get()[f + 1], mesh.faces.ptr.get()[f + 2]);
         }

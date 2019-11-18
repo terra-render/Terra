@@ -10,6 +10,11 @@
 #include <Logging.hpp>
 #include <Renderers/TerraRenderer.hpp>
 #include <Renderers/ObjectRenderer.hpp>
+#include <Panels/Console.hpp>
+#include <Panels/Visualizer.hpp>
+#include <Camera.hpp>
+#include <CameraControls.hpp>
+#include <UI.hpp>
 
 // Terra
 #include <TerraPresets.h>
@@ -17,10 +22,6 @@
 
 // GLFW
 #include <glfw/glfw3.h>
-
-// Imgui
-#include <imgui.h>
-#include <examples/opengl3_example/imgui_impl_glfw_gl3.h>
 
 #include <Commdlg.h>
 
@@ -49,7 +50,6 @@ using namespace std;
 #define CMD_MESH_LIST_NAME "list"
 #define CMD_MESH_MOVE_NAME "move"
 
-#define DEFAULT_UI_FONT "Inconsolata.ttf"
 
 namespace {
     // Human friendly formatted multiline string literal
@@ -100,29 +100,14 @@ namespace {
 
         return ret;
     }
+}
 
-    bool file_exists ( const char* filename ) {
-        return std::ifstream ( filename ).good();
-    }
+App* key_receiver = nullptr;
+void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    assert(key_receiver);
 
-    string find_default_ui_font() {
-        if ( file_exists ( DEFAULT_UI_FONT ) ) {
-            return DEFAULT_UI_FONT;
-        }
-
-        if ( file_exists ( "../" DEFAULT_UI_FONT ) ) {
-            return "../" DEFAULT_UI_FONT;
-        }
-
-        if ( file_exists ( "fonts/" DEFAULT_UI_FONT ) ) {
-            return "fonts/" DEFAULT_UI_FONT;
-        }
-
-        if ( file_exists ( "../fonts/" DEFAULT_UI_FONT ) ) {
-            return "../fonts/" DEFAULT_UI_FONT;
-        }
-
-        return "";
+    if (key_receiver->_camera_controls.get()) {
+        key_receiver->_camera_controls->key_callback(key, scancode, action, mods);
     }
 }
 
@@ -131,10 +116,14 @@ App::App ( int argc, char** argv ) {
     Config::init();
 }
 
-App::~App() {
+App::~App() { }
 
+void App::_set_ui() {
+    _ui = shared_ptr<Panel>(new UI(&_gfx));
+    ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new Console(_ui))));
+    _ui->init();
 }
-
+   
 void App::_set_renderer(const string& type) {
     if (type.compare(RENDER_OPT_RENDERER_OBJECT) == 0) {
         _renderer.reset(new ObjectRenderer);
@@ -150,18 +139,24 @@ void App::_set_renderer(const string& type) {
 
 void App::_set_camera(const string& type) {
     OrthographicCamera* camera = new OrthographicCamera;
-    camera->resize(_gfx.width(), _gfx.height());
-    camera->set_position(4.f, 10.f, 6.f);
-    camera->set_lookat(0.f, 0.f, 0.f);
+    
+    vec3 position, direction;
+    vec3_set(position, 5.f, 5.f, 5.f);
+    vec3_set(direction, -1.f, -1.f, -1.f);
+    camera->set_lookat(position, direction);
+    camera->resize(1280, 720);
+
     _camera.reset(camera);
+}
+
+void App::_set_camera_controls(const std::string& type) {
+    _camera_controls.reset(new FirstPersonControls);
 }
 
 void App::_clear() {
     if (_renderer) {
         _renderer->clear();
     }
-
-    _visualizer.update_stats();
 }
 
 int App::run () {
@@ -172,32 +167,29 @@ int App::run () {
         return boot_result;
     }
 
+    _time_prev = glfwGetTime();
+
     while ( !_gfx.should_quit () ) {
+        const double _time_now = glfwGetTime();
+        _dt = _time_now - _time_prev;
+        _time_prev = _time_now;
+
         // i/o
         _gfx.process_events ();
 
-        // begin frame
-        ImGui_ImplGlfwGL3_NewFrame();
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glClearColor(0.15f, 0.15f, 0.15f, 1.f);
-
         // update camera
         assert(_camera.get());
-        _camera->update_transformations();
+        //_camera_controls->update(*_camera.get(), _dt);
 
+        // Use active renderer to a offscreen target
         if (_renderer && !_renderer->is_paused()) {
             assert(_camera.get());
             _renderer->update(_scene, *_camera);
-            _visualizer.set_display_image(_renderer->render_target());
         }
 
-        // draw
-        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        //glUseProgram(0);
-        // _visualizer.draw();
-        //_console.draw ( _gfx.width(), _gfx.height() );
-        ImGui::Render();
-        ImGui_ImplGlfwGL3_RenderDrawData ( ImGui::GetDrawData() );
+        // Draw interface
+        assert(_ui);
+        _ui->draw();
 
         // present
         _gfx.swap_buffers ();
@@ -207,23 +199,12 @@ int App::run () {
     return EXIT_SUCCESS;
 }
 
+#if 0
 void App::_init_ui() {
-    // Initializing ImGui
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    ImGui_ImplGlfwGL3_Init ( ( GLFWwindow* ) _gfx.get_window(), true );
-    ImGui::StyleColorsDark();
-    io.IniFilename = nullptr;
-    string font_file = find_default_ui_font();
+    Console* console = (Console*)(((UI*)_ui.get())->find("console").get());
 
-    if ( font_file.empty() ) {
-        io.Fonts->AddFontDefault();
-    } else {
-        io.Fonts->AddFontFromFileTTF ( font_file.c_str(), 15.f );
-    }
-
-    Log::redirect_console ( &_console );
-    _console.set_callback ( [this] ( const CommandArgs & args ) -> int {
+    Log::redirect_console ( console );
+    console->set_callback ( [this] ( const CommandArgs & args ) -> int {
         if ( args.empty() ) {
             return 1;
         }
@@ -237,6 +218,9 @@ void App::_init_ui() {
         return _c_map[args[0]] ( args_only );
     } );
 }
+#endif
+
+#if 0
 
 void App::_init_cmd_map() {
     // help
@@ -609,37 +593,46 @@ success:
     _c_map[CMD_STATS_NAME] = cmd_stats;
     _c_map[CMD_MESH_NAME] = cmd_mesh;
 }
+#endif
 
 int App::_boot() {
+    // Initialize graphics component
     int width = Config::read_i ( Config::RENDER_WIDTH );
     int height = Config::read_i ( Config::RENDER_HEIGHT );
     bool gfx_init = _gfx.init ( width, height, "Satellite",
     [ = ] ( int w, int h ) { // on resize
     },
     [ = ] ( const ImGuiIO & io ) { // on key
-        if ( io.KeysDown[GLFW_KEY_GRAVE_ACCENT] && io.KeysDownDuration[GLFW_KEY_GRAVE_ACCENT] == 0 ) {
-            _console.toggle();
-        }
     } );
 
     if ( !gfx_init ) {
         return EXIT_FAILURE;
     }
 
-    _init_ui();
     Log::flush();
 
     if ( !Config::load () ) {
         Log::warning ( STR ( "No configuration file found, defaulting all options." ) );
     }
 
-    _visualizer.init ( &_gfx );
-    _init_cmd_map();
-    _c_map[CMD_LOAD_NAME] ( { Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() } );
+    // Initialize components
     _on_config_change ( true );
-
+    _set_ui();
     _set_renderer(Config::read_s(Config::RENDERER_TYPE));
     _set_camera("");
+    _set_camera_controls("");
+
+    // Register input callbacks
+    key_receiver = this;
+    glfwSetInputMode(_gfx.window_handle(), GLFW_LOCK_KEY_MODS, GLFW_TRUE);
+    glfwSetKeyCallback(_gfx.window_handle(), glfw_key_callback);
+
+    // Load scene
+    const string scene_path = Config::read_s(Config::RENDER_SCENE_PATH);
+    if (!scene_path.empty()) {
+        _scene.load(scene_path.c_str());
+    }
+
     return EXIT_SUCCESS;
 }
 
@@ -678,7 +671,7 @@ int App::_opt_set ( bool clear, std::function< int() > setter ) {
 void App::_on_config_change ( bool clear ) {
     _scene.update_config();
     _gfx.update_config();
-    _visualizer.update_config();
+    //_visualizer.update_config();
 
     if ( clear ) {
         _clear();

@@ -1,5 +1,7 @@
 #pragma once
 
+#if 0
+
 // stdlib
 #include <cstdint>
 #include <memory>
@@ -8,7 +10,6 @@
 
 // Satellite
 #include <Graphics.hpp>
-#include <Console.hpp>
 
 // Terra
 #include <Terra.h>
@@ -88,3 +89,4 @@ class Visualizer {
     std::vector<Stats> _stats;
     ImageID _image = 0;
 };
+#endif

@@ -7,6 +7,7 @@
 
 // Satellite
 #include <Graphics.hpp>
+#include <UI.hpp>
 
 class Console;
 
@@ -17,10 +18,13 @@ struct ImGuiTextEditCallbackData;
 struct ImFont;
 
 // Adapted from Imgui's example
-class Console {
+class Console : public Panel {
   public:
-    Console ();
+    Console (const PanelSharedPtr& parent);
     ~Console();
+
+    void init() override;
+    void draw() override;
 
     void set_font ( ImFont* font );
 

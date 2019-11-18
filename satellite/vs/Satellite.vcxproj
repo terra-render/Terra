@@ -226,19 +226,21 @@
     <ClInclude Include="..\include\Apollo.h" />
     <ClInclude Include="..\include\App.hpp" />
     <ClInclude Include="..\include\Camera.hpp" />
+    <ClInclude Include="..\include\CameraControls.hpp" />
     <ClInclude Include="..\include\Cloto.h" />
     <ClInclude Include="..\include\Config.hpp" />
-    <ClInclude Include="..\include\Console.hpp" />
     <ClInclude Include="..\include\Graphics.hpp" />
     <ClInclude Include="..\include\LinearAlgebra.hpp" />
     <ClInclude Include="..\include\Logging.hpp" />
     <ClInclude Include="..\include\Object.hpp" />
     <ClInclude Include="..\include\OS.hpp" />
+    <ClInclude Include="..\include\Panels\Console.hpp" />
+    <ClInclude Include="..\include\Panels\Visualizer.hpp" />
     <ClInclude Include="..\include\Renderer.hpp" />
     <ClInclude Include="..\include\Renderers\ObjectRenderer.hpp" />
     <ClInclude Include="..\include\Renderers\TerraRenderer.hpp" />
     <ClInclude Include="..\include\Scene.hpp" />
-    <ClInclude Include="..\include\Visualization.hpp" />
+    <ClInclude Include="..\include\UI.hpp" />
     <ClInclude Include="..\src\stb_image_write.h" />
   </ItemGroup>
   <ItemGroup>
@@ -269,18 +271,20 @@
     <ClCompile Include="..\dependencies\imgui\imgui_draw.cpp" />
     <ClCompile Include="..\src\App.cpp" />
     <ClCompile Include="..\src\Camera.cpp" />
+    <ClCompile Include="..\src\CameraControls.cpp" />
     <ClCompile Include="..\src\Config.cpp" />
-    <ClCompile Include="..\src\Console.cpp" />
     <ClCompile Include="..\src\Graphics.cpp" />
     <ClCompile Include="..\src\Logging.cpp" />
     <ClCompile Include="..\src\Object.cpp" />
     <ClCompile Include="..\src\OS.cpp" />
+    <ClCompile Include="..\src\Panels\Console.cpp" />
+    <ClCompile Include="..\src\Panels\Visualizer.cpp" />
     <ClCompile Include="..\src\Renderer.cpp" />
     <ClCompile Include="..\src\Renderers\ObjectRenderer.cpp" />
     <ClCompile Include="..\src\Renderers\TerraRenderer.cpp" />
     <ClCompile Include="..\src\Satellite.cpp" />
     <ClCompile Include="..\src\Scene.cpp" />
-    <ClCompile Include="..\src\Visualization.cpp" />
+    <ClCompile Include="..\src\UI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\include\TerraMath.inl" />

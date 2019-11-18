@@ -130,6 +130,10 @@ void GFXLayer::update_config() {
     }
 }
 
+GLFWwindow* GFXLayer::window_handle() {
+    return _window;
+}
+
 const char* ShaderUniform::type_to_string(const GLenum type) {
     switch (type) {
         case GL_FLOAT: return "float";
@@ -200,7 +204,7 @@ void Pipeline::bind() {
     //glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_DEPTH_TEST);
-    glViewport(0, 0, 800, 800);
+    glViewport(0, 0, 1280, 720);
 }
 
 const ShaderUniform& Pipeline::uniform(const char* str) {

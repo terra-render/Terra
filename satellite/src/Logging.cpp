@@ -2,7 +2,7 @@
 #include <Logging.hpp>
 
 // Satellite
-#include <Console.hpp>
+#include <Panels/Console.hpp>
 
 // stdlib
 #include <cstdarg>

@@ -271,7 +271,7 @@ static inline void mat4_mul(mat4 M, const mat4 a, const mat4 b) {
 
     mat4_dup(M, temp);
 }
-static inline void mat4_mul_vec4(vec4 r, mat4 M, vec4 v) {
+static inline void mat4_mul_vec4(vec4 r, const mat4 M, vec4 v) {
     int i, j;
 
     for (j = 0; j < 4; ++j) {

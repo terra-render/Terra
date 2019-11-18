@@ -1,3 +1,4 @@
+#if 0
 // Header
 #include <Visualization.hpp>
 
@@ -480,3 +481,5 @@ void Visualizer::update_stats() {
 
 #endif
 }
+
+#endif
