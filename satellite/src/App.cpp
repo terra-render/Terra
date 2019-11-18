@@ -12,7 +12,9 @@
 #include <Renderers/ObjectRenderer.hpp>
 #include <Panels/Console.hpp>
 #include <Panels/Visualizer.hpp>
+#include <Panels/RendererControls.hpp>
 #include <Camera.hpp>
+#include <Messenger.hpp>
 #include <CameraControls.hpp>
 #include <UI.hpp>
 
@@ -121,6 +123,7 @@ App::~App() { }
 void App::_set_ui() {
     _ui = shared_ptr<Panel>(new UI(&_gfx));
     ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new Console(_ui))));
+    ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new RendererControls(_ui))));
     _ui->init();
 }
    
@@ -170,6 +173,8 @@ int App::run () {
     _time_prev = glfwGetTime();
 
     while ( !_gfx.should_quit () ) {
+        Messenger::dispatch();
+
         const double _time_now = glfwGetTime();
         _dt = _time_now - _time_prev;
         _time_prev = _time_now;

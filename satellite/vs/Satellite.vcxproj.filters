@@ -162,13 +162,22 @@
     <ClInclude Include="..\include\UI.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\Panels\Console.hpp">
-      <Filter>Satellite Headers\Panels</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\Panels\Visualizer.hpp">
       <Filter>Satellite Headers\Panels</Filter>
     </ClInclude>
     <ClInclude Include="..\include\CameraControls.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Panels\Console.hpp">
+      <Filter>Satellite Headers\Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Panels\RendererControls.hpp">
+      <Filter>Satellite Headers\Panels</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Messenger.hpp">
+      <Filter>Satellite Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Messages.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
   </ItemGroup>
@@ -292,6 +301,12 @@
       <Filter>Satellite Sources\Panels</Filter>
     </ClCompile>
     <ClCompile Include="..\src\CameraControls.cpp">
+      <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Panels\RendererControls.cpp">
+      <Filter>Satellite Sources\Panels</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Messenger.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
   </ItemGroup>
