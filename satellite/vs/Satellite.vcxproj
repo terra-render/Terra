@@ -238,6 +238,7 @@
     <ClInclude Include="..\include\OS.hpp" />
     <ClInclude Include="..\include\Panels\Console.hpp" />
     <ClInclude Include="..\include\Panels\RendererControls.hpp" />
+    <ClInclude Include="..\include\Panels\TextureVisualizer.hpp" />
     <ClInclude Include="..\include\Panels\Visualizer.hpp" />
     <ClInclude Include="..\include\Renderer.hpp" />
     <ClInclude Include="..\include\Renderers\ObjectRenderer.hpp" />
@@ -272,6 +273,7 @@
     <ClCompile Include="..\dependencies\imgui\imgui.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\source\Panels\TextureVisualizer.cpp" />
     <ClCompile Include="..\src\App.cpp" />
     <ClCompile Include="..\src\Camera.cpp" />
     <ClCompile Include="..\src\CameraControls.cpp" />

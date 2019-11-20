@@ -180,6 +180,9 @@
     <ClInclude Include="..\include\Messages.hpp">
       <Filter>Satellite Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\Panels\TextureVisualizer.hpp">
+      <Filter>Satellite Headers\Panels</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\App.cpp">
@@ -308,6 +311,9 @@
     </ClCompile>
     <ClCompile Include="..\src\Messenger.cpp">
       <Filter>Satellite Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\source\Panels\TextureVisualizer.cpp">
+      <Filter>Satellite Sources\Panels</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

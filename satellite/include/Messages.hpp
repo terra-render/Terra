@@ -14,6 +14,8 @@ enum MessageTypes {
     MSG_SET_CAMERA,
     MSG_SET_CAMERA_CONTROLS,
 
+    MSG_SET_RENDER_VIEW,
+
     MSG_CONSOLE_UPDATE_STATE,
     
     MESSAGE_TYPE_COUNT
@@ -28,6 +30,10 @@ struct MessageSaveRenderTarget : public MessagePayload {
 };
 
 struct MessageClearRenderTarget : public MessagePayload { };
+
+struct MessageSetRenderView : public MessagePayload {
+    // texture handle
+};
 
 struct MessageSetRenderer : public MessagePayload {
     std::string type;
@@ -48,7 +54,7 @@ struct MessageResize : public MessagePayload {
 
 enum PanelStates {
     PANEL_STATE_HIDE,
-    PANEL_STATE_
+    PANEL_STATE_SHOW
 };
 using PanelState = int;
 
