@@ -104,13 +104,19 @@ void RendererControls::draw() {
 }
 
 void RendererControls::_on_select_renderer() {
-
+    MessageSetRenderer msg;
+    msg.type = _renderer_names[_active_renderer];
+    SEND_MESSAGE(MSG_SET_RENDERER, MessageSetRenderer, msg);
 }
 
 void RendererControls::_on_select_camera() {
-
+    MessageSetCamera msg;
+    msg.type = _camera_names[_active_renderer];
+    SEND_MESSAGE(MSG_SET_CAMERA, MessageSetCamera, msg);
 }
 
 void RendererControls::_on_select_camera_controls() {
-
+    MessageSetCameraControls msg;
+    msg.type = _camera_names[_active_renderer];
+    SEND_MESSAGE(MSG_SET_CAMERA_CONTROLS, MessageSetCameraControls, msg);
 }

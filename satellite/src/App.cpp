@@ -15,6 +15,7 @@
 #include <Panels/RendererControls.hpp>
 #include <Camera.hpp>
 #include <Messenger.hpp>
+#include <Messages.hpp>
 #include <CameraControls.hpp>
 #include <UI.hpp>
 
@@ -166,6 +167,7 @@ int App::run () {
         return boot_result;
     }
 
+    _register_message_listener();
     _time_prev = glfwGetTime();
 
     while ( !_gfx.should_quit () ) {
@@ -639,6 +641,39 @@ int App::_boot() {
 
 void App::_shutdown() {
     // TODO
+}
+
+void App::_register_message_listener() {
+    Messenger::register_listener(
+        [this](const MessageType type, const MessagePayload& _data) {
+            switch (type) {
+            case MSG_SET_RENDERER: {
+                const auto& data = (const MessageSetRenderer&)_data;
+                printf("set renderer type %s \n", data.type.c_str());
+                _set_renderer(data.type);
+                break;
+            }
+
+            case MSG_SET_CAMERA: {
+                const auto& data = (const MessageSetCamera&)_data;
+                printf("set camera %s\n", data.type.c_str());
+                _set_camera(data.type);
+                break;
+            }
+            case MSG_SET_CAMERA_CONTROLS: {
+                const auto& data = (const MessageSetCamera&)_data;
+                printf("set camera controls %s\n", data.type.c_str());
+                _set_camera_controls(data.type);
+                break;
+            }
+            default: assert(false);
+            }
+
+        }, {
+            MSG_SET_RENDERER,
+            MSG_SET_CAMERA,
+            MSG_SET_CAMERA_CONTROLS
+        });
 }
 
 int App::_opt_set ( int opt, const std::string& value ) {

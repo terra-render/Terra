@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <initializer_list>
+#include <functional>
 #include <mutex>
 
 using MessageType = unsigned int;
@@ -14,18 +15,14 @@ struct MessagePayload {
 };
 using MessagePayloadPtr = std::shared_ptr<MessagePayload>;
 
-struct MessageListener {
-    virtual ~MessageListener() = default;
-
-    virtual void on_message(
-        MessageType type,
-        const MessagePayload& data
-    ) = 0;
-};
+using MessageListener = std::function<void(
+    const MessageType type,
+    const MessagePayload& data
+)>;
 
 namespace Messenger {
     void register_listener(
-        MessageListener* listener,
+        const MessageListener listener,
         const std::initializer_list<MessageType>& messages
     );
 

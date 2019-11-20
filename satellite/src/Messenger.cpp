@@ -18,7 +18,7 @@ namespace {
     struct Impl {
         // It should be one per time
         std::mutex                     mutex;
-        std::vector<MessageListener*>  listeners;
+        std::vector<MessageListener>   listeners;
         std::vector<MessageListenMask> listener_masks;
         std::vector<Message>           messages;
     };
@@ -27,7 +27,7 @@ namespace {
 }
 
 void Messenger::register_listener(
-    MessageListener* listener,
+    const MessageListener listener,
     const std::initializer_list<MessageType>& message_types
 ) {
     lock_guard<mutex> lock(impl.mutex);
@@ -37,6 +37,7 @@ void Messenger::register_listener(
     for (MessageType type : message_types) {
         mask[type] = true;
     }
+    impl.listener_masks.emplace_back(move(mask));
 }
 
 void Messenger::send (const MessageType type, MessagePayload* data) {
@@ -53,9 +54,9 @@ int Messenger::dispatch() {
     int dispatched = 0;
     for (Message& msg : impl.messages) {
         for (size_t i = 0; i < impl.listeners.size(); ++i) {
-            if (impl.listeners[msg.type]) {
+            if (impl.listener_masks[i][msg.type]) {
                 assert(msg.data);
-                impl.listeners[i]->on_message(msg.type, *msg.data);
+                impl.listeners[i](msg.type, *msg.data);
             }
         }
     }

@@ -26,13 +26,11 @@ void FirstPersonControls::update(
     vec4 right, right_prev;
     vec3_mul_cross(right, dir, up);
     
-
     if (mouse_dragging) {
         double next_mouse_pos[2];
         glfwGetCursorPos(wnd, next_mouse_pos, next_mouse_pos + 1);
         const double mouse_dx = next_mouse_pos[0] - mouse_pos[0];
         const double mouse_dy = next_mouse_pos[1] - mouse_pos[1];
-        printf("mouse delta %f %f\n", mouse_dx, mouse_dy);
 
         const double yaw_angle = mouse_dx * _speed_pixels_per_rad;
         const double pitch_angle = mouse_dy * _speed_pixels_per_rad;

@@ -9,6 +9,10 @@
 enum MessageTypes {
     MSG_LOAD_SCENE = 0,
     MSG_SAVE_RENDER_TARGET,
+    
+    MSG_SET_RENDERER,
+    MSG_SET_CAMERA,
+    MSG_SET_CAMERA_CONTROLS,
 
     MSG_CONSOLE_UPDATE_STATE,
     
@@ -23,6 +27,20 @@ struct MessageSaveRenderTarget : public MessagePayload {
     std::string path;
 };
 
+struct MessageClearRenderTarget : public MessagePayload { };
+
+struct MessageSetRenderer : public MessagePayload {
+    std::string type;
+};
+
+struct MessageSetCamera : public MessagePayload {
+    std::string type;
+};
+
+struct MessageSetCameraControls : public MessagePayload {
+    std::string type;
+};
+
 struct MessageResize : public MessagePayload {
     unsigned int width = -1;
     unsigned int height = -1;
@@ -30,7 +48,7 @@ struct MessageResize : public MessagePayload {
 
 enum PanelStates {
     PANEL_STATE_HIDE,
-    PANEL_STATE_    
+    PANEL_STATE_
 };
 using PanelState = int;
 

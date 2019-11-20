@@ -29,6 +29,7 @@ class App {
   private:
     int  _boot();
     void _shutdown();
+    void _register_message_listener();
 
     // This should not go through the App
     int _opt_set ( int opt, int value );
