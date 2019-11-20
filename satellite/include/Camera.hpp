@@ -18,6 +18,9 @@ public:
     unsigned int width() const { return _width; }
     unsigned int height() const { return _height; }
 
+    const float* position()const { return _position; }
+    const float* direction() const { return _direction; }
+
 protected:
     // Sensor plane pixel dimensions
     unsigned int _width, _height;

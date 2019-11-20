@@ -107,10 +107,6 @@ namespace {
 App* key_receiver = nullptr;
 void glfw_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     assert(key_receiver);
-
-    if (key_receiver->_camera_controls.get()) {
-        key_receiver->_camera_controls->key_callback(key, scancode, action, mods);
-    }
 }
 
 App::App ( int argc, char** argv ) {
@@ -184,7 +180,7 @@ int App::run () {
 
         // update camera
         assert(_camera.get());
-        //_camera_controls->update(*_camera.get(), _dt);
+        _camera_controls->update(_gfx.window_handle(), *_camera.get(), _dt);
 
         // Use active renderer to a offscreen target
         if (_renderer && !_renderer->is_paused()) {

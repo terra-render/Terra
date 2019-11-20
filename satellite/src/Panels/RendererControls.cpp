@@ -61,8 +61,6 @@ void RendererControls::init() {
 }
 
 void RendererControls::draw() {
-    ShowDemoWindow();
-
     if (BeginMainMenuBar()) {
         if (!_renderer_names.empty()) {
             if (BeginMenu("File")) {

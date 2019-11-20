@@ -1,5 +1,6 @@
 // Satellite
 #include <Messenger.hpp>
+#include <Messages.hpp>
 
 // libc++
 #include <cassert>

@@ -7,12 +7,7 @@
 #include <initializer_list>
 #include <mutex>
 
-enum MessageType {
-    MSG_LOAD_SCENE = 0,
-    MSG_SAVE_RENDER_TARGET = 1,
-    MSG_SAVE_
-    MESSAGE_TYPE_COUNT
-};
+using MessageType = unsigned int;
 
 struct MessagePayload { 
     virtual ~MessagePayload() = default;
