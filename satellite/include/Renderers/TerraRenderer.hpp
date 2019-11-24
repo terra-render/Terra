@@ -1,7 +1,10 @@
 #pragma once
 
-// Satellite
+// satellite
 #include <Renderer.hpp>
+
+// terra
+#include <Terra.h>
 
 //
 // Dispatches terra_render jobs
@@ -25,12 +28,16 @@ public:
     void update_config();
 
     // Getters
-    const TextureData& framebuffer();
-    bool               is_framebuffer_clear() const;
     int                iterations() const;
     ClotoThread*       thread() const;
 
 private:
+    HTerraScene _bvh;
+    TerraSceneOptions _opts;
+    TerraCamera _camera_active;
+    void _on_scene_changed (const Scene& scene);
+    void _load_scene_options();
+
     bool     _launch();
     void     _setup_threads();
     void     _push_jobs();
@@ -51,12 +58,11 @@ private:
     // Threading
     std::unique_ptr<ClotoSlaveGroup> _workers;
     uint32_t                         _tile_counter;
-    ClotoThread* _this_thread;
+    ClotoThread*                     _this_thread;
 
     // Terra
-    TerraFramebuffer                 _framebuffer;
-    TextureData                      _framebuffer_data;
-    std::vector<TerraRenderArgs>     _job_args;
+    TerraFramebuffer             _framebuffer;
+    std::vector<TerraRenderArgs> _job_args;
 
     // Renderer state
     bool         _opt_render_change = true;

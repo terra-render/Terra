@@ -25,7 +25,6 @@ public:
     using Event = std::function<void() >;
     using TileEvent = std::function<void(size_t x, size_t y, size_t w, size_t h) >;
     using Settings = std::unordered_map<std::string, Config::Opt>;
-
 public:
     Renderer();
     virtual ~Renderer() = default;
@@ -45,7 +44,7 @@ public:
         const Settings& settings
     );
 
-    const ImageID& render_target() const { return _render_target; }
+    const ImageHandle& render_target() const { return _render_target; }
     bool is_camera_locked() const { return _is_camera_locked; }
     bool is_paused()const { return _is_paused; }
     void set_selected(const Object::ID& id) { _selected = id; }
@@ -53,7 +52,7 @@ public:
 
 protected:
     Settings    _settings;
-    ImageID     _render_target;
+    ImageHandle _render_target;
     bool        _is_camera_locked;
     bool        _is_paused;
     Object::ID  _selected;

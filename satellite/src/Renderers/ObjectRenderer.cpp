@@ -12,11 +12,15 @@ Renderer::Renderer() {
     char* shader_vert_text = OS::read_file_to_string("shaders/object.vert.glsl"); 
     char* shader_frag_text = OS::read_file_to_string("shaders/object.frag.glsl");
 
-    _pipeline.reset(
+    assert(_render_target->valid());
+    _rt_depth = Image::create(_render_target->width, _render_target->height, GL_DEPTH_COMPONENT32F);
+
+    _pipeline.reset (
         _render_target,
+        _rt_depth,
         shader_vert_text,
         shader_frag_text,
-        800, 800
+        true
     );
 
     OS::free(shader_vert_text);

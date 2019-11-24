@@ -31,8 +31,8 @@ namespace Messenger {
         MessagePayload* data
     );
 
-    int dispatch();  
+    void dispatch();  
 }
 
 // please map 1-1 msg_type and msg and make this two arguments
-#define SEND_MESSAGE(type, msg_type, msg) Messenger::send(type, new msg_type(std::move(msg)))
+#define SEND_MESSAGE(type, msg_type, msg) Messenger::send(type, new msg_type(msg))

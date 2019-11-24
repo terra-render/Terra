@@ -14,6 +14,87 @@
 // libc++
 #include <memory>
 
+namespace {
+    void unpack_sized_format(
+        const GLenum sized_format,
+        int& stride,
+        GLenum& format,
+        GLenum& type
+    ) {
+        switch (sized_format) {
+        case GL_RGBA8:
+            stride = 4;
+            format = GL_RGBA;
+            type = GL_UNSIGNED_BYTE;
+            break;
+        case GL_RGBA32F:
+            stride = 16;
+            format = GL_RGBA32F;
+            type = GL_UNSIGNED_BYTE;
+            break;
+        case GL_DEPTH_COMPONENT32F:
+            stride = 16;
+            format = GL_DEPTH_COMPONENT;
+            type = GL_FLOAT;
+            break;
+        default:
+            assert(false);
+        }
+    }
+}
+
+Image::~Image() {
+    if (glIsTexture(id)) {
+        glDeleteTextures(1, &id);
+    }
+}
+
+void Image::upload(
+    int tile_x,
+    int tile_y,
+    int tile_width,
+    int tile_height
+) {
+    assert(glIsTexture(id));
+    assert(width >= 0 && height >= 0);
+    assert(pixels);
+    if (tile_x < 0) {
+        assert(tile_y < 0 && tile_width < 0 && tile_height < 0);
+        tile_x = tile_y = 0;
+        tile_width = width;
+        tile_height = height;
+    }
+
+    int stride;
+    GLenum format, type;
+    unpack_sized_format(this->format, stride, format, type);
+
+    assert(tile_width > 0 && tile_height > 0);
+    glTexSubImage2D(id, 0, tile_x, tile_y, tile_width, tile_height, format, type, pixels.get());
+}
+
+bool Image::valid()const {
+    return glIsTexture(id) && width > 0 && height > 0;
+}
+
+ImageHandle Image::create(const int width, const int height, const GLenum sized_format) {
+    Image* im = new Image;
+    im->width = width;
+    im->height = height;
+    im->format = sized_format;
+
+    GLenum gl_format, gl_type;
+    unpack_sized_format(sized_format, im->stride, gl_format, gl_type);
+
+    glCreateTextures(GL_TEXTURE_2D, 1, &im->id); GL_NO_ERROR;
+    glTextureParameteri(im->id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(im->id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
+    glTextureParameteri(im->id, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureParameteri(im->id, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
+    glTextureStorage2D(im->id, 1, im->format, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
+    return ImageHandle(im);
+}
+
 #ifdef _WIN32
 
 // Skipping notification, reporting everything else
@@ -33,7 +114,6 @@ void GLAPIENTRY opengl_debug_callback ( GLenum source, GLenum type, GLuint id, G
         fprintf(stderr, "OpenGL Warning: %s\n", message);
     } 
 }
-
 LRESULT CALLBACK window_callback ( HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam ) {
     return DefWindowProcA ( hwnd, umsg, wparam, lparam );
 }
@@ -143,34 +223,30 @@ const char* ShaderUniform::type_to_string(const GLenum type) {
         case GL_FLOAT_MAT2: return "mat2";
         case GL_FLOAT_MAT3: return "mat3";
         case GL_FLOAT_MAT4: return "mat4";
+        case GL_SAMPLER_2D: return "sampler2D";
         default: assert(false);
     }
 }
 
-void Pipeline::reset(
-    GLuint rt_color,
+void Pipeline::reset (
+    const ImageHandle rt_color,
+    const ImageHandle rt_depth,
     const char* shader_vert_src,
     const char* shader_frag_src,
-    const int   width,
-    const int   height
-) {
+    const bool depth_test
+) { 
     assert(shader_vert_src);
     assert(shader_frag_src);
-    assert(width);
-    assert(height);
-    assert(glIsTexture(rt_color));
 
-    glCreateTextures(GL_TEXTURE_2D, 1, &rt_depth); GL_NO_ERROR;
-    glTextureParameteri(rt_depth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(rt_depth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(rt_depth, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureParameteri(rt_depth, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureStorage2D(rt_depth, 1, GL_DEPTH_COMPONENT32, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
-
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, rt_color, 0); GL_NO_ERROR;
-    glNamedFramebufferTexture(fbo, GL_DEPTH_ATTACHMENT, rt_depth, 0); GL_NO_ERROR;
+    if (rt_color == nullptr) {
+        assert(rt_depth == nullptr);
+        fbo = 0;
+    }else {
+        glGenFramebuffers(1, &fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, rt_color->id, 0); GL_NO_ERROR;
+        glNamedFramebufferTexture(fbo, GL_DEPTH_ATTACHMENT, rt_depth->id, 0); GL_NO_ERROR;
+    }
 
     shader_vert = _load_shader(GL_VERTEX_SHADER, shader_vert_src);
     shader_frag = _load_shader(GL_FRAGMENT_SHADER, shader_frag_src);
@@ -189,22 +265,47 @@ void Pipeline::reset(
         fprintf(stderr, "GLSL linker error %s\n", linker_message);
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
     _reflect_program();
+    viewport[0] = viewport[1] = 0;
 
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    if (fbo == 0) {
+        viewport[2] = Config::read_i(Config::RENDER_WIDTH);
+        viewport[3] = Config::read_i(Config::RENDER_HEIGHT);
+    }
+    else {
+        assert(rt_color->width == rt_depth->width);
+        assert(rt_color->height == rt_depth->height);
+        viewport[2] = (GLsizei)rt_color->width;
+        viewport[3] = (GLsizei)rt_color->height;
+    }
+
+    enable_depth_test = depth_test;
+
 }
 
 void Pipeline::bind() {
     assert(glIsProgram(program));
-    assert(glIsFramebuffer(fbo));
+    if (fbo != 0) {
+        assert(glIsFramebuffer(fbo));
+    }
     
     glUseProgram(program);
-    //glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDisable(GL_DEPTH_TEST);
-    glViewport(0, 0, 1280, 720);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    if (enable_depth_test) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+
+    if (enable_wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    } else {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 }
 
 const ShaderUniform& Pipeline::uniform(const char* str) {

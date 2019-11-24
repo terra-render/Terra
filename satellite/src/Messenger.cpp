@@ -16,11 +16,10 @@ namespace {
     };
 
     struct Impl {
-        // It should be one per time
-        std::mutex                     mutex;
-        std::vector<MessageListener>   listeners;
-        std::vector<MessageListenMask> listener_masks;
-        std::vector<Message>           messages;
+        mutex mutex;
+        vector<MessageListener>   listeners;
+        vector<MessageListenMask> listener_masks;
+        vector<Message>           messages;
     };
 
     static Impl impl;
@@ -48,19 +47,23 @@ void Messenger::send (const MessageType type, MessagePayload* data) {
     impl.messages.emplace_back(move(msg));
 }
 
-int Messenger::dispatch() {
-    lock_guard<mutex> lock(impl.mutex);
+void Messenger::dispatch() {
+    size_t next_msg = 0;
+    impl.mutex.lock();
+    while (next_msg < impl.messages.size()) {
+        auto msg = impl.messages[next_msg];
+        impl.mutex.unlock(); // We want to be able to listeners to send new messages
 
-    int dispatched = 0;
-    for (Message& msg : impl.messages) {
         for (size_t i = 0; i < impl.listeners.size(); ++i) {
             if (impl.listener_masks[i][msg.type]) {
                 assert(msg.data);
                 impl.listeners[i](msg.type, *msg.data);
             }
         }
-    }
 
+        ++next_msg;
+        impl.mutex.lock();
+    }
     impl.messages.clear();
-    return dispatched;
+    impl.mutex.unlock();
 }

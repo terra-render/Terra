@@ -1,10 +1,11 @@
 #pragma once
 
-// C++ STL
+// libc++
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <memory>
 
 // gl3w
 #include <GL/gl3w.h>
@@ -13,49 +14,32 @@
 // imgui
 #include <imgui.h>
 
+#ifndef GL_NO_ERROR
 #define GL_NO_ERROR assert(glGetError() == 0)
+#endif
 
-#define OPENGL_RESOURCE_COPY_VALID_ID(other_res) assert(res != INVALID_ID); res = other_res;
-#define DEFINE_OPENGL_RESOURCE(name, dtor)\
-struct name {\
-    static const GLuint INVALID_ID = (GLuint)-1;\
-    virtual ~name() {\
-        dtor;\
-    }\
-\
-    name(GLuint res = INVALID_ID) : res(res) { assert(res != INVALID_ID); }\
-\
-    name(name&& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; }\
-    name(name& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; }\
-    name& operator=(name&& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; return *this; }\
-    name& operator=(name& other) { OPENGL_RESOURCE_COPY_VALID_ID(other.res) other.res = INVALID_ID; return *this; }\
-    name& operator=(GLuint other_res) { OPENGL_RESOURCE_COPY_VALID_ID(other_res) return *this; }\
-\
-    GLuint* operator&() { return &res; }\
-    const GLuint* operator&() const { return &res; }\
-    operator GLuint& () { return res; }\
-    operator const GLuint& () const { return res; }\
-\
-protected:\
-    GLuint res = -1;\
-};
+struct Image;
+using ImageHandle = std::shared_ptr<Image>;
 
-DEFINE_OPENGL_RESOURCE(OpenGLShader, if (glIsShader(res)) glDeleteShader(res); )
-DEFINE_OPENGL_RESOURCE(OpenGLBuffer, if (glIsBuffer(res)) glDeleteBuffers(1, &res); )
-DEFINE_OPENGL_RESOURCE(OpenGLTexture, if (glIsTexture(res)) glDeleteTextures(1, &res); )
-DEFINE_OPENGL_RESOURCE(OpenGLFramebuffer, if (glIsFramebuffer(res)) glDeleteFramebuffers(1, &res); )
-DEFINE_OPENGL_RESOURCE(OpenGLVertexArray, if (glIsVertexArray(res)) glDeleteVertexArrays(1, &res); )
-DEFINE_OPENGL_RESOURCE(OpenGLProgram, if (glIsShader(res)) glDeleteShader(res); )
+struct Image {
+    int width = -1;
+    int height = -1;
+    int stride = -1;
+    std::unique_ptr<uint8_t[]> pixels = nullptr;
+    GLuint id;
+    GLenum format; // opengl *sized* format
 
-using ImageID = GLuint;
+    ~Image();
+    void upload(
+        int tile_x = -1,
+        int tile_y = -1,
+        int tile_width = -1,
+        int tile_height = -1
+    );
 
-// To avoid having TerraFramebuffers going around
-// and also used by a couple of other classes for convenience
-struct TextureData {
-    float* data       = nullptr;
-    int    width      = -1;
-    int    height     = -1;
-    int    components = -1;
+    bool valid()const;
+
+    static ImageHandle create(const int width, const int height, const GLenum format);
 };
 
 struct GLFWwindow;
@@ -99,22 +83,23 @@ struct Pipeline {
     ~Pipeline() = default;
 
     void reset (
-        GLuint rt_color,
+        const ImageHandle rt_color,
+        const ImageHandle rt_depth,
         const char* shader_vert_src,
         const char* shader_frag_src,
-        const int   width,
-        const int   height
+        const bool enable_depth_test
     );
     void bind();
     const ShaderUniform& uniform(const char* str);
 
-    GLuint shader_vert;
-    GLuint shader_frag;
-    GLuint program;
+    GLuint shader_vert = -1;
+    GLuint shader_frag = -1;
+    GLuint program = -1;
+    GLuint fbo = -1;
+    GLsizei viewport[4];
 
-    GLuint fbo;
-    GLuint rt_color;
-    GLuint rt_depth;
+    bool enable_depth_test = false;
+    bool enable_wireframe = false;
 
 private:
     GLuint _load_shader(const GLenum stage, const char* glsl);

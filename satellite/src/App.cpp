@@ -13,6 +13,7 @@
 #include <Panels/Console.hpp>
 #include <Panels/Visualizer.hpp>
 #include <Panels/RendererControls.hpp>
+#include <Panels/TextureVisualizer.hpp>
 #include <Camera.hpp>
 #include <Messenger.hpp>
 #include <Messages.hpp>
@@ -119,21 +120,28 @@ App::~App() { }
 
 void App::_set_ui() {
     _ui = shared_ptr<Panel>(new UI(&_gfx));
+    ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new TextureVisualizer(_ui))));
     ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new Console(_ui))));
     ((UI*)_ui.get())->add_panel(shared_ptr<Panel>((Panel*)(new RendererControls(_ui))));
     _ui->init();
 }
    
 void App::_set_renderer(const string& type) {
+    SEND_MESSAGE(MSG_DETACH_RENDER_VIEW, MessageDetachRenderView, MessageDetachRenderView());
+
     if (type.compare(RENDER_OPT_RENDERER_OBJECT) == 0) {
         _renderer.reset(new ObjectRenderer);
-        _renderer->start();
     }
     else if (type.compare(RENDER_OPT_RENDERER_TERRA) == 0) {
-        _renderer.reset(new TerraRenderer);
+        _renderer.reset(nullptr);
+        //_renderer.reset(new TerraRenderer);
     }
     else {
         assert(false);
+    }
+
+    if (_renderer) {
+        _renderer->start();
     }
 }
 
@@ -181,8 +189,11 @@ int App::run () {
         _gfx.process_events ();
 
         // update camera
-        assert(_camera.get());
-        _camera_controls->update(_gfx.window_handle(), *_camera.get(), _dt);
+        if (_renderer && !_renderer->is_camera_locked()) {
+            assert(_camera.get());
+            assert(_camera_controls.get());
+            _camera_controls->update(_gfx.window_handle(), *_camera.get(), _dt);
+        }
 
         // Use active renderer to a offscreen target
         if (_renderer && !_renderer->is_paused()) {

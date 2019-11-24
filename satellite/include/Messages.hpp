@@ -2,6 +2,7 @@
 
 // satellite
 #include <Messenger.hpp>
+#include <Graphics.hpp>
 
 // libc++
 #include <string>
@@ -9,15 +10,15 @@
 enum MessageTypes {
     MSG_LOAD_SCENE = 0,
     MSG_SAVE_RENDER_TARGET,
-    
+
     MSG_SET_RENDERER,
     MSG_SET_CAMERA,
     MSG_SET_CAMERA_CONTROLS,
 
     MSG_SET_RENDER_VIEW,
+    MSG_DETACH_RENDER_VIEW,
 
-    MSG_CONSOLE_UPDATE_STATE,
-    
+    MSG_CONSOLE_UPDATE_STATE,    
     MESSAGE_TYPE_COUNT
 };
 
@@ -32,8 +33,9 @@ struct MessageSaveRenderTarget : public MessagePayload {
 struct MessageClearRenderTarget : public MessagePayload { };
 
 struct MessageSetRenderView : public MessagePayload {
-    // texture handle
+    ImageHandle image;
 };
+struct MessageDetachRenderView : public MessagePayload { };
 
 struct MessageSetRenderer : public MessagePayload {
     std::string type;

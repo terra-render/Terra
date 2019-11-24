@@ -53,4 +53,20 @@ exit:
     bool file_exists(const char* filename) {
         return std::ifstream(filename).good();
     }
+
+    std::string path_join(
+        const char* lhs,
+        const char* rhs
+    ) {
+        assert(lhs);
+        assert(rhs);
+        std::string path = lhs;
+        if (path.back() != '/' && path.back() != '\\') {
+            path.append("/");
+        }
+
+        const int offset = (rhs[0] == '\\' || rhs[0] == '/') ? 1 : 0;
+        path.append(rhs + offset);
+        return path;
+    }
 }

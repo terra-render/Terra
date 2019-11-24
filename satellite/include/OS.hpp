@@ -1,5 +1,8 @@
 #pragma once
 
+// libc++
+#include <string>
+
 namespace OS {
     void* allocate (
         const size_t bytes
@@ -17,5 +20,10 @@ namespace OS {
 
     bool file_exists(
         const char* filename
+    );
+
+    std::string path_join(
+        const char* lhs,
+        const char* rhs
     );
 }

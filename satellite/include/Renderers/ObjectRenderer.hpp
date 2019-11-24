@@ -24,12 +24,6 @@ public:
     ) override;
 
 private:
-    void _compute_clip_from_world(const Camera& camera);
-
-    float _color_face[4] = { 1., 1., 1., 1. };
-    float _color_edges[4] = { 1., 1., 1., 1. };
-    float _color_face_selected[4] = { 1., 1., 1., 1. };
-    float _color_edges_selected[4] = { 1., 1., 1., 1. };
-
-    Pipeline _pipeline;
+    ImageHandle _rt_depth;
+    Pipeline    _pipeline;
 };

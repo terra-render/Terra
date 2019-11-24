@@ -9,11 +9,17 @@
 #include <Logging.hpp>
 #define CLOTO_IMPLEMENTATION
 #include <Cloto.h>
+#include <Scene.hpp>
 #include <Config.hpp>
+#include <Camera.hpp>
 
 // Terra
 #include <TerraProfile.h>
 #include <TerraPresets.h>
+
+// todo: remove
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 
 namespace {
     // fnv1a
@@ -100,14 +106,18 @@ void terra_render_launcher(void* _args) {
 }
 
 TerraRenderer::TerraRenderer() :
-    Renderer() {
+    Renderer(),
+    _bvh(nullptr) {
+
     cloto_thread_register();
     _this_thread = cloto_thread_get();
     memset(&_framebuffer, 0, sizeof(TerraFramebuffer));
-    _paused = true;
+    _paused = false;
     _tile_counter = 0;
     _target_camera = nullptr;
     _target_scene = nullptr;
+
+    terra_profile_session_create(0, 16);
 }
 
 TerraRenderer::~TerraRenderer() {
@@ -116,12 +126,35 @@ TerraRenderer::~TerraRenderer() {
     }
 
     cloto_thread_dispose();
+    
+    terra_profile_session_delete(0);
 }
 
 void TerraRenderer::update(
     const Scene& scene,
     const Camera& camera
 ) {
+    if (!_bvh) {
+        _on_scene_changed(scene);
+        terra_framebuffer_clear(&_framebuffer);
+
+        memcpy(&_camera_active.position.x, camera.position(), sizeof(vec3));
+        memcpy(&_camera_active.direction.x, camera.direction(), sizeof(vec3));
+        _camera_active.fov = 45;
+        _camera_active.up = terra_f3_set(0.f, 1.f, 0.f);
+        step(_camera_active, _bvh,
+            [this]() {
+                stbi_write_hdr("D:/data/example.hdr", _framebuffer.width, _framebuffer.height, 3, (const float*)_framebuffer.pixels);
+            },
+            [](size_t x, size_t y, size_t w, size_t h) {
+                Log::verbose(FMT("Begin tile %llu %llu %llu %llu", x, y, w, h));
+            },
+            [](size_t x, size_t y, size_t w, size_t h) {
+                Log::verbose(FMT("Finished tile %llu %llu %llu %llu", x, y, w, h));
+            }
+            );
+    }
+
     _process_messages();
 
     if (_paused) {
@@ -173,14 +206,11 @@ void TerraRenderer::clear() {
 
 void TerraRenderer::start() {
     Renderer::start();
+
+
 }
 
 bool TerraRenderer::step(const TerraCamera& camera, HTerraScene scene, const Event& on_step_end, const TileEvent& on_tile_begin, const TileEvent& on_tile_end) {
-    if (!_paused) {
-        Log::error(STR("Rendering is already in progress."));
-        return false;
-    }
-
     _target_scene = scene;
     _target_camera = &camera;
     _on_step_end = on_step_end;
@@ -230,19 +260,6 @@ void TerraRenderer::update_config() {
         // Restart the rendering
         _opt_render_change = true;
     }
-}
-
-const TextureData& TerraRenderer::framebuffer() {
-    assert(sizeof(TerraFloat3) == sizeof(float) * 3);
-    _framebuffer_data.data = (float*)_framebuffer.pixels;
-    _framebuffer_data.width = (int)_framebuffer.width;
-    _framebuffer_data.height = (int)_framebuffer.height;
-    _framebuffer_data.components = 3;
-    return _framebuffer_data;
-}
-
-bool TerraRenderer::is_framebuffer_clear() const {
-    return _clear_framebuffer;
 }
 
 int TerraRenderer::iterations() const {
@@ -374,6 +391,142 @@ void TerraRenderer::_restart_jobs() {
     cloto_slavegroup_reset(_workers.get());
 }
 
+// Rebuilds the bvh
+void TerraRenderer::_on_scene_changed(const Scene& scene) {
+    _load_scene_options();
+
+    if (_bvh) {
+        terra_scene_destroy(_bvh);
+    }
+
+    _bvh = terra_scene_create();
+
+    for (const auto& mesh : scene.objects()) {
+        for (const auto& submesh : mesh.render.submeshes) {
+            const size_t n_triangles = submesh.faces.count / 3;
+            TerraObject* o = terra_scene_add_object(_bvh, n_triangles);
+
+            for (size_t f = 0; f < n_triangles; ++f) {
+                const uint32_t a = submesh.faces.ptr.get()[f * 3 + 0];
+                const uint32_t b = submesh.faces.ptr.get()[f * 3 + 1];
+                const uint32_t c = submesh.faces.ptr.get()[f * 3 + 2];
+                o->triangles[f].a.x = mesh.render.x.ptr.get()[a];
+                o->triangles[f].a.y = mesh.render.y.ptr.get()[a];
+                o->triangles[f].a.z = mesh.render.z.ptr.get()[a];
+                o->triangles[f].b.x = mesh.render.x.ptr.get()[b];
+                o->triangles[f].b.y = mesh.render.y.ptr.get()[b];
+                o->triangles[f].b.z = mesh.render.z.ptr.get()[b];
+                o->triangles[f].c.x = mesh.render.x.ptr.get()[c];
+                o->triangles[f].c.y = mesh.render.y.ptr.get()[c];
+                o->triangles[f].c.z = mesh.render.z.ptr.get()[c];
+                o->properties[f].normal_a.x = mesh.render.nx.ptr.get()[a];
+                o->properties[f].normal_a.y = mesh.render.ny.ptr.get()[a];
+                o->properties[f].normal_a.z = mesh.render.nz.ptr.get()[a];
+                o->properties[f].normal_b.x = mesh.render.nx.ptr.get()[b];
+                o->properties[f].normal_b.y = mesh.render.ny.ptr.get()[b];
+                o->properties[f].normal_b.z = mesh.render.nz.ptr.get()[b];
+                o->properties[f].normal_c.x = mesh.render.nx.ptr.get()[c];
+                o->properties[f].normal_c.y = mesh.render.ny.ptr.get()[c];
+                o->properties[f].normal_c.z = mesh.render.nz.ptr.get()[c];
+                o->properties[f].texcoord_a.x = 0.f;
+                o->properties[f].texcoord_a.y = 0.f;
+                o->properties[f].texcoord_b.x = 0.f;
+                o->properties[f].texcoord_b.y = 0.f;
+                o->properties[f].texcoord_c.x = 0.f;
+                o->properties[f].texcoord_c.y = 0.f;
+            }
+
+            o->material.ior = 1.5;
+            o->material.enable_bump_map_attr = 0;
+            o->material.enable_normal_map_attr = 0;
+
+            TerraFloat3 albedo = terra_f3_set(1.f, 0.f, 1.f);
+            terra_attribute_init_constant(o->material.attributes + TERRA_DIFFUSE_ALBEDO, &albedo);
+            o->material.attributes_count = TERRA_DIFFUSE_END;
+            terra_bsdf_diffuse_init(&o->material.bsdf);
+        }
+    }
+
+    TerraSceneOptions* opts = terra_scene_get_options(_bvh);
+    *opts = _opts;
+    terra_scene_commit(_bvh);
+}
+
+void TerraRenderer::_load_scene_options() {
+    string tonemap_str = Config::read_s(Config::RENDER_TONEMAP);
+    string accelerator_str = Config::read_s(Config::RENDER_ACCELERATOR);
+    string sampling_str = Config::read_s(Config::RENDER_SAMPLING);
+    string integrator_str = Config::read_s(Config::RENDER_INTEGRATOR);
+    TerraTonemappingOperator tonemap = Config::to_terra_tonemap(tonemap_str);
+    TerraAccelerator accelerator = Config::to_terra_accelerator(accelerator_str);
+    TerraSamplingMethod sampling = Config::to_terra_sampling(sampling_str);
+    TerraIntegrator integrator = Config::to_terra_integrator(integrator_str);
+
+    if (tonemap == -1) {
+        Log::error(FMT("Invalid configuration RENDER_TONEMAP value %s. Defaulting to none.", tonemap_str.c_str()));
+        tonemap = kTerraTonemappingOperatorNone;
+    }
+
+    if (accelerator == -1) {
+        Log::error(FMT("Invalid configuration RENDER_ACCELERATOR value %s. Defaulting to BVH.", accelerator_str.c_str()));
+        accelerator = kTerraAcceleratorBVH;
+    }
+
+    if (sampling == -1) {
+        Log::error(FMT("Invalid configuration RENDER_SAMPLING value %s. Defaulting to random.", sampling_str.c_str()));
+        sampling = kTerraSamplingMethodRandom;
+    }
+
+    if (integrator == -1) {
+        Log::error(FMT("Invalid configuration RENDER_INTEGRATOR value %s. Defaulting to simple.", integrator_str.c_str()));
+        integrator = kTerraIntegratorSimple;
+    }
+
+    int bounces = Config::read_i(Config::RENDER_MAX_BOUNCES);
+    int samples = Config::read_i(Config::RENDER_SAMPLES);
+    float exposure = Config::read_f(Config::RENDER_EXPOSURE);
+    float gamma = Config::read_f(Config::RENDER_GAMMA);
+    float jitter = Config::read_f(Config::RENDER_JITTER);
+
+    if (bounces < 0) {
+        Log::error(FMT("Invalid configuration RENDER_MAX_BOUNCES (%d < 0). Defaulting to 64.", bounces));
+        bounces = 64;
+    }
+
+    if (samples < 0) {
+        Log::error(FMT("Invalid configuration RENDER_SAMPLES (%d < 0). Defaulting to 8.", samples));
+        samples = 8;
+    }
+
+    if (exposure < 0) {
+        Log::error(FMT("Invalid configuration RENDER_EXPOSURE (%f < 0). Defaulting to 1.0.", exposure));
+        exposure = 1.0;
+    }
+
+    if (gamma < 0) {
+        Log::error(FMT("Invalid configuration RENDER_GAMMA (%f < 0). Defaulting to 2.2.", gamma));
+        gamma = 2.2f;
+    }
+
+    if (jitter < 0) {
+        Log::error(FMT("Invalid configuration RENDER_JITTER (%f < 0) Defaulting to 0.", jitter));
+        jitter = 0;
+    }
+
+    _opts.bounces = bounces;
+    _opts.samples_per_pixel = samples;
+    _opts.subpixel_jitter = jitter;
+    _opts.tonemapping_operator = tonemap;
+    _opts.manual_exposure = exposure;
+    _opts.gamma = gamma;
+    _opts.accelerator = accelerator;
+    _opts.strata = 4;
+    _opts.sampling_method = sampling;
+    _opts.integrator = integrator;
+    TerraFloat3 envmap_color = terra_f3_set(1.f, 1.f, 1.f);
+    terra_attribute_init_constant(&_opts.environment_map, &envmap_color);
+}
+
 bool TerraRenderer::_launch() {
     //if ( _framebuffer.pixels == nullptr ) {
     //    Log::error ( STR ( "Cannot launch rendering, invalid destination Terra framebuffer" ) );
@@ -381,7 +534,7 @@ bool TerraRenderer::_launch() {
     //}
     assert(_target_camera);
     assert(_target_scene);
-    assert(_paused);
+    //assert(_paused);
 
     // Sync config
     if (_opt_render_change) {

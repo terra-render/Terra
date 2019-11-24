@@ -1,5 +1,6 @@
 // satellite
 #include <Renderer.hpp>
+#include <Messages.hpp>
 
 // libc++
 #include <cassert>
@@ -10,18 +11,17 @@ Renderer::Renderer() :
     _selected(Object::ID_NULL) {
 
     resize(1280, 720);
+
+    MessageSetRenderView set_render_view;
+    set_render_view.image = _render_target;
+    SEND_MESSAGE(MSG_SET_RENDER_VIEW, MessageSetRenderView, set_render_view);
 }
 
 void Renderer::resize (
     const unsigned int width,
     const unsigned int height
 ) {
-    glCreateTextures(GL_TEXTURE_2D, 1, &_render_target); GL_NO_ERROR;
-    glTextureParameteri(_render_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(_render_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
-    glTextureParameteri(_render_target, GL_TEXTURE_MIN_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureParameteri(_render_target, GL_TEXTURE_MAG_FILTER, GL_NEAREST); GL_NO_ERROR;
-    glTextureStorage2D(_render_target, 1, GL_RGBA8, (GLsizei)width, (GLsizei)height); GL_NO_ERROR;
+    _render_target = Image::create((int)width, (int)height, GL_RGBA8);
 }
 
 void Renderer::start() {

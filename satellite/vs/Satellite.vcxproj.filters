@@ -312,7 +312,7 @@
     <ClCompile Include="..\src\Messenger.cpp">
       <Filter>Satellite Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\source\Panels\TextureVisualizer.cpp">
+    <ClCompile Include="..\src\Panels\TextureVisualizer.cpp">
       <Filter>Satellite Sources\Panels</Filter>
     </ClCompile>
   </ItemGroup>

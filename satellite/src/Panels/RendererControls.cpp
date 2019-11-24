@@ -51,11 +51,11 @@ void RendererControls::add_camera_control(const char* name) {
 }
 
 void RendererControls::init() {
-    add_renderer("Object");
-    add_renderer("Terra");
+    add_renderer("object");
+    add_renderer("terra");
 
-    add_camera("Orthographic");
-    add_camera("Perspective");
+    add_camera("orthographic");
+    add_camera("perspective");
 
     add_camera_control("First person");
 }
@@ -76,18 +76,18 @@ void RendererControls::draw() {
                     SEND_MESSAGE(MSG_SAVE_RENDER_TARGET, MessageSaveRenderTarget, msg);
                 }
 
-                EndMenu();
+                ImGui::EndMenu();
             }
 
             if (BeginMenu("Window")) {
-                EndMenu();
+                ImGui::EndMenu();
             }
 
             if (BeginMenu("Console")) {
-                EndMenu();
+                ImGui::EndMenu();
             }
 
-            PushItemWidth(250);
+            PushItemWidth(100);
             if (Combo("Renderer", &_active_renderer, _renderer_names.data(), _renderer_names.size())) {
                 _on_select_renderer();
             }

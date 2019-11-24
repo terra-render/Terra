@@ -120,7 +120,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)/../dependencies/stb;$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CallingConvention>Cdecl</CallingConvention>
       <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBC;TERRA_PROFILE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -171,7 +171,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)/../dependencies/stb;$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;TERRA_PROFILE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
@@ -189,7 +189,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)/../dependencies/stb;$(ProjectDir)../include;$(ProjectDir)/../dependencies/imgui;$(ProjectDir)/../dependencies/glfw/include;$(ProjectDir)/../dependencies/gl3w/include;$(ProjectDir)../../include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_GLFW_WIN32;GLEW_STATIC;_CRT_SECURE_NO_WARNINGS;b_MBCS;TERRA_PROFILE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
@@ -273,7 +273,6 @@
     <ClCompile Include="..\dependencies\imgui\imgui.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui_demo.cpp" />
     <ClCompile Include="..\dependencies\imgui\imgui_draw.cpp" />
-    <ClCompile Include="..\source\Panels\TextureVisualizer.cpp" />
     <ClCompile Include="..\src\App.cpp" />
     <ClCompile Include="..\src\Camera.cpp" />
     <ClCompile Include="..\src\CameraControls.cpp" />
@@ -285,6 +284,7 @@
     <ClCompile Include="..\src\OS.cpp" />
     <ClCompile Include="..\src\Panels\Console.cpp" />
     <ClCompile Include="..\src\Panels\RendererControls.cpp" />
+    <ClCompile Include="..\src\Panels\TextureVisualizer.cpp" />
     <ClCompile Include="..\src\Panels\Visualizer.cpp" />
     <ClCompile Include="..\src\Renderer.cpp" />
     <ClCompile Include="..\src\Renderers\ObjectRenderer.cpp" />
