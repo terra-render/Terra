@@ -37,6 +37,7 @@ private:
     TerraCamera _camera_active;
     void _on_scene_changed (const Scene& scene);
     void _load_scene_options();
+    void _update_render_target_pixels();
 
     bool     _launch();
     void     _setup_threads();

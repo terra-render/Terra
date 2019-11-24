@@ -133,8 +133,7 @@ void App::_set_renderer(const string& type) {
         _renderer.reset(new ObjectRenderer);
     }
     else if (type.compare(RENDER_OPT_RENDERER_TERRA) == 0) {
-        _renderer.reset(nullptr);
-        //_renderer.reset(new TerraRenderer);
+        _renderer.reset(new TerraRenderer);
     }
     else {
         assert(false);

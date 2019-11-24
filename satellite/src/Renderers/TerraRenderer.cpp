@@ -152,7 +152,9 @@ void TerraRenderer::update(
             [](size_t x, size_t y, size_t w, size_t h) {
                 Log::verbose(FMT("Finished tile %llu %llu %llu %llu", x, y, w, h));
             }
-            );
+        );
+
+        _camera_active.fov = 45.f;
     }
 
     _process_messages();
@@ -160,6 +162,9 @@ void TerraRenderer::update(
     if (_paused) {
         return;
     }
+
+    _update_render_target_pixels();
+    _render_target->upload();
 
     // The current job queue has finished executing, we can now read from TerraFramebuffer
     if (_tile_counter == 0) {
@@ -525,6 +530,38 @@ void TerraRenderer::_load_scene_options() {
     _opts.integrator = integrator;
     TerraFloat3 envmap_color = terra_f3_set(1.f, 1.f, 1.f);
     terra_attribute_init_constant(&_opts.environment_map, &envmap_color);
+}
+
+void TerraRenderer::_update_render_target_pixels() {
+    assert(_framebuffer.width == _render_target->width);
+    assert(_framebuffer.height == _render_target->height);
+    const int cols = _render_target->width;
+    const int rows = _render_target->height;
+
+    if (_render_target->format == GL_RGBA32F) {
+        memcpy(_render_target->pixels.get(), 
+            _framebuffer.pixels, rows * cols * _render_target->stride);
+    }
+    else {
+        for (size_t r = 0; r < rows; ++r) {
+            for (size_t c = 0; c < cols; ++c) {
+                const TerraFloat3* pixel_r  = _framebuffer.pixels + (r * cols + c);
+                uint8_t* pixel_w = _render_target->pixels.get() + (r * cols + c) * _render_target->stride;
+
+                switch (_render_target->format) {
+                case GL_RGBA8:
+                    pixel_w[0] = (uint8_t)(255 * pixel_r->x);
+                    pixel_w[1] = (uint8_t)(255 * pixel_r->y);
+                    pixel_w[2] = (uint8_t)(255 * pixel_r->z);
+                    pixel_w[3] = 1.0;
+                    break;
+                default:
+                    assert(false);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 bool TerraRenderer::_launch() {

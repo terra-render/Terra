@@ -14,6 +14,8 @@
 // libc++
 #include <memory>
 
+using namespace std;
+
 namespace {
     void unpack_sized_format(
         const GLenum sized_format,
@@ -29,8 +31,8 @@ namespace {
             break;
         case GL_RGBA32F:
             stride = 16;
-            format = GL_RGBA32F;
-            type = GL_UNSIGNED_BYTE;
+            format = GL_RGBA;
+            type = GL_FLOAT;
             break;
         case GL_DEPTH_COMPONENT32F:
             stride = 16;
@@ -70,7 +72,7 @@ void Image::upload(
     unpack_sized_format(this->format, stride, format, type);
 
     assert(tile_width > 0 && tile_height > 0);
-    glTexSubImage2D(id, 0, tile_x, tile_y, tile_width, tile_height, format, type, pixels.get());
+    glTextureSubImage2D(id, 0, tile_x, tile_y, tile_width, tile_height, format, type, pixels.get()); GL_NO_ERROR;
 }
 
 bool Image::valid()const {
@@ -85,6 +87,8 @@ ImageHandle Image::create(const int width, const int height, const GLenum sized_
 
     GLenum gl_format, gl_type;
     unpack_sized_format(sized_format, im->stride, gl_format, gl_type);
+
+    im->pixels = unique_ptr<uint8_t[]>(new uint8_t[im->stride * im->width * im->height]);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &im->id); GL_NO_ERROR;
     glTextureParameteri(im->id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER); GL_NO_ERROR;
