@@ -70,8 +70,17 @@ bool Scene::_load_scene ( const char* filename ) {
         return false;
     }
 
+    ApolloAllocator allocator;
+    allocator.p = NULL;
+    allocator.alloc = apollo_alloc;
+    allocator.realloc = apollo_realloc;
+    allocator.free = apollo_free;
     free ( _apollo_model );
+    apollo_buffer_free ( _apollo_materials, &allocator );
+    apollo_buffer_free ( _apollo_textures, &allocator );
     _apollo_model = ( ApolloModel* ) malloc ( sizeof ( ApolloModel ) );
+    _apollo_materials = NULL;
+    _apollo_textures = NULL;
     ApolloLoadOptions options = { 0 };
     options.compute_tangents = true;
     options.compute_bitangents = true;
@@ -82,10 +91,8 @@ bool Scene::_load_scene ( const char* filename ) {
     options.flip_faces = false;
     options.flip_texcoord_v = false;
     options.flip_z = false;
-    options.temp_alloc = &apollo_alloc;
-    options.temp_realloc = &apollo_realloc;
-    options.temp_free = &apollo_free;
-    options.final_alloc = &apollo_alloc;
+    options.temp_allocator = allocator;
+    options.final_allocator = allocator;
     options.prealloc_vertex_count = 1 << 18;
     options.prealloc_index_count = 1 << 18;
     options.prealloc_mesh_count = 16;
@@ -99,10 +106,11 @@ bool Scene::_load_scene ( const char* filename ) {
         return false;
     }
 
+    _path = filename;
     int bsdf_count[APOLLO_BSDF_COUNT];
     memset ( bsdf_count, 0, sizeof ( int ) * APOLLO_BSDF_COUNT );
 
-    for ( size_t i = 0; i < sb_count ( _apollo_materials ); ++i ) {
+    for ( size_t i = 0; i < apollo_buffer_size ( _apollo_materials ); ++i ) {
         bsdf_count[_apollo_materials[i].bsdf] += 1;
     }
 
@@ -426,6 +434,10 @@ void Scene::update_config() {
             || _camera.fov != Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG )
        ) {
         _read_config();
+    }
+
+    if ( _path.compare ( Config::read_s ( Config::RENDER_SCENE_PATH ) ) != 0 ) {
+        _load_scene ( Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() );
     }
 }
 

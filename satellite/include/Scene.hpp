@@ -73,6 +73,7 @@ class Scene {
     ApolloTexture* _apollo_textures = NULL;
 
     std::string       _name;
+    std::string       _path;
     TerraCamera       _camera;
     HTerraScene       _scene;
     TerraSceneOptions _opts;

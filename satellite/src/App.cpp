@@ -30,6 +30,7 @@ using namespace std;
 #define CMD_CLEAR_NAME "clear"
 #define CMD_HELP_NAME "help"
 #define CMD_LOAD_NAME "load"
+#define CMD_RELOAD_NAME "reload"
 #define CMD_STEP_NAME "step"
 #define CMD_LOOP_NAME "loop"
 #define CMD_PAUSE_NAME "pause"
@@ -255,6 +256,12 @@ void App::_init_cmd_map() {
 
         return 0;
     };
+    // reload
+    auto cmd_reload = [this] ( const CommandArgs & args ) -> int {
+        _c_map[CMD_LOAD_NAME] ( { Config::read_s ( Config::RENDER_SCENE_PATH ).c_str() } );
+        _on_config_change ( true );
+        return 0;
+    };
     // step
     auto cmd_step = [ this ] ( const CommandArgs & args ) -> int {
         bool ret = _renderer.step ( _scene.get_camera(), _scene.construct_terra_scene(),
@@ -434,6 +441,7 @@ void App::_init_cmd_map() {
                 }
             }
 
+            _on_config_change ( true );
             goto success;
         } else if ( args[0].compare ( CMD_OPTION_SAVE_NAME ) == 0 ) {
             if ( args.size() == 1 ) {
@@ -556,6 +564,7 @@ success:
     _c_map[CMD_CLEAR_NAME] = cmd_clear;
     _c_map[CMD_HELP_NAME] = cmd_help;
     _c_map[CMD_LOAD_NAME] = cmd_load;
+    _c_map[CMD_RELOAD_NAME] = cmd_reload;
     _c_map[CMD_STEP_NAME] = cmd_step;
     _c_map[CMD_LOOP_NAME] = cmd_loop;
     _c_map[CMD_PAUSE_NAME] = cmd_pause;

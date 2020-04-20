@@ -117,13 +117,16 @@ typedef void* ( apollo_alloc_fun ) ( void* allocator, size_t size, size_t alignm
 typedef void* ( apollo_realloc_fun ) ( void* allocator, void* addr, size_t old_size, size_t new_size, size_t new_alignment );
 typedef void ( apollo_free_fun ) ( void* allocator, void* addr, size_t size );
 
+typedef struct {
+    void* p;
+    apollo_alloc_fun* alloc;
+    apollo_realloc_fun* realloc;
+    apollo_free_fun* free;
+} ApolloAllocator;
+
 typedef struct ApolloLoadOptions {
-    void* temp_allocator;
-    apollo_alloc_fun* temp_alloc;
-    apollo_realloc_fun* temp_realloc;
-    apollo_free_fun* temp_free;
-    void* final_allocator;
-    apollo_alloc_fun* final_alloc;
+    ApolloAllocator temp_allocator;
+    ApolloAllocator final_allocator;
     bool flip_z;
     bool flip_texcoord_v;
     bool flip_faces;
@@ -140,7 +143,11 @@ typedef struct ApolloLoadOptions {
 
 // The provided allocator is not required to strictly follow the alignment requirements. A malloc-based allocator is fine.
 // If it does, the output data arrays are guaranteed to be 16-byte aligned.
-ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** materials, ApolloTexture** textures, const ApolloLoadOptions* options );
+ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** materials, ApolloTexture** textures, ApolloLoadOptions* options );
+
+void apollo_buffer_free ( void* p, ApolloAllocator* allocator );
+int apollo_buffer_size ( void* p );
+
 // Very basic model dump to obj. .obj and .mtl files named after the model name will be created in base_path folder.
 void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* materials, const ApolloTexture* textures, const char* base_path );
 
@@ -213,7 +220,7 @@ inline bool apollo_equalf3 ( const ApolloFloat3* a, const ApolloFloat3* b ) {
 uint32_t        apollo_find_texture ( const ApolloTexture* textures, const char* texture_name );
 uint32_t        apollo_find_material ( const ApolloMaterial* materials, const char* mat_name );
 
-ApolloResult    apollo_read_texture ( FILE* file, ApolloTexture* textures, uint32_t* idx_out );
+ApolloResult    apollo_read_texture ( FILE* file, const ApolloTexture* texture_bank, ApolloTexture* new_textures, uint32_t* new_texture_idx_out, ApolloAllocator* new_texture_allocator );
 bool            apollo_read_float2 ( FILE* file, ApolloFloat2* val );
 bool            apollo_read_float3 ( FILE* file, ApolloFloat3* val );
 
@@ -225,7 +232,8 @@ typedef struct {
     char filename[APOLLO_PATH_LEN];
 } ApolloMaterialLib;
 
-ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures );
+// Parses an entire .mtl file into a materials array. All referenced textures are added to the textures array. For both cases the given allocator is used.
+ApolloResult    apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, const ApolloTexture* texture_bank, ApolloTexture* new_textures, ApolloAllocator* allocator );
 uint32_t        apollo_find_material_lib ( const ApolloMaterialLib* libs, const char* lib_filename );
 
 // Tables are used to speed up model load times
@@ -238,16 +246,16 @@ typedef struct {
     uint32_t* items;
 } ApolloIndexTable;
 
-void            apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity );
-void            apollo_index_table_destroy ( ApolloIndexTable* table );
+void            apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity, ApolloAllocator* allocator );
+void            apollo_index_table_destroy ( ApolloIndexTable* table, ApolloAllocator* allocator );
 void            apollo_index_table_clear ( ApolloIndexTable* table );
 uint32_t        apollo_hash_u32 ( uint32_t key );
 uint64_t        apollo_hash_u64 ( uint64_t key );
 uint32_t*       apollo_index_table_get_item ( const ApolloIndexTable* table, uint32_t hash );
 uint32_t*       apollo_index_table_get_next ( const ApolloIndexTable* table, uint32_t* item );
 int             apollo_index_table_item_distance ( const ApolloIndexTable* table, uint32_t* a, uint32_t* b );
-void            apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity );
-void            apollo_index_table_insert ( ApolloIndexTable* table, uint32_t item );
+void            apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity, ApolloAllocator* allocator );
+void            apollo_index_table_insert ( ApolloIndexTable* table, uint32_t item, ApolloAllocator* allocator );
 bool            apollo_index_table_lookup ( ApolloIndexTable* table, uint32_t item );
 
 typedef struct {
@@ -264,14 +272,14 @@ typedef struct {
     ApolloVertexTableItem* items;
 } ApolloVertexTable;
 
-void                    apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity );
-void                    apollo_vertex_table_destroy ( ApolloVertexTable* table );
+void                    apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity, ApolloAllocator* allocator );
+void                    apollo_vertex_table_destroy ( ApolloVertexTable* table, ApolloAllocator* allocator );
 uint32_t                apollo_f3_hash ( const ApolloFloat3* v );
 ApolloVertexTableItem*  apollo_vertex_table_get_item ( const ApolloVertexTable* table, uint32_t hash );
 ApolloVertexTableItem*  apollo_vertex_table_get_next ( const ApolloVertexTable* table, ApolloVertexTableItem* item );
 int                     apollo_vertex_table_item_distance ( const ApolloVertexTable* table, ApolloVertexTableItem* a, ApolloVertexTableItem* b );
-void                    apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacity );
-void                    apollo_vertex_table_insert ( ApolloVertexTable* table, const ApolloVertexTableItem* item );
+void                    apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacity, ApolloAllocator* allocator );
+void                    apollo_vertex_table_insert ( ApolloVertexTable* table, const ApolloVertexTableItem* item, ApolloAllocator* allocator );
 // Returns a pointer to the element inside the table with matching key. The pointer can (and eventually will) be invalidated upon insertion.
 ApolloVertexTableItem*  apollo_vertex_table_lookup ( ApolloVertexTable* table, const ApolloFloat3* key );
 
@@ -293,7 +301,7 @@ typedef struct {
 } ApolloAdjacencyTableItem;
 
 // returns false if it was already there, false if not. After the search, if not found, the item is added.
-bool        apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t value );
+bool        apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t value, ApolloAllocator* allocator );
 // returns true if it was already there, false if not. After the search, if not found, the item is added.
 bool        apollo_adjacency_item_contains ( ApolloAdjacencyTableItem* item, uint32_t value );
 
@@ -306,55 +314,46 @@ typedef struct {
     ApolloAdjacencyTableItem* items;
 } ApolloAdjacencyTable;
 
-void                        apollo_adjacency_table_create ( ApolloAdjacencyTable* table, uint32_t capacity );
-void                        apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table );
+void                        apollo_adjacency_table_create ( ApolloAdjacencyTable* table, uint32_t capacity, ApolloAllocator* allocator );
+void                        apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table, ApolloAllocator* allocator );
 ApolloAdjacencyTableItem*   apollo_adjacency_table_get_item ( ApolloAdjacencyTable* table, uint32_t hash );
 ApolloAdjacencyTableItem*   apollo_adjacency_table_get_next ( ApolloAdjacencyTable* table, ApolloAdjacencyTableItem* item );
 int                         apollo_adjacency_table_distance ( const ApolloAdjacencyTable* table, const ApolloAdjacencyTableItem* a, const ApolloAdjacencyTableItem* b );
-void                        apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_capacity );
-ApolloAdjacencyTableItem*   apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key );
+void                        apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_capacity, ApolloAllocator* allocator );
+ApolloAdjacencyTableItem*   apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key, ApolloAllocator* allocator );
 ApolloAdjacencyTableItem*   apollo_adjacency_table_lookup ( ApolloAdjacencyTable* table, uint32_t key );
 
-void* apollo_temp_allocator = NULL;
-apollo_alloc_fun* apollo_temp_alloc_f = NULL;
-apollo_realloc_fun* apollo_temp_realloc_f = NULL;
-apollo_free_fun* apollo_temp_free_f = NULL;
-
-#define APOLLO_TEMP_ALLOC(T, n) (T*)apollo_temp_alloc_f(apollo_temp_allocator, sizeof(T) * n, alignof(T))
-#define APOLLO_TEMP_ALLOC_ALIGN(T, n, a) (T*)apollo_temp_alloc_f(apollo_temp_allocator, sizeof(T) * n, a)
-#define APOLLO_TEMP_FREE(p, n) apollo_temp_free_f(apollo_temp_allocator, p, sizeof(*p) * n);
+#define APOLLO_ALLOC_ALIGN(allocator, T, n, align) (T*) (allocator)->alloc(allocator, sizeof(T) * n, align)
+#define APOLLO_ALLOC(allocator, T, n, align) APOLLO_ALLOC_ALIGN(allocator, T, n, alignof(T))
+// Waiting for the day MSVC C compiler will support typeof()...
+#define APOLLO_REALLOC_ALIGN(allocator, T, p, old_n, new_n, align) (T*) (allocator)->alloc(allocator, p, sizeof(T) * old_n, sizeof(T) * new_n, align)
+#define APOLLO_REALLOC(allocator, T, p, old_n, new_n, align) APOLLO_REALLOC_ALIGN(allocator, T, p, old_n, new_n, alignof(T))
+#define APOLLO_FREE(allocator, p, n) (allocator)->free(allocator, p, sizeof(*p) * n)
 
 // Custom version of https://github.com/nothings/stb/blob/master/stretchy_buffer.h
 // Depends on apollo temp allocators
-#define sb_free     stb_sb_free
-#define sb_push     stb_sb_push
-#define sb_count    stb_sb_count
-#define sb_add      stb_sb_add
-#define sb_last     stb_sb_last
-#define sb_prealloc stb_sb_prealloc
+#define apollo_sb_free(a,allocator)         ((a) ? (allocator).free((allocator).p,apollo__sbraw(a),apollo__sbm(a)),0 : 0)
+#define apollo_sb_push(a,v,allocator)       (apollo__sbmaybegrow(a,1,(allocator)), (a)[apollo__sbn(a)++] = (v))
+#define apollo_sb_count(a)                  ((a) ? apollo__sbn(a) : 0)
+#define apollo_sb_add(a,n,allocator)        (apollo__sbmaybegrow(a,n,(allocator)), apollo__sbn(a)+=(n), &(a)[apollo__sbn(a)-(n)])
+#define apollo_sb_last(a)                   ((a)[apollo__sbn(a)-1])
+#define apollo_sb_prealloc(a,n,allocator)   (apollo__sbgrow(a,n,(allocator)))
 
-#define stb_sb_free(a)          ((a) ? apollo_temp_free_f(apollo_temp_allocator,stb__sbraw(a),stb__sbm(a)),0 : 0)
-#define stb_sb_push(a,v)        (stb__sbmaybegrow(a,1), (a)[stb__sbn(a)++] = (v))
-#define stb_sb_count(a)         ((a) ? stb__sbn(a) : 0)
-#define stb_sb_add(a,n)         (stb__sbmaybegrow(a,n), stb__sbn(a)+=(n), &(a)[stb__sbn(a)-(n)])
-#define stb_sb_last(a)          ((a)[stb__sbn(a)-1])
-#define stb_sb_prealloc(a,n)    (stb__sbgrow(a,n))
+#define apollo__sbraw(a)           ((int *) (a) - 2)
+#define apollo__sbm(a)             apollo__sbraw(a)[0]
+#define apollo__sbn(a)             apollo__sbraw(a)[1]
 
-#define stb__sbraw(a)           ((int *) (a) - 2)
-#define stb__sbm(a)             stb__sbraw(a)[0]
-#define stb__sbn(a)             stb__sbraw(a)[1]
+#define apollo__sbneedgrow(a,n)             ((a)==0 || apollo__sbn(a)+(n) >= apollo__sbm(a))
+#define apollo__sbmaybegrow(a,n,allocator)  (apollo__sbneedgrow(a,(n)) ? apollo__sbgrow(a,n,allocator) : 0)
+#define apollo__sbgrow(a,n,allocator)       (*((void **)&(a)) = apollo__sbgrowf((a), (n), sizeof(*(a)), &allocator))
 
-#define stb__sbneedgrow(a,n)    ((a)==0 || stb__sbn(a)+(n) >= stb__sbm(a))
-#define stb__sbmaybegrow(a,n)   (stb__sbneedgrow(a,(n)) ? stb__sbgrow(a,n) : 0)
-#define stb__sbgrow(a,n)        (*((void **)&(a)) = stb__sbgrowf((a), (n), sizeof(*(a))))
-
-void* stb__sbgrowf ( void* arr, int increment, int itemsize );
+void* apollo__sbgrowf ( void* arr, int increment, int itemsize, ApolloAllocator* allocator );
 
 //--------------------------------------------------------------------------------------------------
 // Buffers
 //--------------------------------------------------------------------------------------------------
 uint32_t apollo_find_texture ( const ApolloTexture* textures, const char* texture_name ) {
-    for ( size_t i = 0; i < sb_count ( textures ); ++i ) {
+    for ( size_t i = 0; i < apollo_sb_count ( textures ); ++i ) {
         if ( strcmp ( texture_name, textures[i].name ) == 0 ) {
             return i;
         }
@@ -364,7 +363,7 @@ uint32_t apollo_find_texture ( const ApolloTexture* textures, const char* textur
 }
 
 uint32_t apollo_find_material ( const ApolloMaterial* materials, const char* mat_name ) {
-    for ( size_t i = 0; i < sb_count ( materials ); ++i ) {
+    for ( size_t i = 0; i < apollo_sb_count ( materials ); ++i ) {
         if ( strcmp ( mat_name, materials[i].name ) == 0 ) {
             return i;
         }
@@ -374,7 +373,7 @@ uint32_t apollo_find_material ( const ApolloMaterial* materials, const char* mat
 }
 
 uint32_t apollo_find_material_lib ( const ApolloMaterialLib* libs, const char* lib_filename ) {
-    for ( size_t i = 0; i < sb_count ( libs ); ++i ) {
+    for ( size_t i = 0; i < apollo_sb_count ( libs ); ++i ) {
         if ( strcmp ( lib_filename, libs[i].filename ) == 0 ) {
             return i;
         }
@@ -383,39 +382,35 @@ uint32_t apollo_find_material_lib ( const ApolloMaterialLib* libs, const char* l
     return -1;
 }
 
-size_t  apollo_buffer_size ( void* buffer ) {
-    return sb_count ( buffer );
+void apollo_buffer_free ( void* p, ApolloAllocator* allocator ) {
+    apollo_sb_free ( p, *allocator );
 }
 
-void apollo_buffer_free ( void* buffer ) {
-    sb_free ( buffer );
+int apollo_buffer_size ( void* p ) {
+    return apollo_sb_count ( p );
 }
+
 
 //--------------------------------------------------------------------------------------------------
 // File parsing routines
 //--------------------------------------------------------------------------------------------------
-// TODO: The overall error reporting should be improved, once finer grained
-// APOLLO_ERRORs are spread around they should also be moved here.
-// >= 0 valid texture index
-// -1 -> format error
-// -2 -> texture error
-
-ApolloResult apollo_read_texture ( FILE* file, ApolloTexture* textures, uint32_t* idx_out ) {
+// TODO this should read the texture data instead of just storing the name...
+ApolloResult apollo_read_texture ( FILE* file, const ApolloTexture* texture_bank, ApolloTexture* new_textures, uint32_t* new_texture_idx_out, ApolloAllocator* new_texture_allocator ) {
     char name[APOLLO_NAME_LEN];
 
     if ( fscanf ( file, "%s", name ) != 1 ) {
         return APOLLO_INVALID_FORMAT;
     }
 
-    uint32_t idx = apollo_find_texture ( textures, name );
+    uint32_t idx = apollo_find_texture ( texture_bank, name );
 
     if ( idx == -1 ) {
-        idx = sb_count ( textures );
-        ApolloTexture* texture = sb_add ( textures, 1 );
+        idx = apollo_sb_count ( new_textures );
+        ApolloTexture* texture = apollo_sb_add ( new_textures, 1, *new_texture_allocator );
         strncpy ( texture->name, name, 256 );
     }
 
-    *idx_out = idx;
+    *new_texture_idx_out = idx;
     return APOLLO_SUCCESS;
 }
 
@@ -460,7 +455,7 @@ void apollo_material_clear ( ApolloMaterial* mat ) {
     mat->name[0] = '\0';
 }
 
-ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, ApolloTexture* textures ) {
+ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib* lib, const ApolloTexture* texture_bank, ApolloTexture* new_textures, ApolloAllocator* allocator ) {
     FILE* file = NULL;
     file = fopen ( filename, "r" );
 
@@ -483,7 +478,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            for ( size_t i = 0; i < sb_count ( materials ); ++i ) {
+            for ( size_t i = 0; i < apollo_sb_count ( materials ); ++i ) {
                 if ( strcmp ( mat_name, materials[i].name ) == 0 ) {
                     APOLLO_LOG_ERR ( "Duplicate material name (%s) in materials library %s\n", mat_name, filename );
                     goto error;
@@ -491,7 +486,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
             }
 
             size_t mat_name_len = strlen ( mat_name );
-            ApolloMaterial* mat = sb_add ( materials, 1 );
+            ApolloMaterial* mat = apollo_sb_add ( materials, 1, *allocator );
             apollo_material_clear ( mat );
             strcpy ( mat->name, mat_name );
         } else if ( strcmp ( key, "Ni" ) == 0 ) {
@@ -511,15 +506,15 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).diffuse[0] = Kd.x;
-            sb_last ( materials ).diffuse[1] = Kd.y;
-            sb_last ( materials ).diffuse[2] = Kd.z;
+            apollo_sb_last ( materials ).diffuse[0] = Kd.x;
+            apollo_sb_last ( materials ).diffuse[1] = Kd.y;
+            apollo_sb_last ( materials ).diffuse[2] = Kd.z;
         } else if ( strcmp ( key, "map_Kd" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).diffuse_texture = idx;
+                apollo_sb_last ( materials ).diffuse_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading diffuse texture on file %s\n", idx, filename );
                 goto error;
@@ -534,15 +529,15 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).specular[0] = Ks.x;
-            sb_last ( materials ).specular[1] = Ks.y;
-            sb_last ( materials ).specular[2] = Ks.z;
+            apollo_sb_last ( materials ).specular[0] = Ks.x;
+            apollo_sb_last ( materials ).specular[1] = Ks.y;
+            apollo_sb_last ( materials ).specular[2] = Ks.z;
         } else if ( strcmp ( key, "map_Ks" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).specular_texture = idx;
+                apollo_sb_last ( materials ).specular_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading specular texture on file %s\n", idx, filename );
                 goto error;
@@ -557,15 +552,15 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).specular_exp = Ns;
+            apollo_sb_last ( materials ).specular_exp = Ns;
         }
         // Bump mapping
         else if ( strcmp ( key, "bump" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).bump_texture = idx;
+                apollo_sb_last ( materials ).bump_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading bump texture on file %s\n", idx, filename );
                 goto error;
@@ -580,13 +575,13 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).roughness = Pr;
+            apollo_sb_last ( materials ).roughness = Pr;
         } else if ( strcmp ( key, "map_Pr" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).roughness_texture = idx;
+                apollo_sb_last ( materials ).roughness_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading roughness texture on file %s\n", idx, filename );
                 goto error;
@@ -601,13 +596,13 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).metallic = Pm;
+            apollo_sb_last ( materials ).metallic = Pm;
         } else if ( strcmp ( key, "map_Pm" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).metallic_texture = idx;
+                apollo_sb_last ( materials ).metallic_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading metallic texture on file %s\n", idx, filename );
                 goto error;
@@ -622,15 +617,15 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            sb_last ( materials ).emissive[0] = Ke.x;
-            sb_last ( materials ).emissive[1] = Ke.y;
-            sb_last ( materials ).emissive[2] = Ke.z;
+            apollo_sb_last ( materials ).emissive[0] = Ke.x;
+            apollo_sb_last ( materials ).emissive[1] = Ke.y;
+            apollo_sb_last ( materials ).emissive[2] = Ke.z;
         } else if ( strcmp ( key, "map_Ke" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).emissive_texture = idx;
+                apollo_sb_last ( materials ).emissive_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading emissive texture on file %s\n", idx, filename );
                 goto error;
@@ -639,10 +634,10 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         // Normal map
         else if ( strcmp ( key, "normal" ) == 0 ) {
             uint32_t idx;
-            ApolloResult result = apollo_read_texture ( file, textures, &idx );
+            ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                sb_last ( materials ).normal_texture = idx;
+                apollo_sb_last ( materials ).normal_texture = idx;
             } else {
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading normal texture on file %s\n", idx, filename );
                 goto error;
@@ -660,15 +655,15 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
 
             // Apollo pbr is handled at the end
             if ( strcmp ( illum, "diffuse" ) == 0 ) {
-                sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
+                apollo_sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
             } else if ( strcmp ( illum, "specular" ) == 0 ) {
-                sb_last ( materials ).bsdf = APOLLO_SPECULAR;
+                apollo_sb_last ( materials ).bsdf = APOLLO_SPECULAR;
             } else if ( strcmp ( illum, "mirror" ) == 0 ) {
-                sb_last ( materials ).bsdf = APOLLO_MIRROR;
+                apollo_sb_last ( materials ).bsdf = APOLLO_MIRROR;
             } else if ( strcmp ( illum, "pbr" ) == 0 ) {
-                sb_last ( materials ).bsdf = APOLLO_PBR;
+                apollo_sb_last ( materials ).bsdf = APOLLO_PBR;
             } else {
-                APOLLO_LOG_ERR("Unsupported material bsdf %s", illum);
+                APOLLO_LOG_ERR ( "Unsupported material bsdf %s", illum );
             }
         } else if ( strcmp ( key, "#" ) == 0 ) {
             while ( getc ( file ) != '\n' );
@@ -699,7 +694,7 @@ typedef struct {
     char name[APOLLO_NAME_LEN];
 } ApolloOBJMesh;
 
-void apollo_initialize_mesh_obj(ApolloOBJMesh* mesh) {
+void apollo_initialize_mesh_obj ( ApolloOBJMesh* mesh ) {
     mesh->smoothing_group = APOLLO_INVALID_ID;
     mesh->material = APOLLO_INVALID_ID;
     mesh->indices_offset = 0;
@@ -708,23 +703,23 @@ void apollo_initialize_mesh_obj(ApolloOBJMesh* mesh) {
 
 // Removes submeshes which have invalid materials
 //--------------------------------------------------------------------------------------------------
-void apollo_filter_invalid_models(ApolloModel* model) {
-    APOLLO_LOG_VERBOSE("mesh_count %d\n", model->mesh_count);
-
+void apollo_filter_invalid_models ( ApolloModel* model ) {
+    APOLLO_LOG_VERBOSE ( "mesh_count %d\n", model->mesh_count );
     uint32_t i;
-    for (i = 0; i < model->mesh_count;) {
-        ApolloMesh* mesh = model->meshes + i;
-        APOLLO_LOG_VERBOSE("mesh %d", i);
-        APOLLO_LOG_VERBOSE("name %s", mesh->name);
-        APOLLO_LOG_VERBOSE("material_id %u", mesh->material_id);
-        APOLLO_LOG_VERBOSE("face_count %u", mesh->face_count);
 
-        if (mesh->material_id == APOLLO_INVALID_ID) {
+    for ( i = 0; i < model->mesh_count; ) {
+        ApolloMesh* mesh = model->meshes + i;
+        APOLLO_LOG_VERBOSE ( "mesh %d", i );
+        APOLLO_LOG_VERBOSE ( "name %s", mesh->name );
+        APOLLO_LOG_VERBOSE ( "material_id %u", mesh->material_id );
+        APOLLO_LOG_VERBOSE ( "face_count %u", mesh->face_count );
+
+        if ( mesh->material_id == APOLLO_INVALID_ID ) {
             // This could also be caused by an invalid command order, but we probably don't want to remove invalid meshes
-            assert(mesh->face_count == 0);
-            memcpy(mesh, model->meshes + (model->mesh_count - 1), sizeof(ApolloMesh));
+            assert ( mesh->face_count == 0 );
+            memcpy ( mesh, model->meshes + ( model->mesh_count - 1 ), sizeof ( ApolloMesh ) );
             --model->mesh_count;
-            APOLLO_LOG_VERBOSE("Removing mesh");
+            APOLLO_LOG_VERBOSE ( "Removing mesh" );
         } else {
             ++i;
         }
@@ -734,12 +729,7 @@ void apollo_filter_invalid_models(ApolloModel* model) {
 //--------------------------------------------------------------------------------------------------
 // Model
 //--------------------------------------------------------------------------------------------------
-ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** _materials, ApolloTexture** _textures, const ApolloLoadOptions* options ) {
-    // Setup sb
-    apollo_temp_allocator = options->temp_allocator;
-    apollo_temp_alloc_f = options->temp_alloc;
-    apollo_temp_realloc_f = options->temp_realloc;
-    apollo_temp_free_f = options->temp_free;
+ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model, ApolloMaterial** materials_bank, ApolloTexture** textures_bank, ApolloLoadOptions* options ) {
     // Open mesh file
     FILE* file = fopen ( filename, "r" );
 
@@ -791,15 +781,14 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     ApolloAdjacencyTable atable = {};
     ApolloIndexTable itable = {};
     // Temporary buffers
-    ApolloMaterial* materials = *_materials;
-    ApolloTexture* textures = *_textures;
     ApolloFloat3* f_pos = NULL;
     ApolloFloat2* f_tex = NULL;
     ApolloFloat3* f_norm = NULL;
     size_t face_count = 0;
     ApolloOBJMesh* meshes = NULL;
-    ApolloMaterial* used_materials = NULL;  // New ApolloMaterials go from material_libs to here while building, and from here to materials before returning.
-    ApolloMaterialLib* material_libs = NULL;
+    ApolloTexture* new_textures = NULL;
+    ApolloMaterial* new_materials = NULL;
+    ApolloMaterialLib* material_libs = NULL; // Temporary storage where .mtl files get loaded into RAM before being processed
     uint32_t* m_idx = NULL;
     typedef struct {
         ApolloFloat3 pos;
@@ -810,22 +799,22 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
     // Prealloc memory
     if ( options->remove_vertex_duplicates ) {
-        apollo_vertex_table_create ( &vtable, 2 * options->prealloc_vertex_count );
+        apollo_vertex_table_create ( &vtable, 2 * options->prealloc_vertex_count, &options->temp_allocator );
     }
 
     if ( options->recompute_vertex_normals ) {
-        apollo_adjacency_table_create ( &atable, 2 * options->prealloc_vertex_count );
-        apollo_index_table_create ( &itable, 2 * options->prealloc_index_count );
+        apollo_adjacency_table_create ( &atable, 2 * options->prealloc_vertex_count, &options->temp_allocator );
+        apollo_index_table_create ( &itable, 2 * options->prealloc_index_count, &options->temp_allocator );
     }
 
-    sb_prealloc ( f_pos, options->prealloc_vertex_count );
-    sb_prealloc ( f_tex, options->prealloc_vertex_count );
-    sb_prealloc ( f_norm, options->prealloc_vertex_count );
-    sb_prealloc ( m_idx, options->prealloc_index_count );
-    sb_prealloc ( m_vert, options->prealloc_vertex_count );
-    sb_prealloc ( meshes, options->prealloc_mesh_count );
-    sb_prealloc ( used_materials, options->prealloc_mesh_count );
-    sb_prealloc ( material_libs, options->prealloc_mesh_count );
+    apollo_sb_prealloc ( f_pos, options->prealloc_vertex_count, options->temp_allocator );
+    apollo_sb_prealloc ( f_tex, options->prealloc_vertex_count, options->temp_allocator );
+    apollo_sb_prealloc ( f_norm, options->prealloc_vertex_count, options->temp_allocator );
+    apollo_sb_prealloc ( m_idx, options->prealloc_index_count, options->temp_allocator );
+    apollo_sb_prealloc ( m_vert, options->prealloc_vertex_count, options->temp_allocator );
+    apollo_sb_prealloc ( meshes, options->prealloc_mesh_count, options->temp_allocator );
+    apollo_sb_prealloc ( new_materials, options->prealloc_mesh_count, options->temp_allocator );
+    apollo_sb_prealloc ( material_libs, options->prealloc_mesh_count, options->temp_allocator );
     // Start parsing
     ApolloResult result;
     int x;
@@ -866,7 +855,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 uint32_t idx = apollo_find_material_lib ( material_libs, lib_name );
 
                 if ( idx == -1 ) {
-                    result = apollo_open_material_lib ( lib_name, sb_add ( material_libs, 1 ), textures );
+                    result = apollo_open_material_lib ( lib_name, apollo_sb_add ( material_libs, 1, options->temp_allocator ), *textures_bank, new_textures, &options->temp_allocator );
 
                     if ( result != APOLLO_SUCCESS ) {
                         goto error;
@@ -889,35 +878,35 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 fscanf ( file, "%s", mat_name );
 
                 // Chech for mesh
-                if ( sb_count ( meshes ) == 0 ) {
-                    ApolloOBJMesh* m = sb_add ( meshes, 1 );
-                    apollo_initialize_mesh_obj(m);
-                    m->indices_offset = sb_count ( m_idx );
+                if ( apollo_sb_count ( meshes ) == 0 ) {
+                    ApolloOBJMesh* m = apollo_sb_add ( meshes, 1, options->temp_allocator );
+                    apollo_initialize_mesh_obj ( m );
+                    m->indices_offset = apollo_sb_count ( m_idx );
                 }
 
                 // Lookup the user materials
-                uint32_t idx = apollo_find_material ( materials, mat_name );
+                uint32_t idx = apollo_find_material ( *materials_bank, mat_name );
 
                 if ( idx != -1 ) {
-                    sb_last ( meshes ).material = idx;
+                    apollo_sb_last ( meshes ).material = idx;
                     break;
                 }
 
                 // Lookup the additional materials that have been already loaded for this obj
-                idx = apollo_find_material ( used_materials, mat_name );
+                idx = apollo_find_material ( new_materials, mat_name );
 
                 if ( idx != -1 ) {
-                    sb_last ( meshes ).material = idx + sb_count ( materials );
+                    apollo_sb_last ( meshes ).material = idx + apollo_sb_count ( *materials_bank );
                     break;
                 }
 
                 // Lookup the entire material libs that have been linked so far by this obj
-                for ( size_t i = 0; i < sb_count ( material_libs ); ++i ) {
+                for ( size_t i = 0; i < apollo_sb_count ( material_libs ); ++i ) {
                     idx = apollo_find_material ( material_libs[i].materials, mat_name );
 
                     if ( idx != -1 ) {
-                        sb_push ( used_materials, material_libs[i].materials[idx] );
-                        sb_last ( meshes ).material = sb_count ( materials ) + sb_count ( used_materials ) - 1;
+                        apollo_sb_push ( new_materials, material_libs[i].materials[idx], options->temp_allocator );
+                        apollo_sb_last ( meshes ).material = apollo_sb_count ( *materials_bank ) + apollo_sb_count ( new_materials ) - 1;
                         break;
                     }
                 }
@@ -936,7 +925,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                 switch ( x ) {
                     case ' ': {
-                        ApolloFloat3* pos = sb_add ( f_pos, 1 );
+                        ApolloFloat3* pos = apollo_sb_add ( f_pos, 1, options->temp_allocator );
 
                         if ( !apollo_read_float3 ( file, pos ) ) {
                             result = APOLLO_INVALID_FORMAT;
@@ -950,7 +939,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                     break;
 
                     case 't': {
-                        ApolloFloat2* uv = sb_add ( f_tex, 1 );
+                        ApolloFloat2* uv = apollo_sb_add ( f_tex, 1, options->temp_allocator );
 
                         if ( !apollo_read_float2 ( file, uv ) ) {
                             result = APOLLO_INVALID_FORMAT;
@@ -964,7 +953,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                     break;
 
                     case 'n': {
-                        ApolloFloat3* norm = sb_add ( f_norm, 1 );
+                        ApolloFloat3* norm = apollo_sb_add ( f_norm, 1, options->temp_allocator );
 
                         if ( !apollo_read_float3 ( file, norm ) ) {
                             result = APOLLO_INVALID_FORMAT;
@@ -988,9 +977,9 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                 switch ( x ) {
                     case ' ': {
-                        ApolloOBJMesh* m = sb_add ( meshes, 1 );
-                        apollo_initialize_mesh_obj(m);
-                        m->indices_offset = sb_count ( m_idx );
+                        ApolloOBJMesh* m = apollo_sb_add ( meshes, 1, options->temp_allocator );
+                        apollo_initialize_mesh_obj ( m );
+                        m->indices_offset = apollo_sb_count ( m_idx, options->temp_allocator );
                         fscanf ( file, "%s", m->name );
                         break;
                     }
@@ -1006,16 +995,16 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 x = fgetc ( file );
                 x = fgetc ( file );
 
-                if ( sb_count ( meshes ) == 0 ) {
-                    ApolloOBJMesh* m = sb_add ( meshes, 1 );
-                    apollo_initialize_mesh_obj(m);
-                    m->indices_offset = sb_count ( m_idx );
+                if ( apollo_sb_count ( meshes ) == 0 ) {
+                    ApolloOBJMesh* m = apollo_sb_add ( meshes, 1, options->temp_allocator );
+                    apollo_initialize_mesh_obj ( m );
+                    m->indices_offset = apollo_sb_count ( m_idx );
                 }
 
                 if ( x == '1' ) {
-                    sb_last ( meshes ).smoothing_group = 1;
+                    apollo_sb_last ( meshes ).smoothing_group = 1;
                 } else {
-                    sb_last ( meshes ).smoothing_group = 0;
+                    apollo_sb_last ( meshes ).smoothing_group = 0;
                 }
 
                 while ( fgetc ( file ) != '\n' )
@@ -1064,8 +1053,8 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                         // first_vertex_index and last_vertex_index will be set later (note the face_vertex_count >=3 check).
                         // TODO ?
                         if ( face_vertex_count >= 3 ) {
-                            sb_push ( m_idx, first_vertex_index );
-                            sb_push ( m_idx, last_vertex_index );
+                            apollo_sb_push ( m_idx, first_vertex_index, options->temp_allocator );
+                            apollo_sb_push ( m_idx, last_vertex_index, options->temp_allocator );
                             //indices[index_count++] = first_vertex_index;
                             //indices[index_count++] = last_vertex_index;
                         }
@@ -1092,15 +1081,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                                         // A new data piece has been extraced, we store it.
                                         switch ( data_piece_index ) {
                                             case 0:
-                                                pos_index = data > 0 ? data - 1 : sb_count ( f_pos ) + data;
+                                                pos_index = data > 0 ? data - 1 : apollo_sb_count ( f_pos ) + data;
                                                 break;
 
                                             case 1:
-                                                tex_index = data > 0 ? data - 1 : sb_count ( f_tex ) + data;
+                                                tex_index = data > 0 ? data - 1 : apollo_sb_count ( f_tex ) + data;
                                                 break;
 
                                             case 2:
-                                                norm_index = data > 0 ? data - 1 : sb_count ( f_norm ) + data;
+                                                norm_index = data > 0 ? data - 1 : apollo_sb_count ( f_norm ) + data;
                                                 break;
                                         }
 
@@ -1112,20 +1101,20 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             } while ( vertex_str[i++] != '\0' );
                         }
                         // Preallocate index
-                        uint32_t* index = sb_add ( m_idx, 1 );
+                        uint32_t* index = apollo_sb_add ( m_idx, 1, options->temp_allocator );
 
                         // In an OBJ file, the faces mark the end of a mesh.
                         // However it could be that the first mesh was implicitly started (not listed in the file), so we consider that case,
-                        if ( sb_count ( meshes ) == 0 ) {
-                            ApolloOBJMesh* m = sb_add ( meshes, 1 );
-                            apollo_initialize_mesh_obj(m);
-                            m->indices_offset = sb_count ( m_idx ) - 1;
+                        if ( apollo_sb_count ( meshes ) == 0 ) {
+                            ApolloOBJMesh* m = apollo_sb_add ( meshes, 1, options->temp_allocator );
+                            apollo_initialize_mesh_obj ( m );
+                            m->indices_offset = apollo_sb_count ( m_idx ) - 1;
                         }
 
                         // Finalize the vertex, testing for overlaps if the mesh is smooth and updating the first/last face vertex indices
                         bool duplicate = false;
 
-                        if ( options->remove_vertex_duplicates &&  sb_last ( meshes ).smoothing_group == 1 ) {
+                        if ( options->remove_vertex_duplicates &&  apollo_sb_last ( meshes ).smoothing_group == 1 ) {
                             ApolloVertexTableItem* lookup = apollo_vertex_table_lookup ( &vtable, &f_pos[pos_index] );
 
                             if ( lookup != NULL ) {
@@ -1136,15 +1125,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
                         if ( !duplicate ) {
                             // If it's not a duplicate, add it as a new vertex
-                            ApolloOBJVertex* vertex = sb_add ( m_vert, 1 );
+                            ApolloOBJVertex* vertex = apollo_sb_add ( m_vert, 1, options->temp_allocator );
                             vertex->pos = f_pos[pos_index];
                             vertex->tex = tex_index != -1 ? f_tex[tex_index] : ApolloFloat2{ 0, 0 };
                             vertex->norm = norm_index != -1 ? f_norm[norm_index] : ApolloFloat3{ 0, 0, 0 };
-                            *index = sb_count ( m_vert ) - 1;
+                            *index = apollo_sb_count ( m_vert ) - 1;
 
                             if ( options->remove_vertex_duplicates ) {
                                 ApolloVertexTableItem item = { vertex->pos, *index };
-                                apollo_vertex_table_insert ( &vtable, &item );
+                                apollo_vertex_table_insert ( &vtable, &item, &options->temp_allocator );
                             }
                         }
 
@@ -1153,10 +1142,10 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                             ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, *index );
 
                             if ( adj_lookup == NULL ) {
-                                adj_lookup = apollo_adjacency_table_insert ( &atable, *index );
+                                adj_lookup = apollo_adjacency_table_insert ( &atable, *index, &options->temp_allocator );
                             }
 
-                            apollo_adjacency_item_add_unique ( adj_lookup, face_count );
+                            apollo_adjacency_item_add_unique ( adj_lookup, face_count, &options->temp_allocator );
                         }
 
                         // Store the first and last vertex index for later
@@ -1181,10 +1170,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     }
 
     // End of file
+    fclose ( file );
+
+    for ( size_t i = 0; i < apollo_sb_count ( material_libs ); ++i ) {
+        fclose ( material_libs[i].file );
+    }
 
     // Flip faces?
     if ( options->flip_faces ) {
-        for ( size_t i = 0; i < sb_count ( m_idx ); i += 3 ) {
+        for ( size_t i = 0; i < apollo_sb_count ( m_idx ); i += 3 ) {
             uint32_t idx = m_idx[i];
             m_idx[i] = m_idx[i + 2];
             m_idx[i + 2] = idx;
@@ -1198,15 +1192,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         ApolloFloat3* face_bitangents = NULL;
 
         if ( options->compute_face_normals ) {
-            sb_add ( face_normals, face_count );
+            apollo_sb_add ( face_normals, face_count, options->temp_allocator );
         }
 
         if ( options->compute_tangents ) {
-            sb_add ( face_tangents, face_count );
+            apollo_sb_add ( face_tangents, face_count, options->temp_allocator );
         }
 
         if ( options->compute_bitangents ) {
-            sb_add ( face_bitangents, face_count );
+            apollo_sb_add ( face_bitangents, face_count, options->temp_allocator );
         }
 
         // Compute face normals
@@ -1238,9 +1232,9 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
         // Recompute the vertex normals for smooth meshes
         if ( options->recompute_vertex_normals ) {
-            for ( size_t m = 0; m < sb_count ( meshes ); ++m ) {
+            for ( size_t m = 0; m < apollo_sb_count ( meshes ); ++m ) {
                 size_t mesh_index_base = meshes[m].indices_offset;
-                size_t mesh_index_count = m < sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : sb_count ( m_idx ) - mesh_index_base;
+                size_t mesh_index_count = m < apollo_sb_count ( meshes ) - 1 ? meshes[m + 1].indices_offset - mesh_index_base : apollo_sb_count ( m_idx ) - mesh_index_base;
                 size_t mesh_face_count = mesh_index_count / 3;
 
                 if ( mesh_index_count % 3 != 0 ) {
@@ -1270,7 +1264,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                     if ( already_computed_vertex ) {
                         continue;
                     } else {
-                        apollo_index_table_insert ( &itable, m_idx[mesh_index_base + i] );
+                        apollo_index_table_insert ( &itable, m_idx[mesh_index_base + i], &options->temp_allocator );
                     }
 
                     ApolloAdjacencyTableItem* adj_lookup = apollo_adjacency_table_lookup ( &atable, m_idx[mesh_index_base + i] );
@@ -1337,25 +1331,20 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
             }
         }
 
-        // Update ApolloMaterials
-        for ( size_t i = 0; i < sb_count ( used_materials ); ++i ) {
-            sb_push ( materials, used_materials[i] );
-        }
-
         // Build ApolloModel
-#define APOLLO_FINAL_MALLOC(T, n) (T*) options->final_alloc(options->final_allocator, sizeof(T) * n, 16);
+#define APOLLO_FINAL_ALLOC(T, n) (T*) options->final_allocator.alloc(&options->final_allocator, sizeof(T) * n, 16);
         // Vertices
-        model->vertex_data.pos_x = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.pos_y = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.pos_z = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.norm_x = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.norm_y = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.norm_z = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.tex_u = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_data.tex_v = APOLLO_FINAL_MALLOC ( float, sb_count ( m_vert ) );
-        model->vertex_count = sb_count ( m_vert );
+        model->vertex_data.pos_x =  APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.pos_y =  APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.pos_z =  APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.norm_x = APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.norm_y = APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.norm_z = APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.tex_u =  APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_data.tex_v =  APOLLO_ALLOC_ALIGN ( &options->final_allocator, float, apollo_sb_count ( m_vert ), 16 );
+        model->vertex_count = apollo_sb_count ( m_vert );
 
-        for ( size_t i = 0; i < sb_count ( m_vert ); ++i ) {
+        for ( size_t i = 0; i < apollo_sb_count ( m_vert ); ++i ) {
             model->vertex_data.pos_x[i] = m_vert[i].pos.x;
             model->vertex_data.pos_y[i] = m_vert[i].pos.y;
             model->vertex_data.pos_z[i] = m_vert[i].pos.z;
@@ -1367,15 +1356,15 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         }
 
         // Meshes
-        model->meshes = APOLLO_FINAL_MALLOC ( ApolloMesh, sb_count ( meshes ) );
-        model->mesh_count = sb_count ( meshes );
+        model->meshes = APOLLO_FINAL_ALLOC ( ApolloMesh, apollo_sb_count ( meshes ) );
+        model->mesh_count = apollo_sb_count ( meshes );
 
-        for ( size_t i = 0; i < sb_count ( meshes ); ++i ) {
+        for ( size_t i = 0; i < apollo_sb_count ( meshes ); ++i ) {
             strcpy ( model->meshes[i].name, meshes[i].name );
             memset ( &model->meshes[i].face_data, 0, sizeof ( ApolloMeshFaceData ) );
             // Faces
             int mesh_index_base = meshes[i].indices_offset;
-            size_t mesh_index_count = i < sb_count ( meshes ) - 1 ? meshes[i + 1].indices_offset - mesh_index_base : sb_count ( m_idx ) - mesh_index_base;
+            size_t mesh_index_count = i < apollo_sb_count ( meshes ) - 1 ? meshes[i + 1].indices_offset - mesh_index_base : apollo_sb_count ( m_idx ) - mesh_index_base;
             int mesh_face_count = mesh_index_count / 3;
 
             if ( mesh_index_count % 3 != 0 ) {
@@ -1383,27 +1372,27 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
                 result = APOLLO_INVALID_FORMAT;
                 goto error;
             }
-                
-            model->meshes[i].face_data.idx_a = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
-            model->meshes[i].face_data.idx_b = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
-            model->meshes[i].face_data.idx_c = APOLLO_FINAL_MALLOC ( uint32_t, mesh_face_count );
+
+            model->meshes[i].face_data.idx_a = APOLLO_FINAL_ALLOC ( uint32_t, mesh_face_count );
+            model->meshes[i].face_data.idx_b = APOLLO_FINAL_ALLOC ( uint32_t, mesh_face_count );
+            model->meshes[i].face_data.idx_c = APOLLO_FINAL_ALLOC ( uint32_t, mesh_face_count );
 
             if ( options->compute_face_normals ) {
-                model->meshes[i].face_data.normal_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.normal_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.normal_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.normal_x = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.normal_y = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.normal_z = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
             }
 
             if ( options->compute_tangents ) {
-                model->meshes[i].face_data.tangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.tangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.tangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.tangent_x = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.tangent_y = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.tangent_z = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
             }
 
             if ( options->compute_bitangents ) {
-                model->meshes[i].face_data.bitangent_x = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.bitangent_y = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
-                model->meshes[i].face_data.bitangent_z = APOLLO_FINAL_MALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.bitangent_x = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.bitangent_y = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
+                model->meshes[i].face_data.bitangent_z = APOLLO_FINAL_ALLOC ( float, mesh_face_count );
             }
 
             model->meshes[i].face_count = mesh_face_count;
@@ -1513,7 +1502,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         ApolloFloat3 min = m_vert[0].pos;
         ApolloFloat3 max = m_vert[0].pos;
 
-        for ( size_t j = 1; j < sb_count ( m_vert ); ++j ) {
+        for ( size_t j = 1; j < apollo_sb_count ( m_vert ); ++j ) {
             ApolloFloat3 pos = m_vert[j].pos;
             min.x = pos.x < min.x ? pos.x : min.x;
             min.y = pos.y < min.y ? pos.y : min.y;
@@ -1536,7 +1525,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         center.z = ( max.z + min.z ) / 2.f;
         float max_dist = 0;
 
-        for ( size_t j = 1; j < sb_count ( m_vert ); ++j ) {
+        for ( size_t j = 1; j < apollo_sb_count ( m_vert ); ++j ) {
             ApolloFloat3 pos = m_vert[j].pos;
             ApolloFloat3 center_to_pos;
             center_to_pos.x = pos.x - center.x;
@@ -1555,49 +1544,48 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
         model->bounding_sphere[3] = max_dist;
     }
 
-    fclose ( file );
+    // Update materials bank
+    {
+        ApolloMaterial* new_materials_base = apollo_sb_add ( *materials_bank, apollo_sb_count ( new_materials ), options->final_allocator );
 
-    for ( size_t i = 0; i < sb_count ( material_libs ); ++i ) {
-        fclose ( material_libs[i].file );
+        for ( size_t i = 0; i < apollo_sb_count ( new_materials ); ++i ) {
+            new_materials_base[i] = new_materials[i];
+        }
     }
+    // Update textures bank
+    {
+        ApolloTexture* new_textures_base = apollo_sb_add ( *textures_bank, apollo_sb_count ( new_textures ), options->final_allocator );
 
-    //
-    apollo_filter_invalid_models(model);
-
-    *_materials = materials;
-    *_textures = textures;
-    apollo_vertex_table_destroy ( &vtable );
-    apollo_adjacency_table_destroy ( &atable );
-    apollo_index_table_destroy ( &itable );
-    sb_free ( used_materials );
-    sb_free ( material_libs );
-    sb_free ( f_pos );
-    sb_free ( f_norm );
-    sb_free ( f_tex );
-    sb_free ( m_idx );
-    sb_free ( m_vert );
-    sb_free ( meshes );
-    apollo_temp_allocator = NULL;
-    apollo_temp_alloc_f = NULL;
-    apollo_temp_realloc_f = NULL;
-    apollo_temp_free_f = NULL;
+        for ( size_t i = 0; i < apollo_sb_count ( new_textures ); ++i ) {
+            new_textures_base[i] = new_textures[i];
+        }
+    }
+    // Clean up and return
+    apollo_filter_invalid_models ( model );
+    apollo_vertex_table_destroy ( &vtable, &options->temp_allocator );
+    apollo_adjacency_table_destroy ( &atable, &options->temp_allocator );
+    apollo_index_table_destroy ( &itable, &options->temp_allocator );
+    apollo_sb_free ( new_materials, options->temp_allocator );
+    apollo_sb_free ( material_libs, options->temp_allocator );
+    apollo_sb_free ( f_pos, options->temp_allocator );
+    apollo_sb_free ( f_norm, options->temp_allocator );
+    apollo_sb_free ( f_tex, options->temp_allocator );
+    apollo_sb_free ( m_idx, options->temp_allocator );
+    apollo_sb_free ( m_vert, options->temp_allocator );
+    apollo_sb_free ( meshes, options->temp_allocator );
     return APOLLO_SUCCESS;
 error:
-    apollo_vertex_table_destroy ( &vtable );
-    apollo_adjacency_table_destroy ( &atable );
-    apollo_index_table_destroy ( &itable );
-    sb_free ( used_materials );
-    sb_free ( material_libs );
-    sb_free ( f_pos );
-    sb_free ( f_norm );
-    sb_free ( f_tex );
-    sb_free ( m_idx );
-    sb_free ( m_vert );
-    sb_free ( meshes );
-    apollo_temp_allocator = NULL;
-    apollo_temp_alloc_f = NULL;
-    apollo_temp_realloc_f = NULL;
-    apollo_temp_free_f = NULL;
+    apollo_vertex_table_destroy ( &vtable, &options->temp_allocator );
+    apollo_adjacency_table_destroy ( &atable, &options->temp_allocator );
+    apollo_index_table_destroy ( &itable, &options->temp_allocator );
+    apollo_sb_free ( new_materials, options->temp_allocator );
+    apollo_sb_free ( material_libs, options->temp_allocator );
+    apollo_sb_free ( f_pos, options->temp_allocator );
+    apollo_sb_free ( f_norm, options->temp_allocator );
+    apollo_sb_free ( f_tex, options->temp_allocator );
+    apollo_sb_free ( m_idx, options->temp_allocator );
+    apollo_sb_free ( m_vert, options->temp_allocator );
+    apollo_sb_free ( meshes, options->temp_allocator );
     return result;
 #undef APOLLO_FINAL_MALLOC
 }
@@ -1739,9 +1727,9 @@ void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* mat
 //--------------------------------------------------------------------------------------------------
 // IndexTable
 //--------------------------------------------------------------------------------------------------
-void apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity ) {
+void apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity, ApolloAllocator* allocator ) {
     assert ( ( capacity & ( capacity - 1 ) ) == 0 ); // is power of 2
-    table->items = APOLLO_TEMP_ALLOC ( uint32_t, capacity );
+    table->items = APOLLO_ALLOC ( allocator, uint32_t, capacity );
     memset ( table->items, 0, sizeof ( uint32_t ) * capacity );
     table->capacity = capacity;
     table->count = 0;
@@ -1749,8 +1737,8 @@ void apollo_index_table_create ( ApolloIndexTable* table, uint32_t capacity ) {
     table->is_zero_id_slot_used = false;
 }
 
-void apollo_index_table_destroy ( ApolloIndexTable* table ) {
-    APOLLO_TEMP_FREE ( table->items, table->capacity );
+void apollo_index_table_destroy ( ApolloIndexTable* table, ApolloAllocator* allocator ) {
+    APOLLO_FREE ( allocator, table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -1799,11 +1787,11 @@ int apollo_index_table_item_distance ( const ApolloIndexTable* table, uint32_t* 
     }
 }
 
-void apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity ) {
+void apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity, ApolloAllocator* allocator ) {
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 ); // is power of 2
     uint32_t* old_items = table->items;
     uint32_t old_capacity = table->capacity;
-    table->items = APOLLO_TEMP_ALLOC ( uint32_t, new_capacity );
+    table->items = APOLLO_ALLOC ( allocator, uint32_t, new_capacity );
     memset ( table->items, 0, sizeof ( uint32_t ) * new_capacity );
     table->capacity = new_capacity;
     table->access_mask = new_capacity - 1;
@@ -1821,12 +1809,12 @@ void apollo_index_table_resize ( ApolloIndexTable* table, uint32_t new_capacity 
         }
     }
 
-    APOLLO_TEMP_FREE ( old_items, old_capacity );
+    APOLLO_FREE ( allocator, old_items, old_capacity );
 }
 
-void apollo_index_table_insert ( ApolloIndexTable* table, uint32_t item ) {
+void apollo_index_table_insert ( ApolloIndexTable* table, uint32_t item, ApolloAllocator* allocator ) {
     if ( ( table->count + 1 ) * 4 >= table->capacity * 3 ) {
-        apollo_index_table_resize ( table, table->capacity * 2 );
+        apollo_index_table_resize ( table, table->capacity * 2, allocator );
     }
 
     if ( item != 0 ) {
@@ -1871,9 +1859,9 @@ bool apollo_index_table_lookup ( ApolloIndexTable* table, uint32_t item ) {
 //--------------------------------------------------------------------------------------------------
 // VertexTable
 //--------------------------------------------------------------------------------------------------
-void apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity ) {
+void apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity, ApolloAllocator* allocator ) {
     assert ( ( capacity & ( capacity - 1 ) ) == 0 ); // is power of 2
-    table->items = APOLLO_TEMP_ALLOC ( ApolloVertexTableItem, capacity );
+    table->items = APOLLO_ALLOC ( allocator, ApolloVertexTableItem, capacity );
     memset ( table->items, 0, sizeof ( *table->items ) * capacity );
     table->capacity = capacity;
     table->count = 0;
@@ -1882,8 +1870,8 @@ void apollo_vertex_table_create ( ApolloVertexTable* table, uint32_t capacity ) 
     table->zero_key_item = { { 0, 0, 0 }, 0 };
 }
 
-void apollo_vertex_table_destroy ( ApolloVertexTable* table ) {
-    APOLLO_TEMP_FREE ( table->items, table->capacity );
+void apollo_vertex_table_destroy ( ApolloVertexTable* table, ApolloAllocator* allocator ) {
+    APOLLO_FREE ( allocator, table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -1913,11 +1901,11 @@ int apollo_vertex_table_item_distance ( const ApolloVertexTable* table, ApolloVe
     }
 }
 
-void apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacity ) {
+void apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacity, ApolloAllocator* allocator ) {
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 ); // is power of 2
     ApolloVertexTableItem* old_items = table->items;
     uint32_t old_capacity = table->capacity;
-    table->items = APOLLO_TEMP_ALLOC ( ApolloVertexTableItem, new_capacity );
+    table->items = APOLLO_ALLOC ( allocator, ApolloVertexTableItem, new_capacity );
     memset ( table->items, 0, sizeof ( *table->items ) * new_capacity );
     table->capacity = new_capacity;
     table->access_mask = new_capacity - 1;
@@ -1936,12 +1924,12 @@ void apollo_vertex_table_resize ( ApolloVertexTable* table, uint32_t new_capacit
         }
     }
 
-    APOLLO_TEMP_FREE ( old_items, old_capacity );
+    APOLLO_FREE ( allocator, old_items, old_capacity );
 }
 
-void apollo_vertex_table_insert ( ApolloVertexTable* table, const ApolloVertexTableItem* item ) {
+void apollo_vertex_table_insert ( ApolloVertexTable* table, const ApolloVertexTableItem* item, ApolloAllocator* allocator ) {
     if ( ( table->count + 1 ) * 4 >= table->capacity * 3 ) {
-        apollo_vertex_table_resize ( table, table->capacity * 2 );
+        apollo_vertex_table_resize ( table, table->capacity * 2, allocator );
     }
 
     ApolloFloat3 zero_f3 = { 0, 0, 0 };
@@ -1997,7 +1985,7 @@ ApolloVertexTableItem* apollo_vertex_table_lookup ( ApolloVertexTable* table, co
 // AdjacencyTable
 //--------------------------------------------------------------------------------------------------
 // returns false if it was already there, false if not. After the search, if not found, the item is added.
-bool apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t value ) {
+bool apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t value, ApolloAllocator* allocator ) {
     unsigned int i;
 
     for ( i = 0; i < item->count; ++i ) {
@@ -2027,14 +2015,14 @@ bool apollo_adjacency_item_add_unique ( ApolloAdjacencyTableItem* item, uint32_t
             item->values[item->count++] = value;
             return false;
         } else {
-            item->next = ( ApolloAdjacencyTableExtension* ) apollo_temp_alloc_f ( apollo_temp_allocator, sizeof ( ApolloAdjacencyTableExtension ), 64 );
+            item->next = ( ApolloAdjacencyTableExtension* ) APOLLO_ALLOC ( allocator, ApolloAdjacencyTableExtension, 1, 64 );
             memset ( item->next, 0, sizeof ( *item->next ) );
             ext = item->next;
         }
     }
 
     if ( ext->count == APOLLO_ADJACENCY_EXTENSION_CAPACITY ) {
-        ext->next = ( ApolloAdjacencyTableExtension* ) apollo_temp_alloc_f ( apollo_temp_allocator, sizeof ( ApolloAdjacencyTableExtension ), 64 );
+        ext->next = ( ApolloAdjacencyTableExtension* ) APOLLO_ALLOC ( allocator, ApolloAdjacencyTableExtension, 1, 64 );
         memset ( ext->next, 0, sizeof ( *ext->next ) );
         ext = ext->next;
     }
@@ -2068,28 +2056,28 @@ bool apollo_adjacency_item_contains ( ApolloAdjacencyTableItem* item, uint32_t v
     return false;
 }
 
-void apollo_adjacency_table_create ( ApolloAdjacencyTable* table, uint32_t capacity ) {
+void apollo_adjacency_table_create ( ApolloAdjacencyTable* table, uint32_t capacity, ApolloAllocator* allocator ) {
     assert ( ( capacity & ( capacity - 1 ) ) == 0 );
     table->count = 0;
     table->capacity = capacity;
     table->access_mask = capacity - 1;
-    table->items = APOLLO_TEMP_ALLOC ( ApolloAdjacencyTableItem, capacity );
+    table->items = APOLLO_ALLOC ( allocator, ApolloAdjacencyTableItem, capacity );
     memset ( table->items, 0, sizeof ( ApolloAdjacencyTableItem ) * capacity );
     memset ( &table->zero_key_item, 0, sizeof ( table->zero_key_item ) );
 }
 
-void apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table ) {
+void apollo_adjacency_table_destroy ( ApolloAdjacencyTable* table, ApolloAllocator* allocator ) {
     for ( size_t i = 0; i < table->capacity; ++i ) {
         ApolloAdjacencyTableExtension* ext = table->items[i].next;
 
         while ( ext ) {
             ApolloAdjacencyTableExtension* p = ext;
             ext = ext->next;
-            APOLLO_TEMP_FREE ( p, 1 );
+            APOLLO_FREE ( allocator, p, 1 );
         }
     }
 
-    APOLLO_TEMP_FREE ( table->items, table->capacity );
+    APOLLO_FREE ( allocator, table->items, table->capacity );
     table->items = NULL;
 }
 
@@ -2113,11 +2101,11 @@ int apollo_adjacency_table_distance ( const ApolloAdjacencyTable* table, const A
     }
 }
 
-void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_capacity ) {
+void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_capacity, ApolloAllocator* allocator ) {
     assert ( ( new_capacity & ( new_capacity - 1 ) ) == 0 );
     ApolloAdjacencyTableItem* old_items = table->items;
     uint32_t old_capacity = table->capacity;
-    table->items = APOLLO_TEMP_ALLOC ( ApolloAdjacencyTableItem, new_capacity );
+    table->items = APOLLO_ALLOC ( allocator, ApolloAdjacencyTableItem, new_capacity );
     memset ( table->items, 0, sizeof ( ApolloAdjacencyTableItem ) * new_capacity );
     table->capacity = new_capacity;
 
@@ -2132,12 +2120,12 @@ void apollo_adjacency_table_resize ( ApolloAdjacencyTable* table, uint32_t new_c
         *new_item = *old_item;
     }
 
-    APOLLO_TEMP_FREE ( old_items, old_capacity );
+    APOLLO_FREE ( allocator, old_items, old_capacity );
 }
 
-ApolloAdjacencyTableItem* apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key ) {
+ApolloAdjacencyTableItem* apollo_adjacency_table_insert ( ApolloAdjacencyTable* table, uint32_t key, ApolloAllocator* allocator ) {
     if ( ( table->count + 1 ) * 4 >= table->capacity * 3 ) {
-        apollo_adjacency_table_resize ( table, table->capacity * 2 );
+        apollo_adjacency_table_resize ( table, table->capacity * 2, allocator );
     }
 
     if ( key != 0 ) {
@@ -2189,12 +2177,12 @@ ApolloAdjacencyTableItem* apollo_adjacency_table_lookup ( ApolloAdjacencyTable* 
 //--------------------------------------------------------------------------------------------------
 // STB SB
 //--------------------------------------------------------------------------------------------------
-static void* stb__sbgrowf ( void* arr, int increment, int itemsize ) {
-    int dbl_cur = arr ? 2 * stb__sbm ( arr ) : 0;
-    int min_needed = stb_sb_count ( arr ) + increment;
+static void* apollo__sbgrowf ( void* arr, int increment, int itemsize, ApolloAllocator* allocator ) {
+    int dbl_cur = arr ? 2 * apollo__sbm ( arr ) : 0;
+    int min_needed = apollo_sb_count ( arr ) + increment;
     int m = dbl_cur > min_needed ? dbl_cur : min_needed;
-    int* p = arr ? ( int* ) apollo_temp_realloc_f ( apollo_temp_allocator, stb__sbraw ( arr ), stb__sbm ( arr ) * itemsize, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 )
-             : ( int* ) apollo_temp_alloc_f ( apollo_temp_allocator, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 );
+    int* p = arr ? ( int* ) allocator->realloc ( allocator->p, apollo__sbraw ( arr ), apollo__sbm ( arr ) * itemsize, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 )
+             : ( int* ) allocator->alloc ( allocator->p, itemsize * m + sizeof ( int ) * 2, itemsize >= 4 ? itemsize : 4 );
 
     if ( p ) {
         if ( !arr ) {
