@@ -1,6 +1,8 @@
 // TerraPresets
 #include "TerraPresets.h"
 
+#include <assert.h>
+
 TerraFloat3 terra_fresnel ( const TerraFloat3* F_0, const TerraFloat3* view, const TerraFloat3* half_vector ) {
     float VoH = terra_maxf ( 0.f, terra_dotf3 ( view, half_vector ) );
     TerraFloat3 a = terra_f3_set ( 1 - F_0->x, 1 - F_0->y, 1 - F_0->z );
@@ -73,34 +75,52 @@ void terra_bsdf_phong_calculate_ks_kd ( const TerraShadingSurface* surface, floa
 TerraFloat3 terra_bsdf_phong_sample ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo ) {
     float kd, ks;
     terra_bsdf_phong_calculate_ks_kd ( surface, &kd, &ks );
+    TerraFloat3* sample_attrib = &surface->attributes[TERRA_PHONG_SAMPLE_PICK];
 
     if ( e3 < kd ) {
         // Diffuse hemisphere sample.
+        sample_attrib->x = 1.f;
         return terra_bsdf_diffuse_sample ( surface, e1, e2, e3, wo );
     } else {
         // Specular lobe sample.
+        sample_attrib->x = -1.f;
+        TerraFloat3 wr = terra_mulf3 ( &surface->normal, 2.f * terra_dotf3 ( wo, &surface->normal ) );
+        wr = terra_subf3 ( &wr, wo );
+        TerraFloat4x4 wr_transform = terra_f4x4_from_y ( &wr );
         float phi = 2 * terra_PI * e1;
         float theta = acosf ( powf ( 1.f - e2, 1.f / ( surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 1 ) ) );
         float sin_theta = sinf ( theta );
         TerraFloat3 wi = terra_f3_set ( sin_theta * cosf ( phi ), cosf ( theta ), sin_theta * sinf ( phi ) );
-        wi = terra_transformf3 ( &surface->transform, &wi );
+        wi = terra_transformf3 ( &wr_transform, &wi );
         return terra_normf3 ( &wi );
     }
 }
 
 float terra_bsdf_phong_pdf ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
-    float cos_alpha = terra_dotf3 ( wi, wo );
-    float n = surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x;
-    return ( n + 1 ) / ( 2 * terra_PI ) * powf ( cos_alpha, n );
+    TerraFloat3* sample_attrib = &surface->attributes[TERRA_PHONG_SAMPLE_PICK];
+    assert ( sample_attrib->x == 1.f || sample_attrib->x == -1.f );
+
+    if ( sample_attrib->x == 1.f ) {
+        return terra_bsdf_diffuse_pdf ( surface, wi, wo );
+    } else if ( sample_attrib->x == -1.f ) {
+        TerraFloat3 wr = terra_mulf3 ( &surface->normal, 2.f * terra_dotf3 ( wo, &surface->normal ) );
+        wr = terra_subf3 ( &wr, wo );
+        float cos_alpha = terra_dotf3 ( wi, &wr );
+        float n = surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x;
+        return ( n + 1 ) / ( 2 * terra_PI ) * powf ( cos_alpha, n );
+    } else {
+        assert ( false );
+    }
 }
 
 TerraFloat3 terra_bsdf_phong_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
     TerraFloat3 diffuse_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_ALBEDO], 1.f / terra_PI );
-    float cos_alpha = terra_dotf3 ( wi, wo );
+    TerraFloat3 reflection_dir = terra_mulf3 ( &surface->normal, 2.f * terra_dotf3 ( wo, &surface->normal ) );
+    reflection_dir = terra_subf3 ( &reflection_dir, wo );
+    float cos_alpha = terra_dotf3 ( wi, &reflection_dir );
     float cos_n_alpha = powf ( cos_alpha, surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x );
     TerraFloat3 specular_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_SPECULAR_COLOR], ( surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 2 ) / ( 2 * terra_PI ) );
     specular_term = terra_mulf3 ( &specular_term, cos_n_alpha );
-    // Weight terms by kd, ks
     float kd, ks;
     terra_bsdf_phong_calculate_ks_kd ( surface, &kd, &ks );
     diffuse_term = terra_mulf3 ( &diffuse_term, kd );
@@ -113,6 +133,7 @@ void terra_bsdf_phong_init ( TerraBSDF* bsdf ) {
     bsdf->pdf = terra_bsdf_phong_pdf;
     bsdf->eval = terra_bsdf_phong_eval;
 }
+
 #if 0
 //--------------------------------------------------------------------------------------------------
 // Preset: Rough-dielectric = Diffuse + Microfacet GGX specular

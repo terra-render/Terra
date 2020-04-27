@@ -17,7 +17,8 @@ void terra_bsdf_diffuse_init ( TerraBSDF* bsdf );
 #define TERRA_PHONG_ALBEDO             1
 #define TERRA_PHONG_SPECULAR_COLOR     0
 #define TERRA_PHONG_SPECULAR_INTENSITY 2
-#define TERRA_PHONG_END                3
+#define TERRA_PHONG_SAMPLE_PICK        3
+#define TERRA_PHONG_END                4
 void terra_bsdf_phong_init ( TerraBSDF* bsdf );
 
 // PROFILE

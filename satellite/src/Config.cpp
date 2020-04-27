@@ -286,6 +286,7 @@ namespace Config {
         TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_MONO, kTerraIntegratorDebugMono );
         TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_DEPTH, kTerraIntegratorDebugDepth );
         TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_NORMALS, kTerraIntegratorDebugNormals );
+        TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_MIS, kTerraIntegratorDebugMisWeights );
         return ( TerraIntegrator ) - 1;
     }
 
@@ -353,6 +354,9 @@ namespace Config {
 
             case kTerraIntegratorDebugNormals:
                 return RENDER_OPT_INTEGRATOR_DEBUG_NORMALS;
+
+            case kTerraIntegratorDebugMisWeights:
+                return RENDER_OPT_INTEGRATOR_DEBUG_MIS;
         }
 
         return nullptr;

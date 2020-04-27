@@ -9,34 +9,30 @@
 
 // Matrices are stored row-major (in 4 adjacent 4-float arrays)
 // Vectors are columns, matrix vector multiplication is Mv
+// Coordinate system is right handed: x right, y up, z out.
 
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
 //--------------------------------------------------------------------------------------------------
 #define terra_PI 3.1416926535f
-#define terra_PI2 6.283185307f
 #define terra_Epsilon 1e-4
 
 typedef struct TerraInt4 {
     int x, y, z, w;
 } TerraInt4;
 
-// 2D vector
 typedef struct TerraFloat2 {
     float x, y;
 } TerraFloat2;
 
-// 3D vector
 typedef struct TerraFloat3 {
     float x, y, z;
 } TerraFloat3;
 
-// 4D vector
 typedef struct TerraFloat4 {
     float x, y, z, w;
 } TerraFloat4;
 
-// Matrix
 typedef struct TerraFloat4x4 {
     TerraFloat4 rows[4];
 } TerraFloat4x4;
@@ -52,6 +48,7 @@ typedef struct TerraFloat4x4 {
 static inline TerraFloat2   terra_f2_set ( float x, float y );
 static inline TerraFloat3   terra_f3_set ( float x, float y, float z );
 static inline TerraFloat3   terra_f3_set1 ( float xyz );
+static inline TerraFloat3   terra_f3_setv ( const float* xyz );
 static inline TerraFloat4   terra_f4_set ( float x, float y, float z, float w );
 static inline TerraInt4     terra_i4_set ( int x, int y, int z, int w );
 static inline bool          terra_equalf3 ( const TerraFloat3* a, const TerraFloat3* b );

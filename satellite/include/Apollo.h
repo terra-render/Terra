@@ -88,8 +88,8 @@ typedef enum {
 // Path-tracer subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
 typedef struct ApolloMaterial {
     float       ior;                    // Ni
-    float       diffuse[3];             // Kd
-    uint32_t    diffuse_texture;        // map_Kd
+    float       albedo[3];              // Kd
+    uint32_t    albedo_texture;         // map_Kd
     float       specular[3];            // Ks
     uint32_t    specular_texture;       // map_Ks
     float       specular_exp;           // Ns [0 1000]
@@ -444,7 +444,7 @@ bool apollo_read_float3 ( FILE* file, ApolloFloat3* val ) {
 //--------------------------------------------------------------------------------------------------
 void apollo_material_clear ( ApolloMaterial* mat ) {
     mat->bump_texture = APOLLO_TEXTURE_NONE;
-    mat->diffuse_texture = APOLLO_TEXTURE_NONE;
+    mat->albedo_texture = APOLLO_TEXTURE_NONE;
     mat->displacement_texture = APOLLO_TEXTURE_NONE;
     mat->emissive_texture = APOLLO_TEXTURE_NONE;
     mat->metallic_texture = APOLLO_TEXTURE_NONE;
@@ -497,7 +497,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
         }
-        // Diffuse
+        // Albedo
         else if ( strcmp ( key, "Kd" ) == 0 ) {
             ApolloFloat3 Kd;
 
@@ -506,17 +506,17 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            apollo_sb_last ( materials ).diffuse[0] = Kd.x;
-            apollo_sb_last ( materials ).diffuse[1] = Kd.y;
-            apollo_sb_last ( materials ).diffuse[2] = Kd.z;
+            apollo_sb_last ( materials ).albedo[0] = Kd.x;
+            apollo_sb_last ( materials ).albedo[1] = Kd.y;
+            apollo_sb_last ( materials ).albedo[2] = Kd.z;
         } else if ( strcmp ( key, "map_Kd" ) == 0 ) {
             uint32_t idx;
             ApolloResult result = apollo_read_texture ( file, texture_bank, new_textures, &idx, allocator );
 
             if ( result == APOLLO_SUCCESS ) {
-                apollo_sb_last ( materials ).diffuse_texture = idx;
+                apollo_sb_last ( materials ).albedo_texture = idx;
             } else {
-                APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading diffuse texture on file %s\n", idx, filename );
+                APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading albedo texture on file %s\n", idx, filename );
                 goto error;
             }
         }
@@ -1643,8 +1643,8 @@ void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* mat
     /*
     typedef struct ApolloMaterial {
     float       ior;                    // Ni
-    float       diffuse[3];             // Kd
-    uint32_t    diffuse_texture;        // map_Kd
+    float       albedo[3];              // Kd
+    uint32_t    albedo_texture;         // map_Kd
     float       specular[3];            // Ks
     uint32_t    specular_texture;       // map_Ks
     float       specular_exp;           // Ns [0 1000]
@@ -1672,10 +1672,10 @@ void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* mat
         fprintf ( mat_file, "illum %s\n", illum[mat->bsdf] );
         fprintf ( mat_file, "Ni %f\n", mat->ior );
 
-        if ( mat->diffuse_texture != APOLLO_TEXTURE_NONE ) {
-            fprintf ( mat_file, "map_Kd %s\n", textures[mat->diffuse_texture].name );
+        if ( mat->albedo_texture != APOLLO_TEXTURE_NONE ) {
+            fprintf ( mat_file, "map_Kd %s\n", textures[mat->albedo_texture].name );
         } else {
-            fprintf ( mat_file, "Kd %f %f %f\n", mat->diffuse[0], mat->diffuse[1], mat->diffuse[2] );
+            fprintf ( mat_file, "Kd %f %f %f\n", mat->albedo[0], mat->albedo[1], mat->albedo[2] );
         }
 
         if ( mat->specular_texture != APOLLO_TEXTURE_NONE ) {

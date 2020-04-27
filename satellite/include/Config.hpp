@@ -92,7 +92,7 @@
 #define RENDER_OPT_JITTER_NAME "jitter"
 #define RENDER_OPT_JITTER_DEFAULT 0.f
 
-#define RENDER_OPT_INTEGRATOR_DESC "Integrator [simple|direct|mis|debug-mono|debug-depth|debug-normals]"
+#define RENDER_OPT_INTEGRATOR_DESC "Integrator [simple|direct|mis|debug-mono|debug-depth|debug-normals|debug-mis]"
 #define RENDER_OPT_INTEGRATOR_NAME "integrator"
 #define RENDER_OPT_INTEGRATOR_BASIC "simple"
 #define RENDER_OPT_INTEGRATOR_DIRECT "direct"
@@ -100,6 +100,7 @@
 #define RENDER_OPT_INTEGRATOR_DEBUG_MONO "debug-mono"
 #define RENDER_OPT_INTEGRATOR_DEBUG_DEPTH "debug-depth"
 #define RENDER_OPT_INTEGRATOR_DEBUG_NORMALS "debug-normals"
+#define RENDER_OPT_INTEGRATOR_DEBUG_MIS "debug-mis"
 #define RENDER_OPT_INTEGRATOR_DEFAULT RENDER_OPT_INTEGRATOR_DIRECT
 
 //

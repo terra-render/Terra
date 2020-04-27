@@ -1,8 +1,6 @@
 //--------------------------------------------------------------------------------------------------
 // Math inline implementation
 //--------------------------------------------------------------------------------------------------
-// TODO where to put this ?
-#define absf(v) ((v) < 0.f ? -(v) : (v))
 
 inline TerraFloat2 terra_f2_set ( float x, float y ) {
     TerraFloat2 ret;
@@ -22,6 +20,14 @@ inline TerraFloat3 terra_f3_set ( float x, float y, float z ) {
 inline TerraFloat3 terra_f3_set1 ( float xyz ) {
     TerraFloat3 ret;
     ret.x = ret.y = ret.z = xyz;
+    return ret;
+}
+
+inline TerraFloat3 terra_f3_setv ( const float* xyz ) {
+    TerraFloat3 ret;
+    ret.x = xyz[0];
+    ret.y = xyz[1];
+    ret.z = xyz[2];
     return ret;
 }
 
@@ -197,7 +203,7 @@ inline float terra_min3 ( const TerraFloat3* vec ) {
 }
 
 inline TerraFloat3 terra_absf3 ( const TerraFloat3* vec ) {
-    return terra_f3_set ( absf ( vec->x ), absf ( vec->y ), absf ( vec->z ) );
+    return terra_f3_set ( fabs ( vec->x ), fabs ( vec->y ), fabs ( vec->z ) );
 }
 
 inline float terra_xorf ( float _lhs, float _rhs ) {
@@ -247,6 +253,8 @@ inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* normal ) {
     TerraFloat3 normalbt;
     TerraFloat4x4 xform;
 
+    // Hughes-Möller to get vector perpendicular to normal
+    // http://www.pbr-book.org/3ed-2018/Geometry_and_Transformations/Vectors.html#CoordinateSystemfromaVector
     if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
         normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
         normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );

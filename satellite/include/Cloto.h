@@ -57,6 +57,7 @@ void cloto_job_create ( ClotoJob* job, ClotoJobRoutine* routine, void* args );
 
 //--------------------------------------------------------------------------------------------------
 // Work Queue (Deque)
+// https://blog.molecular-matters.com/2015/08/24/job-system-2-0-lock-free-work-stealing-part-1-basics/
 
 typedef struct ClotoWorkQueue {
     char _p0[64];

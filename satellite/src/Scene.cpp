@@ -20,7 +20,6 @@
 using namespace std;
 
 namespace {
-    // Making life easier, more readability, less errors (hpf)
 #define READ_ATTR(attr, apollo_attr, textures )\
     {\
         int tidx = apollo_attr##_texture;\
@@ -194,12 +193,18 @@ bool Scene::_build_scene() {
             case APOLLO_SPECULAR: {
                 // Log::info ( FMT ( "Loading specular material" ) );
                 TerraAttribute albedo, specular_color, specular_intensity;
-                READ_ATTR ( albedo, material.diffuse, _apollo_textures );
+                READ_ATTR ( albedo, material.albedo, _apollo_textures );
                 READ_ATTR ( specular_color, material.specular, _apollo_textures );
                 READ_ATTR ( specular_intensity, material.specular_exp, _apollo_textures );
                 object->material.attributes[TERRA_PHONG_ALBEDO] = albedo;
                 object->material.attributes[TERRA_PHONG_SPECULAR_COLOR] = specular_color;
                 object->material.attributes[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
+                TerraAttribute sample_pick;
+                {
+                    TerraFloat3 value = terra_f3_zero;
+                    terra_attribute_init_constant ( &sample_pick, &value );
+                }
+                object->material.attributes[TERRA_PHONG_SAMPLE_PICK] = sample_pick;
                 object->material.attributes_count = TERRA_PHONG_END;
                 terra_bsdf_phong_init ( &object->material.bsdf );
                 break;
@@ -215,7 +220,7 @@ bool Scene::_build_scene() {
             case APOLLO_DIFFUSE: {
                 // Log::info ( FMT ( "Loading diffuse material" ) );
                 TerraAttribute albedo;
-                READ_ATTR ( albedo, material.diffuse, _apollo_textures );
+                READ_ATTR ( albedo, material.albedo, _apollo_textures );
                 object->material.attributes[TERRA_DIFFUSE_ALBEDO] = albedo;
                 object->material.attributes_count = TERRA_DIFFUSE_END;
                 terra_bsdf_diffuse_init ( &object->material.bsdf );

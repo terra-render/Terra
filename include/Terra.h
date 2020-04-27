@@ -147,6 +147,7 @@ typedef enum {
     kTerraIntegratorDebugMono,
     kTerraIntegratorDebugDepth,
     kTerraIntegratorDebugNormals,
+    kTerraIntegratorDebugMisWeights,
 } TerraIntegrator;
 
 typedef struct {
