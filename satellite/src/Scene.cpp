@@ -421,6 +421,8 @@ void Scene::_read_config() {
     _camera.position  = Config::read_f3 ( Config::RENDER_CAMERA_POS );
     _camera.direction = Config::read_f3 ( Config::RENDER_CAMERA_DIR );
     _camera.up        = Config::read_f3 ( Config::RENDER_CAMERA_UP );
+    _camera.width     = Config::read_i ( Config::RENDER_WIDTH );
+    _camera.height    = Config::read_i ( Config::RENDER_HEIGHT );
 }
 
 void Scene::update_config() {
@@ -460,7 +462,7 @@ HTerraScene Scene::construct_terra_scene() {
     return _scene;
 }
 
-const TerraCamera& Scene::get_camera() {
+TerraCamera& Scene::get_camera() {
     return _camera;
 }
 

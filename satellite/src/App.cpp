@@ -33,7 +33,8 @@ using namespace std;
 #define CMD_RELOAD_NAME "reload"
 #define CMD_STEP_NAME "step"
 #define CMD_LOOP_NAME "loop"
-#define CMD_PAUSE_NAME "pause"
+#define CMD_STOP_NAME "stop"
+#define CMD_INTERRUPT_NAME "interrupt"
 #define CMD_SAVE_NAME "save"
 #define CMD_OPTION_NAME "opt"
 #define CMD_OPTION_LIST_NAME "list"
@@ -311,10 +312,15 @@ void App::_init_cmd_map() {
         return 0;
     };
     // pause
-    auto cmd_pause = [ this ] ( const CommandArgs & args ) -> int {
-        _renderer.pause();
+    auto cmd_interrupt = [ this ] ( const CommandArgs & args ) -> int {
+        _renderer.interrupt();
         return 0;
     };
+    auto cmd_stop = [this](const CommandArgs& args) -> int {
+        _renderer.stop();
+        return 0;
+    };
+
     // save
     // TODO: support multiple outputs
     auto cmd_save = [ this ] ( const CommandArgs & args ) -> int {
@@ -567,7 +573,8 @@ success:
     _c_map[CMD_RELOAD_NAME] = cmd_reload;
     _c_map[CMD_STEP_NAME] = cmd_step;
     _c_map[CMD_LOOP_NAME] = cmd_loop;
-    _c_map[CMD_PAUSE_NAME] = cmd_pause;
+    _c_map[CMD_STOP_NAME] = cmd_stop;
+    _c_map[CMD_INTERRUPT_NAME] = cmd_interrupt;
     _c_map[CMD_SAVE_NAME] = cmd_save;
     //_c_map[CMD_TOGGLE_NAME] = cmd_toggle;
     _c_map[CMD_OPTION_NAME] = cmd_option;
@@ -587,6 +594,21 @@ int App::_boot() {
         if ( io.KeysDown[GLFW_KEY_GRAVE_ACCENT] && io.KeysDownDuration[GLFW_KEY_GRAVE_ACCENT] == 0 ) {
             _console.toggle();
         }
+
+        //if (!io.WantCaptureMouse) {
+          //  printf("keyshift %d\n", io.KeyShift);
+            if (io.KeyShift && io.MouseDown[0]) {
+                TerraCamera& cam = _scene.get_camera();
+                const TerraFloat3 fw = terra_normf3(&cam.direction);
+                const TerraFloat3 right = terra_crossf3(&fw, &cam.up);
+                if (io.MouseDelta.x > terra_Epsilon || io.MouseDelta.y > terra_Epsilon) {
+                    const TerraFloat3 step = terra_mulf3(&right, io.MouseDelta.x * 0.001f);
+                    cam.position = terra_addf3(&cam.position, &step);
+                    printf("pos %f %f %f\n", cam.position.x, cam.position.y, cam.position.z);
+                    _renderer.interrupt();
+                }
+            }
+        //}
     } );
 
     if ( !gfx_init ) {

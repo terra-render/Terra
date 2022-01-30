@@ -344,6 +344,90 @@ void terra_framebuffer_destroy ( TerraFramebuffer* framebuffer ) {
     terra_free ( framebuffer->pixels );
 }
 
+void terra_framebuffer_accumulate (TerraFramebuffer* dst, const TerraFramebuffer* src, size_t dst_x, size_t dst_y, size_t width, size_t height) {
+    assert(src->width >= width);
+    assert(src->height >= height);
+    assert((dst_x + width) <= dst->width);
+    assert((dst_y + height) <= dst->height);
+
+    for (size_t i = 0; i < height; ++i) {
+        for (size_t j = 0; j < width; ++j) {
+            const size_t dst_pixel_idx = (dst_y + i) * dst->width + (dst_x + j);
+            const size_t src_pixel_idx = (i * src->width) + j;
+
+            TerraRawIntegrationResult* partial_dst = dst->results + dst_pixel_idx;
+            TerraRawIntegrationResult* partial_src = src->results + src_pixel_idx;
+
+            partial_dst->acc = terra_addf3(&partial_dst->acc, &partial_src->acc);
+            partial_dst->samples += partial_src->samples;
+            dst->pixels[dst_pixel_idx] = terra_divf3(&partial_dst->acc, (float)partial_dst->samples);
+
+            dst->pixels[dst_pixel_idx] = terra_powf3(&dst->pixels[dst_pixel_idx], 1.f / 2.2);
+
+            //printf("%d %d %f %f %f\n", dst_y + i, dst_x + j, dst->pixels[dst_pixel_idx].x, dst->pixels[dst_pixel_idx].y, dst->pixels[dst_pixel_idx].z);
+
+            // Manual xposure
+            // TODO:
+#if 0
+            TerraFloat3 color = terra_divf3(&partial->acc, (float)partial->samples);
+            color = terra_mulf3(&color, scene->opts.manual_exposure);
+
+            // Tonemapping
+            switch (scene->opts.tonemapping_operator) {
+                // TODO: Should exposure be 2^exposure as with f-stops ?
+                // Gamma correction
+            case kTerraTonemappingOperatorLinear: {
+                color = terra_powf3(&color, 1.f / scene->opts.gamma);
+                break;
+            }
+
+                                                // Simple version, local operator w/o white balancing
+            case kTerraTonemappingOperatorReinhard: {
+                // TODO: same as inv_dir invf3
+                color.x = color.x / (1.f + color.x);
+                color.y = color.y / (1.f + color.y);
+                color.z = color.z / (1.f + color.z);
+                color = terra_powf3(&color, 1.f / scene->opts.gamma);
+                break;
+            }
+
+                                                  // Approx
+            case kTerraTonemappingOperatorFilmic: {
+                TerraFloat3 x;
+                x.x = terra_maxf(0.f, color.x - 0.004f);
+                x.y = terra_maxf(0.f, color.y - 0.004f);
+                x.z = terra_maxf(0.f, color.z - 0.004f);
+                color.x = (x.x * (6.2f * x.x + 0.5f)) / (x.x * (6.2f * x.x + 1.7f) + 0.06f);
+                color.y = (x.y * (6.2f * x.y + 0.5f)) / (x.y * (6.2f * x.y + 1.7f) + 0.06f);
+                color.x = (x.z * (6.2f * x.z + 0.5f)) / (x.z * (6.2f * x.z + 1.7f) + 0.06f);
+                // Gamma 2.2 included
+                break;
+            }
+
+            case kTerraTonemappingOperatorUncharted2: {
+                // TODO: Should white be tweaked ?
+                // This is the white point in linear space
+                const TerraFloat3 linear_white = terra_f3_set1(11.2f);
+                TerraFloat3 white_scale = terra_tonemapping_uncharted2(&linear_white);
+                white_scale.x = 1.f / white_scale.x;
+                white_scale.y = 1.f / white_scale.y;
+                white_scale.z = 1.f / white_scale.z;
+                const float exposure_bias = 2.f;
+                TerraFloat3 t = terra_mulf3(&color, exposure_bias);
+                t = terra_tonemapping_uncharted2(&t);
+                color = terra_pointf3(&t, &white_scale);
+                color = terra_powf3(&color, 1.f / scene->opts.gamma);
+                break;
+            }
+
+            default:
+                break;
+            }
+#endif
+        }
+    }
+}
+
 //--------------------------------------------------------------------------------------------------
 // @TerraTexture
 //--------------------------------------------------------------------------------------------------
@@ -509,7 +593,11 @@ void terra_texture_finalize ( void* _texture ) {
 //--------------------------------------------------------------------------------------------------
 // @TerraRender
 //--------------------------------------------------------------------------------------------------
+// The framebuffer is expected to hold width * height pixels and is cleared every time
 void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFramebuffer* framebuffer, size_t x, size_t y, size_t width, size_t height ) {
+    assert(framebuffer->width >= width);
+    assert(framebuffer->height >= height);
+
     TerraScene* scene = ( TerraScene* ) _scene;
     TerraClockTime t = TERRA_CLOCK();
     TerraFloat4x4 camera_rotation = terra_camera_to_world_frame ( camera );
@@ -566,68 +654,10 @@ void terra_render ( const TerraCamera* camera, HTerraScene _scene, const TerraFr
                 acc = terra_addf3 ( &acc, &dL );
             }
 
-            // Accumulate with previous integrations
-            TerraRawIntegrationResult* partial = &framebuffer->results[i * framebuffer->width + j];
-            partial->acc = terra_addf3 ( &acc, &partial->acc );
-            partial->samples += spp;
-            // Manual exposure
-            TerraFloat3 color = terra_divf3 ( &partial->acc, ( float ) partial->samples );
-            color = terra_mulf3 ( &color, scene->opts.manual_exposure );
-
-            // Tonemapping
-            switch ( scene->opts.tonemapping_operator ) {
-                // TODO: Should exposure be 2^exposure as with f-stops ?
-                // Gamma correction
-                case kTerraTonemappingOperatorLinear: {
-                    color = terra_powf3 ( &color, 1.f / scene->opts.gamma );
-                    break;
-                }
-
-                // Simple version, local operator w/o white balancing
-                case kTerraTonemappingOperatorReinhard: {
-                    // TODO: same as inv_dir invf3
-                    color.x = color.x / ( 1.f + color.x );
-                    color.y = color.y / ( 1.f + color.y );
-                    color.z = color.z / ( 1.f + color.z );
-                    color = terra_powf3 ( &color, 1.f / scene->opts.gamma );
-                    break;
-                }
-
-                // Approx
-                case kTerraTonemappingOperatorFilmic: {
-                    TerraFloat3 x;
-                    x.x = terra_maxf ( 0.f, color.x - 0.004f );
-                    x.y = terra_maxf ( 0.f, color.y - 0.004f );
-                    x.z = terra_maxf ( 0.f, color.z - 0.004f );
-                    color.x = ( x.x * ( 6.2f * x.x + 0.5f ) ) / ( x.x * ( 6.2f * x.x + 1.7f ) + 0.06f );
-                    color.y = ( x.y * ( 6.2f * x.y + 0.5f ) ) / ( x.y * ( 6.2f * x.y + 1.7f ) + 0.06f );
-                    color.x = ( x.z * ( 6.2f * x.z + 0.5f ) ) / ( x.z * ( 6.2f * x.z + 1.7f ) + 0.06f );
-                    // Gamma 2.2 included
-                    break;
-                }
-
-                case kTerraTonemappingOperatorUncharted2: {
-                    // TODO: Should white be tweaked ?
-                    // This is the white point in linear space
-                    const TerraFloat3 linear_white = terra_f3_set1 ( 11.2f );
-                    TerraFloat3 white_scale = terra_tonemapping_uncharted2 ( &linear_white );
-                    white_scale.x = 1.f / white_scale.x;
-                    white_scale.y = 1.f / white_scale.y;
-                    white_scale.z = 1.f / white_scale.z;
-                    const float exposure_bias = 2.f;
-                    TerraFloat3 t = terra_mulf3 ( &color, exposure_bias );
-                    t = terra_tonemapping_uncharted2 ( &t );
-                    color = terra_pointf3 ( &t, &white_scale );
-                    color = terra_powf3 ( &color, 1.f / scene->opts.gamma );
-                    break;
-                }
-
-                default:
-                    break;
-            }
-
-            // Store the final color value on the framebuffer
-            framebuffer->pixels[i * framebuffer->width + j] = color;
+            // lock and compare frame index
+            const size_t pixel_idx = (i - y) * framebuffer->width + (j - x);
+            framebuffer->results[pixel_idx].acc = acc;
+            framebuffer->results[pixel_idx].samples = spp;
         }
     }
 
@@ -1784,12 +1814,12 @@ TerraFloat3 terra_camera_perspective_sample ( const TerraCamera* camera, const T
     float dx = -jitter + 2 * r1 * jitter;
     float dy = -jitter + 2 * r2 * jitter;
     // [0:1], y points down
-    float ndc_x = ( x + 0.5f + dx ) / frame->width;
-    float ndc_y = ( y + 0.5f + dy ) / frame->height;
+    float ndc_x = ( x + 0.5f + dx ) / camera->width;
+    float ndc_y = ( y + 0.5f + dy ) / camera->height;
     // [-1:1], y points up
     float screen_x = 2 * ndc_x - 1;
     float screen_y = 1 - 2 * ndc_y;
-    float aspect_ratio = ( float ) frame->width / ( float ) frame->height;
+    float aspect_ratio = ( float ) camera->width / ( float ) camera->height;
     // [-aspect_ratio * tan(fov/2):aspect_ratio * tan(fov/2)]
     float frustum_x = screen_x * aspect_ratio * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );
     float frustum_y = screen_y * ( float ) tan ( ( camera->fov * 0.0174533f ) / 2 );

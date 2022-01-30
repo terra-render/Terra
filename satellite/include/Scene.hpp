@@ -51,7 +51,8 @@ class Scene {
     // Somewhat readable scene name
     const char* name() const;
 
-    const TerraCamera& get_camera();
+    TerraCamera& get_camera();
+    
 
     // This invalidates the current scene! Need to call construct_terra_scene() again
     bool move_mesh ( const char* name, const TerraFloat3& new_pos );

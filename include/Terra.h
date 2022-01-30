@@ -178,6 +178,8 @@ typedef struct {
     TerraFloat3 direction;
     TerraFloat3 up;
     float       fov;
+    size_t      width;
+    size_t      height;
 } TerraCamera;
 
 typedef struct {
@@ -213,6 +215,7 @@ void                terra_scene_destroy ( HTerraScene scene );
 bool                terra_framebuffer_create ( TerraFramebuffer* framebuffer, size_t width, size_t height );
 void                terra_framebuffer_clear ( TerraFramebuffer* framebuffer );
 void                terra_framebuffer_destroy ( TerraFramebuffer* framebuffer );
+void                terra_framebuffer_accumulate ( TerraFramebuffer* dst, const TerraFramebuffer* src, size_t dst_x, size_t dst_y, size_t src_width, size_t src_height);
 
 bool                terra_texture_init ( TerraTexture* texture, size_t width, size_t height, size_t components, const void* data );
 bool                terra_texture_init_hdr ( TerraTexture* texture, size_t width, size_t height, size_t components, const float* data );
