@@ -234,10 +234,10 @@ namespace Config {
     // -1 for invalid
     //
 #define TRY_COMPARE_S(s, v, ret) if (strcmp((s), (v)) == 0) { return ret; }
+
     TerraTonemappingOperator to_terra_tonemap ( string& str ) {
         return to_terra_tonemap ( std::move ( str ) );
     }
-
     TerraTonemappingOperator to_terra_tonemap ( string&& str ) {
         transform ( str.begin(), str.end(), str.begin(), ::tolower );
         const char* s = str.data();
@@ -252,7 +252,6 @@ namespace Config {
     TerraAccelerator to_terra_accelerator ( string& str ) {
         return to_terra_accelerator ( std::move ( str ) );
     }
-
     TerraAccelerator to_terra_accelerator ( string&& str ) {
         transform ( str.begin(), str.end(), str.begin(), ::tolower );
         const char* s = str.data();
@@ -263,7 +262,6 @@ namespace Config {
     TerraSamplingMethod to_terra_sampling ( string& str ) {
         return to_terra_sampling ( std::move ( str ) );
     }
-
     TerraSamplingMethod to_terra_sampling ( string&& str ) {
         transform ( str.begin(), str.end(), str.begin(), ::tolower );
         const char* s = str.data();
@@ -276,7 +274,6 @@ namespace Config {
     TerraIntegrator to_terra_integrator ( std::string& str ) {
         return to_terra_integrator ( std::move ( str ) );
     }
-
     TerraIntegrator to_terra_integrator ( std::string&& str ) {
         transform ( str.begin(), str.end(), str.begin(), ::tolower );
         const char* s = str.data();
@@ -289,79 +286,6 @@ namespace Config {
         TRY_COMPARE_S ( s, RENDER_OPT_INTEGRATOR_DEBUG_MIS, kTerraIntegratorDebugMisWeights );
         return ( TerraIntegrator ) - 1;
     }
-
-    const char* from_terra_tonemap ( TerraTonemappingOperator v ) {
-        switch ( v ) {
-            case kTerraTonemappingOperatorNone:
-                return RENDER_OPT_TONEMAP_NONE;
-
-            case kTerraTonemappingOperatorLinear:
-                return RENDER_OPT_TONEMAP_LINEAR;
-
-            case kTerraTonemappingOperatorReinhard:
-                return RENDER_OPT_TONEMAP_REINHARD;
-
-            case kTerraTonemappingOperatorFilmic:
-                return RENDER_OPT_TONEMAP_FILMIC;
-
-            case kTerraTonemappingOperatorUncharted2:
-                return RENDER_OPT_TONEMAP_UNCHARTED2;
-        }
-
-        return nullptr;
-    }
-
-    const char* from_terra_accelerator ( TerraAccelerator v ) {
-        switch ( v ) {
-            case kTerraAcceleratorBVH:
-                return RENDER_OPT_ACCELERATOR_BVH;
-        }
-
-        return nullptr;
-    }
-
-    const char* from_terra_sampling ( TerraSamplingMethod v ) {
-        switch ( v ) {
-            case kTerraSamplingMethodRandom:
-                return RENDER_OPT_SAMPLER_RANDOM;
-
-            case kTerraSamplingMethodStratified:
-                return RENDER_OPT_SAMPLER_STRATIFIED;
-
-            case kTerraSamplingMethodHalton:
-                return RENDER_OPT_SAMPLER_HALTON;
-        }
-
-        return nullptr;
-    }
-
-    const char* from_terra_integrator ( TerraIntegrator v ) {
-        switch ( v ) {
-            case kTerraIntegratorSimple:
-                return RENDER_OPT_INTEGRATOR_BASIC;
-
-            case kTerraIntegratorDirect:
-                return RENDER_OPT_INTEGRATOR_DIRECT;
-
-            case kTerraIntegratorDirectMis:
-                return RENDER_OPT_INTEGRATOR_DIRECT_MIS;
-
-            case kTerraIntegratorDebugMono:
-                return RENDER_OPT_INTEGRATOR_DEBUG_MONO;
-
-            case kTerraIntegratorDebugDepth:
-                return RENDER_OPT_INTEGRATOR_DEBUG_DEPTH;
-
-            case kTerraIntegratorDebugNormals:
-                return RENDER_OPT_INTEGRATOR_DEBUG_NORMALS;
-
-            case kTerraIntegratorDebugMisWeights:
-                return RENDER_OPT_INTEGRATOR_DEBUG_MIS;
-        }
-
-        return nullptr;
-    }
-
 
     Effect query_change_effect ( int opt ) {
         if ( opt > RENDER_BEGIN && opt < RENDER_END ) {

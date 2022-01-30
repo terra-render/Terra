@@ -113,7 +113,6 @@ void Visualizer::init ( GFXLayer* gfx ) {
     _info.sampling    = "n/a";
     _texture.width    = 0;
     _texture.height   = 0;
-    terra_clock_init();
 }
 
 void Visualizer::_create_texture ( int width, int height, int gl_format, void* data ) {
@@ -419,6 +418,9 @@ void Visualizer::draw() {
 
         snprintf ( stats_buf, STATS_BUF_LEN, "%s(%s)\n avg: %e\n var: %e\n min: %e\n max: %e\n sum: %e\n count: %.0f\n",
                    unit_name, stats.name.c_str(), data.avg, data.var, data.min, data.max, data.sum, data.n );
+        // TODO align TopLeft with fixed offset from right edge dep on window size
+        // make optional the display of some numbers (e.g. count, variance)
+        // use an outlined font and maybe remove the background box
         im_text_aligned ( ImAlign::TopRight, stats_buf, IM_WHITE, ImVec4 ( 0.f, 0.f, 0.f, 0.5f ), ImVec2 ( 0, offset ) );
         offset += 120;
     }
@@ -439,6 +441,11 @@ std::vector<Visualizer::Stats>& Visualizer::stats() {
 
 void Visualizer::add_stats_tracker ( size_t session, size_t target, const char* name ) {
 #ifdef TERRA_PROFILE
+
+    if ( !terra_profile_session_exists ( session ) ) {
+        return;
+    }
+
     TerraProfileStats data = terra_profile_target_stats_get ( session, target );
     Stats stats;
     stats.data = data;

@@ -87,9 +87,10 @@ bool Scene::_load_scene ( const char* filename ) {
     options.compute_face_normals = true;
     options.recompute_vertex_normals = true;
     options.remove_vertex_duplicates = true;
-    options.flip_faces = false;
+    // flip z and winding order to go from right to left handed coordinate system
+    options.flip_faces_winding_order = true;
+    options.flip_z = true;
     options.flip_texcoord_v = false;
-    options.flip_z = false;
     options.temp_allocator = allocator;
     options.final_allocator = allocator;
     options.prealloc_vertex_count = 1 << 18;
@@ -201,7 +202,7 @@ bool Scene::_build_scene() {
                 object->material.attributes[TERRA_PHONG_SPECULAR_INTENSITY] = specular_intensity;
                 TerraAttribute sample_pick;
                 {
-                    TerraFloat3 value = terra_f3_zero;
+                    TerraFloat3 value = terra_f3_set1 ( 0 );
                     terra_attribute_init_constant ( &sample_pick, &value );
                 }
                 object->material.attributes[TERRA_PHONG_SAMPLE_PICK] = sample_pick;
@@ -347,7 +348,7 @@ void Scene::_read_config() {
     string tonemap_str     = Config::read_s ( Config::RENDER_TONEMAP );
     string accelerator_str = Config::read_s ( Config::RENDER_ACCELERATOR );
     string sampling_str    = Config::read_s ( Config::RENDER_SAMPLING );
-    string integrator_str = Config::read_s ( Config::RENDER_INTEGRATOR );
+    string integrator_str  = Config::read_s ( Config::RENDER_INTEGRATOR );
     TerraTonemappingOperator tonemap = Config::to_terra_tonemap ( tonemap_str );
     TerraAccelerator accelerator     = Config::to_terra_accelerator ( accelerator_str );
     TerraSamplingMethod sampling     = Config::to_terra_sampling ( sampling_str );
@@ -423,6 +424,10 @@ void Scene::_read_config() {
 }
 
 void Scene::update_config() {
+    TerraFloat3 envmap_color = Config::read_f3(Config::RENDER_ENVMAP_COLOR);
+    TerraFloat3 camera_pos = Config::read_f3(Config::RENDER_ENVMAP_COLOR);
+    TerraFloat3 camera_dir = Config::read_f3(Config::RENDER_ENVMAP_COLOR);
+    TerraFloat3 camera_up = Config::read_f3(Config::RENDER_ENVMAP_COLOR);
     if ( _opts.bounces != Config::read_i ( Config::RENDER_MAX_BOUNCES )
             || _opts.samples_per_pixel != Config::read_i ( Config::RENDER_SAMPLES )
             || _opts.gamma != Config::read_f ( Config::RENDER_GAMMA )
@@ -432,12 +437,14 @@ void Scene::update_config() {
             || _opts.accelerator != Config::to_terra_accelerator ( Config::read_s ( Config::RENDER_ACCELERATOR ) )
             || _opts.sampling_method != Config::to_terra_sampling ( Config::read_s ( Config::RENDER_SAMPLING ) )
             || _opts.integrator != Config::to_terra_integrator ( Config::read_s ( Config::RENDER_INTEGRATOR ) )
-            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_ENVMAP_COLOR ), &_envmap_color )
-            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_POS ), &_camera.position )
-            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_DIR ), &_camera.direction )
-            || !terra_equalf3 ( &Config::read_f3 ( Config::RENDER_CAMERA_UP ), &_camera.up )
+            || !terra_equalf3 ( &envmap_color, &_envmap_color )
+            || !terra_equalf3 ( &camera_pos, &_camera.position )
+            || !terra_equalf3 ( &camera_dir, &_camera.direction )
+            || !terra_equalf3 ( &camera_up, &_camera.up )
             || _camera.fov != Config::read_f ( Config::RENDER_CAMERA_VFOV_DEG )
        ) {
+        // This could be inlined here to avoid doing a double-read on all variables
+        // in practice it probably doesn't matter and avoids having to maintain one more config function
         _read_config();
     }
 

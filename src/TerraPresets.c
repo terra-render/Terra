@@ -3,20 +3,29 @@
 
 #include <assert.h>
 
-TerraFloat3 terra_fresnel ( const TerraFloat3* F_0, const TerraFloat3* view, const TerraFloat3* half_vector ) {
-    float VoH = terra_maxf ( 0.f, terra_dotf3 ( view, half_vector ) );
-    TerraFloat3 a = terra_f3_set ( 1 - F_0->x, 1 - F_0->y, 1 - F_0->z );
-    a = terra_mulf3 ( &a, powf ( 1 - VoH, 5 ) );
-    return terra_addf3 ( &a, F_0 );
+// https://en.wikipedia.org/wiki/Schlick%27s_approximation
+static float terra_bsdf_schlick_weight ( float cos_theta ) {
+    float m = terra_clamp ( 1.f - cos_theta, 0.f, 1.f );
+    float m2 = m * m;
+    return m2 * m2 * m;
 }
 
-TerraFloat3 terra_F_0 ( float ior, const TerraFloat3* albedo, float metalness ) {
+#if 0
+TerraFloat3 terra_bsdf_fresnel_schlick ( const TerraFloat3* R0, const TerraFloat3* w, const TerraFloat3* h ) {
+    float cos_theta = terra_maxf ( 0.f, terra_dotf3 ( w, h ) );
+    TerraFloat3 a = terra_f3_set ( 1 - R0->x, 1 - R0->y, 1 - R0->z );
+    a = terra_mulf3 ( &a, powf ( 1 - cos_theta, 5 ) );
+    return terra_addf3 ( &a, R0 );
+}
+
+TerraFloat3 terra_bsdf_R0 ( float ior, const TerraFloat3* albedo, float metalness ) {
     float f = ( 1.f - ior ) / ( 1.f + ior );
     f *= f;
     TerraFloat3 F0 = terra_f3_set1 ( f );
     F0 = terra_lerpf3 ( &F0, albedo, metalness );
     return F0;
 }
+#endif
 
 //--------------------------------------------------------------------------------------------------
 // Preset: Diffuse [Cosine] weighted sampling (Lambertian)
@@ -54,7 +63,7 @@ void terra_bsdf_diffuse_init ( TerraBSDF* bsdf ) {
 // Preset: Phong
 // http://www.cs.princeton.edu/courses/archive/fall16/cos526/papers/importance.pdf
 //--------------------------------------------------------------------------------------------------
-void terra_bsdf_phong_calculate_ks_kd ( const TerraShadingSurface* surface, float* kd, float* ks ) {
+void terra_bsdf_phong_calculate_kd_ks ( const TerraShadingSurface* surface, float* kd, float* ks ) {
     float diffuse = terra_maxf ( surface->attributes[TERRA_PHONG_ALBEDO].x +
                                  surface->attributes[TERRA_PHONG_ALBEDO].y +
                                  surface->attributes[TERRA_PHONG_ALBEDO].z,
@@ -74,7 +83,7 @@ void terra_bsdf_phong_calculate_ks_kd ( const TerraShadingSurface* surface, floa
 
 TerraFloat3 terra_bsdf_phong_sample ( const TerraShadingSurface* surface, float e1, float e2, float e3, const TerraFloat3* wo ) {
     float kd, ks;
-    terra_bsdf_phong_calculate_ks_kd ( surface, &kd, &ks );
+    terra_bsdf_phong_calculate_kd_ks ( surface, &kd, &ks );
     TerraFloat3* sample_attrib = &surface->attributes[TERRA_PHONG_SAMPLE_PICK];
 
     if ( e3 < kd ) {
@@ -86,7 +95,7 @@ TerraFloat3 terra_bsdf_phong_sample ( const TerraShadingSurface* surface, float 
         sample_attrib->x = -1.f;
         TerraFloat3 wr = terra_mulf3 ( &surface->normal, 2.f * terra_dotf3 ( wo, &surface->normal ) );
         wr = terra_subf3 ( &wr, wo );
-        TerraFloat4x4 wr_transform = terra_f4x4_from_y ( &wr );
+        TerraFloat4x4 wr_transform = terra_f4x4_basis ( &wr );
         float phi = 2 * terra_PI * e1;
         float theta = acosf ( powf ( 1.f - e2, 1.f / ( surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 1 ) ) );
         float sin_theta = sinf ( theta );
@@ -114,24 +123,176 @@ float terra_bsdf_phong_pdf ( const TerraShadingSurface* surface, const TerraFloa
 }
 
 TerraFloat3 terra_bsdf_phong_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
-    TerraFloat3 diffuse_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_ALBEDO], 1.f / terra_PI );
+    float kd, ks;
+    terra_bsdf_phong_calculate_kd_ks ( surface, &kd, &ks );
+    float n = surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x;
+    // Diffuse
+    TerraFloat3 diffuse_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_ALBEDO], kd * 1.f / terra_PI );
+    // Specular
     TerraFloat3 reflection_dir = terra_mulf3 ( &surface->normal, 2.f * terra_dotf3 ( wo, &surface->normal ) );
     reflection_dir = terra_subf3 ( &reflection_dir, wo );
     float cos_alpha = terra_dotf3 ( wi, &reflection_dir );
-    float cos_n_alpha = powf ( cos_alpha, surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x );
-    TerraFloat3 specular_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_SPECULAR_COLOR], ( surface->attributes[TERRA_PHONG_SPECULAR_INTENSITY].x + 2 ) / ( 2 * terra_PI ) );
-    specular_term = terra_mulf3 ( &specular_term, cos_n_alpha );
-    float kd, ks;
-    terra_bsdf_phong_calculate_ks_kd ( surface, &kd, &ks );
-    diffuse_term = terra_mulf3 ( &diffuse_term, kd );
-    specular_term = terra_mulf3 ( &specular_term, ks );
-    return terra_addf3 ( &diffuse_term, &specular_term );
+    float cos_n_alpha = powf ( cos_alpha, n );
+    TerraFloat3 specular_term = terra_mulf3 ( &surface->attributes[TERRA_PHONG_SPECULAR_COLOR], ks * cos_n_alpha * ( n + 2 ) / ( 2 * terra_PI ) );
+    // Final
+    TerraFloat3 final_term = terra_addf3 ( &diffuse_term, &specular_term );
+    return final_term;
 }
 
 void terra_bsdf_phong_init ( TerraBSDF* bsdf ) {
     bsdf->sample = terra_bsdf_phong_sample;
     bsdf->pdf = terra_bsdf_phong_pdf;
     bsdf->eval = terra_bsdf_phong_eval;
+}
+
+//--------------------------------------------------------------------------------------------------
+// Preset: Disney
+//--------------------------------------------------------------------------------------------------
+// https://github.com/wdas/brdf/blob/master/src/brdfs/disney.brdf
+// https://schuttejoe.github.io/post/disneybsdf/
+
+TerraFloat3 terra_bsdf_disney_tint ( TerraFloat3 base_color ) {
+    TerraFloat3 luminance_coeffs = terra_f3_set ( 0.3, 0.6, 1.0 );
+    float luminance = terra_dotf3 ( &luminance_coeffs, &base_color );
+
+    if ( luminance == 0 ) {
+        return terra_f3_one;
+    }
+
+    return terra_mulf3 ( &base_color, 1.f / luminance );
+}
+
+TerraFloat3 terra_bsdf_disney_sheen ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo, const TerraFloat3* h ) {
+    float sheen = surface->attributes[TERRA_DISNEY_SHEEN].x;
+    float sheen_tint = surface->attributes[TERRA_DISNEY_SHEEN].y;
+    TerraFloat3 base_color = surface->attributes[TERRA_DISNEY_BASE_COLOR];
+
+    if ( sheen <= 0.f ) {
+        return terra_f3_zero;
+    }
+
+    float HdotL = terra_dotf3 ( h, wi );
+    TerraFloat3 tint = terra_bsdf_disney_tint ( base_color );
+    TerraFloat3 onef3 = terra_f3_one;
+    TerraFloat3 sheenf3 = terra_lerpf3 ( &onef3, &tint, sheen_tint );
+    sheenf3 = terra_mulf3 ( &sheenf3, sheen * terra_bsdf_schlick_weight ( HdotL ) );
+    return sheenf3;
+}
+
+float terra_bsdf_disney_GTR2_aniso ( float NdotH, float HdotX, float HdotY, float ax, float ay ) {
+    float x = HdotX / ax;
+    float y = HdotY / ay;
+    float s = x * x + y * y + NdotH * NdotH;
+    return 1.f / ( terra_PI * ax * ay * s * s );
+}
+
+float terra_bsdf_disney_smithG_GGX_aniso ( float NdotV, float VdotX, float VdotY, float ax, float ay ) {
+    float x = VdotX * ax;
+    float y = VdotY * ay;
+    return 1.f / ( NdotV + sqrtf ( x * x + y * y + NdotV * NdotV ) );
+}
+
+float terra_bsdf_disney_smithG_GGX ( float NdotV, float alphaG ) {
+    float a = alphaG * alphaG;
+    float b = NdotV * NdotV;
+    return 1.f / ( NdotV + sqrtf ( a + b - a * b ) );
+}
+
+float terra_bsdf_disney_GTR1 ( float NdotH, float a ) {
+    if ( a >= 1 ) {
+        return 1 / terra_PI;
+    }
+
+    float a2 = a * a;
+    float t = 1 + ( a2 - 1 ) * NdotH * NdotH;
+    return ( a2 - 1 ) / ( terra_PI * logf ( a2 ) * t );
+}
+
+float terra_bsdf_disney_GTR2 ( float NdotH, float a ) {
+    float a2 = a * a;
+    float t = 1 + ( a2 - 1 ) * NdotH * NdotH;
+    return ( a2 - 1 ) / ( terra_PI * t * t );
+}
+
+/*
+    [ base_color.rgb ]
+    [ specular | specular_tint | _ ]
+    [ sheen | sheen_tint | _ ]
+    [ clearcoat | clearcoat_gloss | _ ]
+    [ metalness | roughness | _ ]
+    [ anisotropic | subsurface  | _ ]
+*/
+
+TerraFloat3 terra_bsdf_disney_eval ( const TerraShadingSurface* surface, const TerraFloat3* wi, const TerraFloat3* wo ) {
+    float NdotL = terra_dotf3 ( &surface->normal, wi );
+    float NdotV = terra_dotf3 ( &surface->normal, wo );
+
+    if ( NdotL < 0 || NdotV < 0 ) {
+        return terra_f3_zero;
+    }
+
+    // Half vector
+    TerraFloat3 H = terra_addf3 ( wi, wo );
+    H = terra_normf3 ( &H );
+    float NdotH = terra_dotf3 ( &surface->normal, &H );
+    float LdotH = terra_dotf3 ( wi, &H );
+    // Base Color Luminance
+    TerraFloat3 base_color = surface->attributes[TERRA_DISNEY_BASE_COLOR];
+    TerraFloat3 lum_weights = terra_f3_set ( 0.3, 0.6, 1 );
+    float base_color_lum = terra_dotf3 ( &base_color, &lum_weights );
+    // Tint
+    TerraFloat3 tint = base_color_lum > 0 ? terra_mulf3 ( &base_color, 1.f / base_color_lum ) : terra_f3_one;
+    // Spec0
+    float specular = 0; // =
+    float specular_tint = 0; // =
+    float metalness = 0; // =
+    TerraFloat3 spec0 = terra_lerpf3 ( &terra_f3_one, &tint, specular_tint );
+    spec0 = terra_mulf3 ( &spec0, specular * 0.8f );
+    spec0 = terra_lerpf3 ( &spec0, &base_color, metalness );
+    // Sheen
+    float sheen_tint = 0; // =
+    TerraFloat3 sheen_c = terra_lerpf3 ( &terra_f3_one, &tint, sheen_tint );
+    // Diffuse Fresnel
+    float roughness = 0; // =
+    float FL = terra_bsdf_schlick_weight ( NdotL );
+    float FV = terra_bsdf_schlick_weight ( NdotV );
+    float Fd90 = 0.5f + 2 * LdotH * LdotH * roughness;
+    float Fd = terra_lerp ( 1.f, Fd90, FL ) * terra_lerp ( 1.f, Fd90, FV );
+    // Subsurface Scattering
+    float Fss90 = LdotH * LdotH * roughness;
+    float Fss = terra_lerp ( 1.f, Fss90, FL ) * terra_lerp ( 1.f, Fss90, FV );
+    float ss = 1.25f * ( Fss * ( 1.f / ( NdotL * NdotV ) - 0.5f ) + 0.5f );
+    // Specular
+    float anisotropic = 0; // =
+    float aspect = sqrtf ( 1.f - anisotropic * 0.9f );
+    float ax = terra_maxf ( 0.001f, roughness * roughness / aspect );
+    float ay = terra_maxf ( 0.001f, roughness * roughness * aspect );
+    TerraFloat3 X = terra_f4x4_get_tangent ( &surface->transform );
+    TerraFloat3 Y = terra_f4x4_get_bitangent ( &surface->transform );
+    float Ds = terra_bsdf_disney_GTR2_aniso ( NdotH, terra_dotf3 ( &H, &X ), terra_dotf3 ( &H, &Y ), ax, ay );
+    float FH = terra_bsdf_schlick_weight ( LdotH );
+    TerraFloat3 Fs = terra_lerpf3 ( &spec0, &terra_f3_one, FH );
+    float Gs = terra_bsdf_disney_smithG_GGX_aniso ( NdotL, terra_dotf3 ( wi, &X ), terra_dotf3 ( wi, &Y ), ax, ay );
+    Gs *= terra_bsdf_disney_smithG_GGX_aniso ( NdotV, terra_dotf3 ( wo, &X ), terra_dotf3 ( wo, &Y ), ax, ay );
+    // Sheen
+    float sheen_p = 0; // =
+    TerraFloat3 sheen = terra_mulf3 ( &sheen_c, FH * sheen_p );
+    // Clearcoat
+    float clearcoat_gloss = 0; // =
+    float Dr = terra_bsdf_disney_GTR1 ( NdotH, terra_lerp ( 0.1f, 0.001f, clearcoat_gloss ) );
+    float Fr = terra_lerp ( 0.04f, 1.f, FH );
+    float Gr = terra_bsdf_disney_smithG_GGX ( NdotL, 0.25f ) * terra_bsdf_disney_smithG_GGX ( NdotV, 0.25f );
+    // Result
+    float subsurface = 0; // =
+    float clearcoat = 0; // =
+    TerraFloat3 result_a = terra_mulf3 ( &base_color, 1.f / terra_PI * terra_lerp ( Fd, ss, subsurface ) );
+    result_a = terra_addf3 ( &result_a, &sheen );
+    result_a = terra_mulf3 ( &result_a, 1 - metalness );
+    TerraFloat3 result_b = terra_mulf3 ( &Fs, Gs * Ds );
+    TerraFloat3 result_c = terra_f3_set1 ( 0.25f * clearcoat * Gr * Fr * Dr );
+    TerraFloat3 result = terra_addf3 ( &result_b, &result_c );
+    result = terra_addf3 ( &result, &result_a );
+    return result;
 }
 
 #if 0

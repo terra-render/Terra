@@ -63,7 +63,7 @@ class TerraRenderer {
     void     _num_tiles ( int& tiles_x, int& tiles_y ); // Calculates the number of tiles from the current framebuffer / tile_size
 
     typedef struct TerraRenderArgs {
-        TerraRenderer*  th;
+        TerraRenderer*  renderer;
         int             x, y;
         int             width, height;
     } TerraRenderArgs;

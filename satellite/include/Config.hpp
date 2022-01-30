@@ -6,6 +6,15 @@
 // Terra
 #include <Terra.h>
 
+//
+// TO ADD A NEW CONFIG VAR:
+// - Add DESC NAME DEFAULT defines here
+// - If values are strings, also add all values defines here
+// - Add a line in init and reset_to_default in the impl file
+// - If values are strings, also add to_terra function decls here and defs in the impl file
+// - Update _read_config and update_config in Scene.cpp
+//
+
 // Render options that can be set from the terminal through `option set <name> <value>`
 #define RENDER_OPT_WORKERS_DESC "Number of worker threads"
 #define RENDER_OPT_WORKERS_NAME "workers"
@@ -66,7 +75,7 @@
 
 #define RENDER_OPT_CAMERA_POS_DESC "Camera position"
 #define RENDER_OPT_CAMERA_POS_NAME "campos"
-#define RENDER_OPT_CAMERA_POS_DEFAULT { 0.f, 0.9f, 2.3f }
+#define RENDER_OPT_CAMERA_POS_DEFAULT { 0.f, 0.f, 0.f }
 
 #define RENDER_OPT_CAMERA_DIR_DESC "Camera direction"
 #define RENDER_OPT_CAMERA_DIR_NAME "camdir"
@@ -124,10 +133,6 @@ namespace Config {
     TerraSamplingMethod      to_terra_sampling ( std::string&& str );
     TerraIntegrator          to_terra_integrator ( std::string& str );
     TerraIntegrator          to_terra_integrator ( std::string&& str );
-    const char*              from_terra_tonemap ( TerraTonemappingOperator v );
-    const char*              from_terra_accelerator ( TerraAccelerator v );
-    const char*              from_terra_sampling ( TerraSamplingMethod v );
-    const char*              from_terra_integrator ( TerraIntegrator v );
 
     // Possible effects caused by changing a config options.
     enum Effect {

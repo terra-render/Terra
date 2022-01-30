@@ -1760,7 +1760,7 @@ void terra_surface_init ( TerraShadingSurface* surface, const TerraTriangle* tri
     }
 
     surface->emissive = terra_attribute_eval ( &material->emissive, &texcoord, point );
-    surface->transform = terra_f4x4_from_y ( &surface->normal );
+    surface->transform = terra_f4x4_basis ( &surface->normal );
 }
 
 //--------------------------------------------------------------------------------------------------

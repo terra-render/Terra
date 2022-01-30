@@ -7,9 +7,9 @@
 #include <float.h>
 #include <stdint.h>
 
-// Matrices are stored row-major (in 4 adjacent 4-float arrays)
+// Matrices are stored row-major (in 4 adjacent 4-float long arrays)
 // Vectors are columns, matrix vector multiplication is Mv
-// Coordinate system is right handed: x right, y up, z out.
+// Coordinate system is left handed: x right, y up, z out.
 
 //--------------------------------------------------------------------------------------------------
 // Math / Basic Types
@@ -38,9 +38,13 @@ typedef struct TerraFloat4x4 {
 } TerraFloat4x4;
 
 #define terra_ior_air 1.f
-#define terra_f2_zero terra_f2_set(0.f, 0.f)
-#define terra_f3_zero terra_f3_set1(0.f)
-#define terra_f3_one terra_f3_set1(1.f)
+//#define terra_f2_zero terra_f2_set(0.f, 0.f)
+//#define terra_f3_zero terra_f3_set1(0.f)
+//#define terra_f3_one terra_f3_set1(1.f)
+
+#define terra_f2_zero (TerraFloat2){0.f, 0.f}
+#define terra_f3_zero (TerraFloat3){0.f, 0.f, 0.f}
+#define terra_f3_one  (TerraFloat3){1.f, 1.f, 1.f}
 
 //--------------------------------------------------------------------------------------------------
 // Math functions
@@ -85,8 +89,13 @@ static inline TerraFloat3   terra_transformf3 ( const TerraFloat4x4* transform, 
 static inline bool          terra_f3_is_zero ( const TerraFloat3* f3 );
 static inline float         terra_lerp ( float a, float b, float t );
 static inline TerraFloat3   terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, float t );
-static inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* y_axis );
+static inline TerraFloat4x4 terra_f4x4_basis ( const TerraFloat3* normal );
+static inline TerraFloat3   terra_f4x4_get_normal ( const TerraFloat4x4* basis );
+static inline TerraFloat3   terra_f4x4_get_tangent ( const TerraFloat4x4* basis );
+static inline TerraFloat3   terra_f4x4_get_bitangent ( const TerraFloat4x4* basis );
+static inline float         terra_clamp ( float value, float min, float max );
 static inline TerraFloat3   terra_clampf3 ( const TerraFloat3* f3, const TerraFloat3* min, const TerraFloat3* max );
+static inline float         terra_sqr ( float value );
 
 #include "TerraMath.inl"
 

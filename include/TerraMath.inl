@@ -248,27 +248,43 @@ inline TerraFloat3 terra_lerpf3 ( const TerraFloat3* a, const TerraFloat3* b, fl
     return terra_f3_set ( x, y, z );
 }
 
-inline TerraFloat4x4 terra_f4x4_from_y ( const TerraFloat3* normal ) {
-    TerraFloat3 normalt;
-    TerraFloat3 normalbt;
+inline TerraFloat4x4 terra_f4x4_basis ( const TerraFloat3* normal ) {
+    TerraFloat3 tangent;
+    TerraFloat3 bitangent;
     TerraFloat4x4 xform;
 
     // Hughes-Möller to get vector perpendicular to normal
     // http://www.pbr-book.org/3ed-2018/Geometry_and_Transformations/Vectors.html#CoordinateSystemfromaVector
     if ( fabs ( normal->x ) > fabs ( normal->y ) ) {
-        normalt = terra_f3_set ( normal->z, 0.f, -normal->x );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
+        tangent = terra_f3_set ( normal->z, 0.f, -normal->x );
+        tangent = terra_mulf3 ( &tangent, sqrtf ( normal->x * normal->x + normal->z * normal->z ) );
     } else {
-        normalt = terra_f3_set ( 0.f, -normal->z, normal->y );
-        normalt = terra_mulf3 ( &normalt, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
+        tangent = terra_f3_set ( 0.f, -normal->z, normal->y );
+        tangent = terra_mulf3 ( &tangent, sqrtf ( normal->y * normal->y + normal->z * normal->z ) );
     }
 
-    normalbt = terra_crossf3 ( normal, &normalt );
-    xform.rows[0] = terra_f4_set ( normalt.x, normal->x, normalbt.x, 0.f );
-    xform.rows[1] = terra_f4_set ( normalt.y, normal->y, normalbt.y, 0.f );
-    xform.rows[2] = terra_f4_set ( normalt.z, normal->z, normalbt.z, 0.f );
+    bitangent = terra_crossf3 ( normal, &tangent );
+    xform.rows[0] = terra_f4_set ( tangent.x, normal->x, bitangent.x, 0.f );
+    xform.rows[1] = terra_f4_set ( tangent.y, normal->y, bitangent.y, 0.f );
+    xform.rows[2] = terra_f4_set ( tangent.z, normal->z, bitangent.z, 0.f );
     xform.rows[3] = terra_f4_set ( 0.f, 0.f, 0.f, 1.f );
     return xform;
+}
+
+inline TerraFloat3 terra_f4x4_get_normal ( const TerraFloat4x4* basis ) {
+    return terra_f3_set ( basis->rows[0].y, basis->rows[1].y, basis->rows[2].y );
+}
+
+inline TerraFloat3 terra_f4x4_get_tangent ( const TerraFloat4x4* basis ) {
+    return terra_f3_set ( basis->rows[0].x, basis->rows[1].x, basis->rows[2].x );
+}
+
+inline TerraFloat3 terra_f4x4_get_bitangent ( const TerraFloat4x4* basis ) {
+    return terra_f3_set ( basis->rows[0].z, basis->rows[1].z, basis->rows[2].z );
+}
+
+inline float terra_clamp ( float value, float min, float max ) {
+    return value < min ? min : value > max ? max : value;
 }
 
 inline TerraFloat3 terra_clampf3 ( const TerraFloat3* f3, const TerraFloat3* min, const TerraFloat3* max ) {
@@ -280,4 +296,8 @@ inline TerraFloat3 terra_clampf3 ( const TerraFloat3* f3, const TerraFloat3* min
     res.y = res.y < max->y ? res.y : max->y;
     res.z = res.z < max->z ? res.z : max->z;
     return res;
+}
+
+inline float terra_sqr ( float value ) {
+    return value * value;
 }

@@ -13,7 +13,6 @@ typedef int64_t TerraClockTime;
 typedef clock_t TerraClockTime;
 #endif
 
-void                terra_clock_init();
 TerraClockTime      terra_clock();
 double              terra_clock_to_ms ( TerraClockTime delta_time );
 double              terra_clock_to_us ( TerraClockTime delta_time );
@@ -43,12 +42,10 @@ typedef struct {
 typedef __declspec ( align ( 64 ) ) struct {
     // Thread local buffer stats.
     TerraProfileStats stats;
-    // Buffer size.
-    size_t size;
-    size_t cap;
     // Buffer data.
-    TerraClockTime* time;
     void* value;
+    size_t size;    // Used size
+    size_t cap;     // Total size
 } TerraProfileBuffer;
 
 typedef enum {
@@ -82,39 +79,43 @@ typedef struct {
 
 extern TerraProfileDatabase g_terra_profile_database;
 
-void                terra_profile_session_create ( size_t id, size_t threads );
-void                terra_profile_register_thread ( size_t session );
-void                terra_profile_session_delete ( size_t id );
+void                    terra_profile_session_create ( size_t id, size_t threads );
+void                    terra_profile_register_thread ( size_t session );
+void                    terra_profile_session_delete ( size_t id );
 
-void                terra_profile_target_create_u32 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_u64 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_i32 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_i64 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_f32 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_f64 ( size_t session, size_t target, size_t sample_cap );
-void                terra_profile_target_create_time ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_u32 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_u64 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_i32 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_i64 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_f32 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_f64 ( size_t session, size_t target, size_t sample_cap );
+void                    terra_profile_target_create_time ( size_t session, size_t target, size_t sample_cap );
 
-void                terra_profile_target_clear ( size_t session, size_t target );
-size_t              terra_profile_target_size ( size_t session, size_t target );
-size_t              terra_profile_target_local_size ( size_t session, size_t target );
-void                terra_profile_target_stats_update ( size_t session, size_t target );
-void                terra_profile_target_local_stats_update ( size_t session, size_t target );
-TerraProfileStats   terra_profile_target_stats_get ( size_t session, size_t target );
-TerraProfileStats   terra_profile_target_local_stats_get ( size_t session, size_t target );
+
+void                    terra_profile_target_clear ( size_t session, size_t target );
+void                    terra_profile_target_stats_update ( size_t session, size_t target );
+void                    terra_profile_target_local_stats_update ( size_t session, size_t target );
+
+void                    terra_profile_add_sample_u32 ( size_t session, size_t target, uint32_t value );
+void                    terra_profile_add_sample_u64 ( size_t session, size_t target, uint64_t value );
+void                    terra_profile_add_sample_i32 ( size_t session, size_t target, int32_t value );
+void                    terra_profile_add_sample_i64 ( size_t session, size_t target, int64_t value );
+void                    terra_profile_add_sample_f32 ( size_t session, size_t target, float value );
+void                    terra_profile_add_sample_f64 ( size_t session, size_t target, double value );
+void                    terra_profile_add_sample_time ( size_t session, size_t target, TerraClockTime value );
+
+size_t                  terra_profile_target_size ( size_t session, size_t target );
+size_t                  terra_profile_target_local_size ( size_t session, size_t target );
+TerraProfileStats       terra_profile_target_stats_get ( size_t session, size_t target );
+TerraProfileStats       terra_profile_target_local_stats_get ( size_t session, size_t target );
 TerraProfileSampleType  terra_profile_target_type_get ( size_t session, size_t target );
+bool                    terra_profile_session_exists ( size_t session );
 
-void                terra_profile_add_sample_u32 ( size_t session, size_t target, uint32_t value );
-void                terra_profile_add_sample_u64 ( size_t session, size_t target, uint64_t value );
-void                terra_profile_add_sample_i32 ( size_t session, size_t target, int32_t value );
-void                terra_profile_add_sample_i64 ( size_t session, size_t target, int64_t value );
-void                terra_profile_add_sample_f32 ( size_t session, size_t target, float value );
-void                terra_profile_add_sample_f64 ( size_t session, size_t target, double value );
-void                terra_profile_add_sample_time ( size_t session, size_t target, TerraClockTime value );
 
 // Use these macros to wrap profile calls so that when necessary they can be easily turned off without having to edit out code.
 // Stats getters are not wrapped since TerraProfile types are generally part of them anyway.
-#define TERRA_PROFILE_REGISTER_THREAD( session )                            terra_profile_register_thread (session )
 #define TERRA_PROFILE_CREATE_SESSION( session, threads )                    terra_profile_session_create ( session, threads )
+#define TERRA_PROFILE_REGISTER_THREAD( session )                            terra_profile_register_thread (session )
 #define TERRA_PROFILE_CREATE_TARGET( format, session, target, sample_cap)   terra_profile_target_create_ ## format ( session, target, sample_cap )
 #define TERRA_PROFILE_ADD_SAMPLE( format, session, target, value)           terra_profile_add_sample_ ## format ( session, target, value )
 #define TERRA_PROFILE_UPDATE_STATS( session, target )                       terra_profile_target_stats_update ( session, target )

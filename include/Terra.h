@@ -29,11 +29,17 @@ extern "C" {
 #define TERRA_MATERIAL_MAX_LAYERS 4
 #endif
 
+#ifndef TERRA_MATERIAL_CONTEXT_SIZE
+#define TERRA_MATERIAL_CONTEXT_SIZE 128
+#endif
+
 typedef struct {
     TerraFloat4x4 transform;
     TerraFloat3   normal;
     TerraFloat3   emissive;
     float         ior;
+    //TODO
+    //char          material[TERRA_MATERIAL_CONTEXT_SIZE];
     TerraFloat3   attributes[TERRA_MATERIAL_MAX_ATTRIBUTES];
 } TerraShadingSurface;
 
@@ -226,13 +232,15 @@ void                terra_render ( const TerraCamera* camera, HTerraScene scene,
 // Terra system API
 //--------------------------------------------------------------------------------------------------
 // Client can override by defining TERRA_MALLOC
-//------------------------------------------------------------------------------------------------
+// TODO pass old size to realloc and free
+//--------------------------------------------------------------------------------------------------
 void*               terra_malloc ( size_t size );
 void*               terra_realloc ( void* ptr, size_t size );
 void                terra_free ( void* ptr );
 
 //--------------------------------------------------------------------------------------------------
 // Client can override by defining TERRA_LOG
+// TODO use this
 //--------------------------------------------------------------------------------------------------
 void                terra_log ( const char* str, ... );
 

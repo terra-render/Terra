@@ -60,15 +60,15 @@ void cloto_job_create ( ClotoJob* job, ClotoJobRoutine* routine, void* args );
 // https://blog.molecular-matters.com/2015/08/24/job-system-2-0-lock-free-work-stealing-part-1-basics/
 
 typedef struct ClotoWorkQueue {
-    char _p0[64];
+    char _p0[CLOTO_L1D$_SIZE];
     ClotoJob* jobs;
-    char _p1[64];
+    char _p1[CLOTO_L1D$_SIZE];
     uint32_t top;
-    char _p2[64];
+    char _p2[CLOTO_L1D$_SIZE];
     uint32_t bottom;
-    char _p3[64];
+    char _p3[CLOTO_L1D$_SIZE];
     uint32_t mask;
-    char _p4[64];
+    char _p4[CLOTO_L1D$_SIZE];
 } ClotoWorkQueue;
 
 bool        cloto_workqueue_create ( ClotoWorkQueue* queue, uint32_t capacity );
@@ -83,15 +83,15 @@ void        cloto_workqueue_clear ( ClotoWorkQueue* queue );
 // TODO: implement this and use it in slave groups instead of using a shared work queue
 
 //typedef struct {
-//    char _p0[64];
+//    char _p0[CLOTO_L1D$_SIZE];
 //    ClotoJob* jobs;
-//    char _p1[64];
+//    char _p1[CLOTO_L1D$_SIZE];
 //    uint32_t top;
-//    char _p2[64];
+//    char _p2[CLOTO_L1D$_SIZE];
 //    uint32_t bottom;
-//    char _p3[64];
+//    char _p3[CLOTO_L1D$_SIZE];
 //    uint32_t mask;
-//    char _p4[64];
+//    char _p4[CLOTO_L1D$_SIZE];
 //} ClotoTaskQueue;
 
 //bool cloto_taskqueue_create ( ClotoTaskQueue* queue, uint32_t capacity );
@@ -101,7 +101,7 @@ void        cloto_workqueue_clear ( ClotoWorkQueue* queue );
 
 //--------------------------------------------------------------------------------------------------
 // Messaging system:
-// messages get pushed in a single thread-owned queue by other threads
+// each thread owns a message queue, messages get pushed into the queue by other threads
 // owner thread processes messages between jobs
 // command messages are immedaitely executed and handled
 // user messages are deferred to user handling, meaning, they get copied in another thread local queue
@@ -141,17 +141,17 @@ typedef struct {
 // Message Queue (MPSC)
 
 typedef struct {
-    char _p0[64];
+    char _p0[CLOTO_L1D$_SIZE];
     ClotoMessage* messages;
-    char _p1[64];
+    char _p1[CLOTO_L1D$_SIZE];
     uint32_t top;
-    char _p2[64];
+    char _p2[CLOTO_L1D$_SIZE];
     uint32_t bottom;
-    char _p3[64];
+    char _p3[CLOTO_L1D$_SIZE];
     uint32_t mask;
-    char _p4[64];
+    char _p4[CLOTO_L1D$_SIZE];
     uint32_t processed;
-    char _p5[64];
+    char _p5[CLOTO_L1D$_SIZE];
 } ClotoMessageQueue;
 
 bool        cloto_msgqueue_create ( ClotoMessageQueue* queue, uint32_t capacity );

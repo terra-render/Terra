@@ -68,34 +68,33 @@ void tile_msg_stub ( void* _arg ) {
 }
 
 void terra_render_launcher ( void* _args ) {
+    static_assert ( sizeof ( TileMsgArg ) <= CLOTO_MSG_PAYLOAD_SIZE, "TileMsgArg size is too big to be inlined, reduce it or use CLOTO_MSG_JOB_REMOTE_ARGS." );
     using Args = TerraRenderer::TerraRenderArgs;
     Args* args = ( Args* ) _args;
 
-    if ( args->th->_on_tile_begin ) {
-        //TileMsg msg1{ tile_msg_stub, args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
+    if ( args->renderer->_on_tile_begin ) {
         ClotoMessageJobPayload msg;
         msg.routine = tile_msg_stub;
-        TileMsgArg msg_arg { args->th->_on_tile_begin, args->x, args->y, args->width, args->height };
+        TileMsgArg msg_arg { args->renderer->_on_tile_begin, args->x, args->y, args->width, args->height };
         memcpy ( msg.buffer, &msg_arg, sizeof ( msg_arg ) );
-        cloto_thread_send_message ( args->th->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
+        cloto_thread_send_message ( args->renderer->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
     }
 
-    terra_render ( args->th->_target_camera, args->th->_target_scene, &args->th->_framebuffer, args->x, args->y, args->width, args->height );
+    terra_render ( args->renderer->_target_camera, args->renderer->_target_scene, &args->renderer->_framebuffer, args->x, args->y, args->width, args->height );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RENDER );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_TRACE );
     TERRA_PROFILE_UPDATE_LOCAL_STATS ( TERRA_PROFILE_SESSION_DEFAULT, TERRA_PROFILE_TARGET_RAY_TRIANGLE_INTERSECTION );
 
-    if ( args->th->_on_tile_end ) {
-        TileMsg msg2{ tile_msg_stub, args->th->_on_tile_end, args->x, args->y, args->width, args->height };
+    if ( args->renderer->_on_tile_end ) {
         ClotoMessageJobPayload msg;
         msg.routine = tile_msg_stub;
-        TileMsgArg msg_arg { args->th->_on_tile_end, args->x, args->y, args->width, args->height };
+        TileMsgArg msg_arg { args->renderer->_on_tile_end, args->x, args->y, args->width, args->height };
         memcpy ( msg.buffer, &msg_arg, sizeof ( msg_arg ) );
-        cloto_thread_send_message ( args->th->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
+        cloto_thread_send_message ( args->renderer->thread(), CLOTO_MSG_JOB_LOCAL_ARGS, &msg, sizeof ( msg ) );
     }
 
-    cloto_atomic_fetch_add_u32 ( &args->th->_tile_counter, -1 );
+    cloto_atomic_fetch_add_u32 ( &args->renderer->_tile_counter, -1 );
 }
 
 TerraRenderer::TerraRenderer ( ) {
@@ -303,9 +302,6 @@ void TerraRenderer::_setup_threads () {
 
     for ( int i = 0; i < workers; ++i ) {
         ClotoMessageJobPayload payload;
-        struct {
-            size_t session;
-        } msg_args;
         auto msg_routine = [] ( void* args ) -> void {
             size_t* session = ( size_t* ) args;
             TERRA_PROFILE_REGISTER_THREAD ( *session );
@@ -326,7 +322,7 @@ void TerraRenderer::_setup_threads () {
     for ( int i = 0; i < num_tiles_y; ++i ) {
         for ( int j = 0; j < num_tiles_x; ++j ) {
             TerraRenderArgs* args = _job_args.data() + i * num_tiles_x + j;
-            args->th = this;
+            args->renderer = this;
             args->x = j * tile_size;
             args->y = i * tile_size;
             args->width = ( int ) terra_mini ( ( size_t ) ( j + 1 ) * tile_size, _framebuffer.width ) - j * tile_size;

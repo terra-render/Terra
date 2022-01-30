@@ -34,6 +34,8 @@ TerraProfileDatabase g_terra_profile_database;
 
 // .c decl
 
+void terra_clock_init();
+
 size_t terra_profile_sizeof ( TerraProfileSampleType type );
 
 void terra_profile_stats_init ( TerraProfileStats* stats );
@@ -67,7 +69,9 @@ void terra_profile_update_thread_stats_time ( size_t session, size_t target );
 
 void terra_profile_session_create ( size_t id, size_t threads ) {
     if ( TERRA_PDB.sessions == NULL ) {
+        terra_clock_init();
         TERRA_PDB.sessions = terra_malloc ( sizeof ( TerraProfileSession ) * TERRA_PROFILE_SESSIONS );
+        memset ( TERRA_PDB.sessions, 0, sizeof ( TerraProfileSession ) * TERRA_PROFILE_SESSIONS );
     }
 
     TerraProfileSession* session = TERRA_PDB.sessions + id;
@@ -95,7 +99,6 @@ void terra_profile_session_delete ( size_t id ) {
         }
 
         for ( size_t j = 0; j < session->threads; ++j ) {
-            terra_free ( target->buffers[j].time );
             terra_free ( target->buffers[j].value );
         }
     }
@@ -208,6 +211,10 @@ TerraProfileSampleType terra_profile_target_type_get ( size_t session, size_t ta
     return TERRA_PDB.sessions[session].targets[target].type;
 }
 
+bool terra_profile_session_exists ( size_t session ) {
+    return TERRA_PDB.sessions != NULL && session < TERRA_PROFILE_SESSIONS && TERRA_PDB.sessions[session].targets != NULL;
+}
+
 // .c defs
 
 size_t terra_profile_sizeof ( TerraProfileSampleType type ) {
@@ -275,7 +282,6 @@ TerraProfileStats terra_profile_stats_combine ( TerraProfileStats* s1, TerraProf
         target->buffers = terra_malloc ( sizeof ( TerraProfileBuffer ) * session->threads );                        \
         terra_profile_stats_init ( &target->stats );                                                                \
         for ( size_t i = 0; i < session->threads; ++i ) {                                                           \
-            target->buffers[i].time = ( TerraClockTime* ) terra_malloc( sizeof( TerraClockTime ) * sample_cap );    \
             target->buffers[i].value = terra_malloc ( sizeof( _type ) * sample_cap );                               \
             target->buffers[i].size = 0;                                                                            \
             target->buffers[i].cap = sample_cap;                                                                    \
@@ -292,10 +298,8 @@ TERRA_PROFILE_DEFINE_TARGET_CREATOR ( time, TerraClockTime )
 
 #define TERRA_PROFILE_DEFINE_COLLECTOR(postfix, type)                                                   \
     void terra_profile_add_sample_ ## postfix ( size_t session, size_t target, type value ) {           \
-        TerraClockTime time = terra_clock();                                                            \
         TerraProfileBuffer* buffer = &TERRA_PDB.sessions[session].targets[target].buffers[TERRA_PID];   \
         if (buffer->size == buffer->cap) { return; }                                                    \
-        buffer->time[buffer->size] = time;                                                              \
         ( ( type* ) buffer->value ) [buffer->size] = value;                                             \
         ++buffer->size;                                                                                 \
     }
@@ -369,8 +373,6 @@ TERRA_PROFILE_DEFINE_UPDATE ( f32 )
 TERRA_PROFILE_DEFINE_UPDATE ( f64 )
 TERRA_PROFILE_DEFINE_UPDATE ( time )
 #endif
-
-// time goes to the bottom because otherwise it fucks up MVS 2017 Intellisense...
 
 #ifdef _WIN32
 // TODO make a header that only wraps including windows.h with proper defines and use it everywhere?

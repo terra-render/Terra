@@ -82,7 +82,9 @@ typedef enum {
     APOLLO_SPECULAR,
     APOLLO_MIRROR,
     APOLLO_PBR,
-    APOLLO_BSDF_COUNT
+    APOLLO_DISNEY,
+    APOLLO_BSDF_COUNT,
+    APOLLO_BSDF_INVALID = APOLLO_BSDF_COUNT
 } ApolloBSDF;
 
 // Path-tracer subset of http://exocortex.com/blog/extending_wavefront_mtl_to_support_pbr
@@ -103,9 +105,83 @@ typedef struct ApolloMaterial {
     float       emissive[3];            // Ke
     uint32_t    emissive_texture;       // map_Ke
     uint32_t    normal_texture;         // norm
-    ApolloBSDF  bsdf;
+    float       sheen;                  // Ps
+    float       sheen_tint;             // Pst
+    float       specular_tint;          // Kst
+    float       clearcoat;              // Pc
+    float       clearcoat_gloss;        // Pcg
+    float       subsurface;             // Ss
+    float       anisotropic;            // aniso
+    ApolloBSDF  bsdf;                   // illum
     char        name[APOLLO_NAME_LEN];
 } ApolloMaterial;
+
+typedef struct {
+    float albedo[3];
+    uint32_t albedo_texture;
+} ApolloBSDFParamsDiffuse;
+
+typedef struct {
+    float albedo[3];
+    float specular[3];
+    float specular_exp;
+    uint32_t albedo_texture;
+    uint32_t specular_texture;
+} ApolloBSDFParamsSpecular;
+
+typedef struct {
+    float ior;
+    float metalness;
+    float roughness;
+    uint32_t metalness_texture;
+    uint32_t roughness_texture;
+} ApolloBSDFParamsPBR;
+
+typedef struct {
+    float metalness;
+    float roughness;
+    float specular;
+    float specular_tint;
+    float sheen;
+    float sheen_tint;
+    float clearcoat;
+    float clearcoat_gloss;
+    float subsurface;
+    float anisotropic;
+    uint32_t base_color_texture;
+    uint32_t metalness_texture;
+    uint32_t roughness_texture;
+    uint32_t specular_texture;
+    uint32_t specular_tint_texture;
+    uint32_t sheen_texture;
+    uint32_t sheen_tint_texture;
+    uint32_t clearcoat_texture;
+    uint32_t clearcoat_gloss_texture;
+    uint32_t subsurface_texture;
+    uint32_t anisotropic_texture;
+} ApolloBSDFParamsDisney;
+
+typedef struct {
+    float albedo[3];
+    float emissive[3];
+    uint32_t albedo_texture;
+    uint32_t emissive_texture;
+    uint32_t normal_texture;
+    uint32_t bump_texture;
+    uint32_t displacement_texture;
+} ApolloMaterialCommonParams;
+
+typedef struct ApolloMaterial2 {
+    char name[APOLLO_NAME_LEN];
+    ApolloBSDF bsdf;
+    union {
+        ApolloBSDFParamsDiffuse diffuse;
+        ApolloBSDFParamsSpecular specular;
+        ApolloBSDFParamsPBR pbr;
+        ApolloBSDFParamsDisney disney;
+    } BSDF_params;
+    ApolloMaterialCommonParams common_params;
+} ApolloMaterial2;
 
 #define APOLLO_TEXTURE_NONE UINT32_MAX
 
@@ -129,7 +205,7 @@ typedef struct ApolloLoadOptions {
     ApolloAllocator final_allocator;
     bool flip_z;
     bool flip_texcoord_v;
-    bool flip_faces;
+    bool flip_faces_winding_order;
     bool recompute_vertex_normals;
     bool compute_face_normals;
     bool remove_vertex_duplicates;
@@ -414,6 +490,81 @@ ApolloResult apollo_read_texture ( FILE* file, const ApolloTexture* texture_bank
     return APOLLO_SUCCESS;
 }
 
+bool apollo_read_float ( FILE* file, float* val ) {
+#if 1
+    return fscanf ( file, "%f", val ) > 0;
+#else
+    char str[64];
+
+    if ( fscanf ( file, "%s", str ) != 1 ) {
+        return false;
+    }
+
+    // Parse sign
+    const char* p = str;
+    char sign = '+';
+
+    if ( *p == '+' || *p == '-' ) {
+        sign = *p;
+        ++p;
+    }
+
+    // Read int part
+    double mantissa = 0.0;
+
+    while ( *p != 'e' && *p != 'E' && *p != '.' && *p != ' ' && *p != '\0' ) {
+        mantissa *= 10.0;
+        mantissa += *p - '0';
+        ++p;
+    }
+
+    // Read decimal part
+    if ( *p == '.' ) {
+        ++p;
+        double frac = 1.0;
+
+        while ( *p != 'e' && *p != 'E' && *p != ' ' && *p != '\0' ) {
+            frac *= 0.1;
+            mantissa += ( *p - '0' ) * frac;
+            ++p;
+        }
+    }
+
+    // Read exp
+    int exp = 0;
+    char exp_sign = '+';
+
+    if ( *p == 'e' || *p == 'E' ) {
+        ++p;
+
+        // Read exp sign
+        if ( *p == '+' || *p == '-' ) {
+            exp_sign = *p;
+            ++p;
+        }
+
+        // Read exp value
+        while ( *p != ' ' && *p != '\0' ) {
+            exp *= 10;
+            exp += *p - '0';
+            ++p;
+        }
+    }
+
+    // Assemble
+    double a = pow ( 5, exp );
+    double b = pow ( 2, exp );
+
+    if ( exp_sign == '-' ) {
+        a = 1.0 / a;
+        b = 1.0 / b;
+    }
+
+    *val = ( float ) ( ( sign == '+' ? 1.0 : -1.0 ) * mantissa * a * b );
+    return true;
+#endif
+}
+
 bool apollo_read_float2 ( FILE* file, ApolloFloat2* val ) {
     float x, y, z;
 
@@ -443,6 +594,8 @@ bool apollo_read_float3 ( FILE* file, ApolloFloat3* val ) {
 // Material
 //--------------------------------------------------------------------------------------------------
 void apollo_material_clear ( ApolloMaterial* mat ) {
+    mat->name[0] = '\0';
+    mat->bsdf = APOLLO_BSDF_INVALID;
     mat->bump_texture = APOLLO_TEXTURE_NONE;
     mat->albedo_texture = APOLLO_TEXTURE_NONE;
     mat->displacement_texture = APOLLO_TEXTURE_NONE;
@@ -492,7 +645,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         } else if ( strcmp ( key, "Ni" ) == 0 ) {
             float Ni;
 
-            if ( fscanf ( file, "%f", &Ni ) == 0 ) {
+            if ( !apollo_read_float ( file, &Ni ) ) {
                 APOLLO_LOG_ERR ( "Format error reading Ni on file %s\n", filename );
                 goto error;
             }
@@ -547,7 +700,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         else if ( strcmp ( key, "Ns" ) == 0 ) {
             float Ns;
 
-            if ( fscanf ( file, "%f", &Ns ) != 1 ) {
+            if ( !apollo_read_float ( file, &Ns ) ) {
                 APOLLO_LOG_ERR ( "Format error reading Ns on file %s\n", filename );
                 goto error;
             }
@@ -570,7 +723,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         else if ( strcmp ( key, "Pr" ) == 0 ) {
             float Pr;
 
-            if ( fscanf ( file, "%f", &Pr ) != 1 ) {
+            if ( !apollo_read_float ( file, &Pr ) ) {
                 APOLLO_LOG_ERR ( "Format error reading Pr on file %s\n", filename );
                 goto error;
             }
@@ -591,7 +744,7 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         else if ( strcmp ( key, "Pm" ) == 0 ) {
             float Pm;
 
-            if ( fscanf ( file, "%f", &Pm ) != 1 ) {
+            if ( !apollo_read_float ( file, &Pm ) ) {
                 APOLLO_LOG_ERR ( "Format error reading Pm on file %s\n", filename );
                 goto error;
             }
@@ -642,10 +795,86 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 APOLLO_LOG_ERR ( "Error %d(if ==-1 format error; if== -2 texture error)reading normal texture on file %s\n", idx, filename );
                 goto error;
             }
-        } else if ( strcmp ( key, "d" ) == 0 || strcmp ( key, "Tr" ) == 0 || strcmp ( key, "Tf" ) == 0 || strcmp ( key, "Ka" ) == 0 ) {
-            // We ignore all of these, only use a subset of the material spec.
-            while ( getc ( file ) != '\n' );
-        } else if ( strcmp ( key, "illum" ) == 0 ) {
+        }
+        // Sheen
+        else if ( strcmp ( key, "Ps" ) == 0 ) {
+            float Ps;
+
+            if ( !apollo_read_float ( file, &Ps ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Ps on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).sheen = Ps;
+        }
+        // Sheen tint
+        else if ( strcmp ( key, "Pst" ) == 0 ) {
+            float Pst;
+
+            if ( !apollo_read_float ( file, &Pst ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Pst on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).sheen_tint = Pst;
+        }
+        // Specular tint
+        else if ( strcmp ( key, "Kst" ) == 0 ) {
+            float Kst;
+
+            if ( !apollo_read_float ( file, &Kst ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Kst on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).specular_tint = Kst;
+        }
+        // Clearcoat
+        else if ( strcmp ( key, "Pc" ) == 0 ) {
+            float Pc;
+
+            if ( !apollo_read_float ( file, &Pc ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Pc on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).clearcoat = Pc;
+        }
+        // Clearcoat Gloss
+        else if ( strcmp ( key, "Pcg" ) == 0 ) {
+            float Pcg;
+
+            if ( !apollo_read_float ( file, &Pcg ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Pcg on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).clearcoat_gloss = Pcg;
+        }
+        // Subsurface
+        else if ( strcmp ( key, "Ss" ) == 0 ) {
+            float Ss;
+
+            if ( !apollo_read_float ( file, &Ss ) ) {
+                APOLLO_LOG_ERR ( "Format error reading Ss on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).subsurface = Ss;
+        }
+        // Anisotropic
+        else if ( strcmp ( key, "aniso" ) == 0 ) {
+            float aniso;
+
+            if ( !apollo_read_float ( file, &aniso ) ) {
+                APOLLO_LOG_ERR ( "Format error reading aniso on file %s\n", filename );
+                goto error;
+            }
+
+            apollo_sb_last ( materials ).anisotropic = aniso;
+        }
+        // BSDF
+        else if ( strcmp ( key, "illum" ) == 0 ) {
             char illum[256];
 
             if ( fscanf ( file, "%s", &illum ) != 1 ) {
@@ -653,7 +882,6 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 goto error;
             }
 
-            // Apollo pbr is handled at the end
             if ( strcmp ( illum, "diffuse" ) == 0 ) {
                 apollo_sb_last ( materials ).bsdf = APOLLO_DIFFUSE;
             } else if ( strcmp ( illum, "specular" ) == 0 ) {
@@ -662,6 +890,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
                 apollo_sb_last ( materials ).bsdf = APOLLO_MIRROR;
             } else if ( strcmp ( illum, "pbr" ) == 0 ) {
                 apollo_sb_last ( materials ).bsdf = APOLLO_PBR;
+            } else if ( strcmp ( illum, "disney" ) == 0 ) {
+                apollo_sb_last ( materials ).bsdf = APOLLO_DISNEY;
             } else {
                 APOLLO_LOG_ERR ( "Unsupported material bsdf %s", illum );
             }
@@ -670,6 +900,8 @@ ApolloResult apollo_open_material_lib ( const char* filename, ApolloMaterialLib*
         } else if ( strcmp ( key, "map_d" ) == 0 ) {
             while ( getc ( file ) != '\n' );
         } else if ( strcmp ( key, "map_Ka" ) == 0 ) {
+            while ( getc ( file ) != '\n' );
+        } else if ( strcmp ( key, "d" ) == 0 || strcmp ( key, "Tr" ) == 0 || strcmp ( key, "Tf" ) == 0 || strcmp ( key, "Ka" ) == 0 ) {
             while ( getc ( file ) != '\n' );
         } else {
             APOLLO_LOG_ERR ( "Unexpected field name %s in materials file %s\n", key, filename );
@@ -751,7 +983,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
 
     const char* name_end = dir_end;
 
-    while ( ++name_end != '\0' && *name_end != '.' )
+    while ( *(++name_end) != '\0' && *name_end != '.')
         ;
 
     strncpy ( model->name, dir_end, name_end - dir_end );
@@ -1177,7 +1409,7 @@ ApolloResult apollo_import_model_obj ( const char* filename, ApolloModel* model,
     }
 
     // Flip faces?
-    if ( options->flip_faces ) {
+    if ( options->flip_faces_winding_order ) {
         for ( size_t i = 0; i < apollo_sb_count ( m_idx ); i += 3 ) {
             uint32_t idx = m_idx[i];
             m_idx[i] = m_idx[i + 2];
@@ -1587,7 +1819,6 @@ error:
     apollo_sb_free ( m_vert, options->temp_allocator );
     apollo_sb_free ( meshes, options->temp_allocator );
     return result;
-#undef APOLLO_FINAL_MALLOC
 }
 
 void apollo_dump_model_obj ( const ApolloModel* model, const ApolloMaterial* materials, const ApolloTexture* textures, const char* base_path ) {
